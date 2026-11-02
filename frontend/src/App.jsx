@@ -1,0 +1,95 @@
+import { Suspense, lazy } from 'react';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
+import AdminLayout from '@/components/layout/AdminLayout';
+import ResourcePage from '@/components/resource/ResourcePage';
+import { useAuth } from '@/context/AuthContext';
+import { ROUTES } from '@/config/routes';
+import {
+  dryingsConfig,
+  packagingsConfig,
+  receiptsConfig,
+  sterilizationsConfig,
+  verificationsConfig,
+  washingsConfig,
+} from '@/config/resources/process';
+import { distGauzeConfig, distToolsConfig } from '@/config/resources/distribution';
+import { bmhpInConfig, bmhpItemsConfig, bmhpMutationConfig, bmhpOutConfig } from '@/config/resources/stock';
+import { itemsConfig, machinesConfig, officersConfig, unitsConfig, usersConfig } from '@/config/resources/master';
+
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+const TraceabilityPage = lazy(() => import('@/pages/TraceabilityPage'));
+const BmhpHubPage = lazy(() => import('@/pages/BmhpHubPage'));
+const ReportsHubPage = lazy(() => import('@/pages/ReportsHubPage'));
+const ReportPage = lazy(() => import('@/pages/ReportPage'));
+const GuidePage = lazy(() => import('@/pages/GuidePage'));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
+const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
+
+const PageLoader = () => (
+  <div className="flex min-h-[40vh] items-center justify-center text-brand-700" role="status" aria-label="Memuat">
+    <Loader2 size={30} className="animate-spin" />
+  </div>
+);
+
+/** Route terlindungi: wajib login, opsional khusus admin. */
+function Protected({ adminOnly = false }) {
+  const { user, loading, isAdmin } = useAuth();
+  const location = useLocation();
+
+  if (loading) return <PageLoader />;
+  if (!user) return <Navigate to={ROUTES.LOGIN} replace state={{ from: location }} />;
+  if (adminOnly && !isAdmin) return <Navigate to={ROUTES.HOME} replace />;
+  return <Outlet />;
+}
+
+/** key memastikan state list (search, page, sort) di-reset saat pindah halaman. */
+const resource = (config) => <ResourcePage key={config.key} config={config} />;
+
+export default function App() {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+
+        <Route element={<Protected />}>
+          <Route element={<AdminLayout />}>
+            <Route index element={<DashboardPage />} />
+
+            <Route path={ROUTES.RECEIPTS} element={resource(receiptsConfig)} />
+            <Route path={ROUTES.WASHINGS} element={resource(washingsConfig)} />
+            <Route path={ROUTES.DRYINGS} element={resource(dryingsConfig)} />
+            <Route path={ROUTES.PACKAGINGS} element={resource(packagingsConfig)} />
+            <Route path={ROUTES.STERILIZATIONS} element={resource(sterilizationsConfig)} />
+            <Route path={ROUTES.VERIFICATIONS} element={resource(verificationsConfig)} />
+            <Route path={ROUTES.DIST_TOOLS} element={resource(distToolsConfig)} />
+            <Route path={ROUTES.DIST_GAUZE} element={resource(distGauzeConfig)} />
+
+            <Route path={ROUTES.BMHP} element={<BmhpHubPage />} />
+            <Route path={ROUTES.BMHP_IN} element={resource(bmhpInConfig)} />
+            <Route path={ROUTES.BMHP_OUT} element={resource(bmhpOutConfig)} />
+            <Route path={ROUTES.BMHP_STOCK} element={resource(bmhpItemsConfig)} />
+            <Route path={ROUTES.BMHP_REPORT} element={resource(bmhpMutationConfig)} />
+
+            <Route path={ROUTES.REPORTS} element={<ReportsHubPage />} />
+            <Route path={`${ROUTES.REPORTS}/:slug`} element={<ReportPage />} />
+            <Route path={ROUTES.TRACE} element={<TraceabilityPage />} />
+            <Route path={ROUTES.GUIDE} element={<GuidePage />} />
+            <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+
+            <Route element={<Protected adminOnly />}>
+              <Route path={ROUTES.MASTER_UNITS} element={resource(unitsConfig)} />
+              <Route path={ROUTES.MASTER_ITEMS} element={resource(itemsConfig)} />
+              <Route path={ROUTES.MASTER_MACHINES} element={resource(machinesConfig)} />
+              <Route path={ROUTES.MASTER_OFFICERS} element={resource(officersConfig)} />
+              <Route path={ROUTES.MASTER_USERS} element={resource(usersConfig)} />
+            </Route>
+
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Route>
+      </Routes>
+    </Suspense>
+  );
+}
