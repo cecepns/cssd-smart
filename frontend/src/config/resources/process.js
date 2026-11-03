@@ -226,7 +226,19 @@ export const packagingsConfig = {
           else if (val === 'Kasa Steril') setValues({ unit_label: 'pouch', material: 'Pouch' });
         },
       },
-      { name: 'material', label: 'Bahan kemasan', type: 'select', required: true, options: ['SMS Wrap', 'Pouch', 'Container', 'Linen', 'Kertas Krep'], default: 'SMS Wrap' },
+      {
+        name: 'material',
+        label: 'Bahan kemasan',
+        type: 'remote-select',
+        required: true,
+        placeholder: 'Pilih bahan kemasan...',
+        optionsEndpoint: API_ENDPOINTS.PACKAGING_MATERIALS.LIST,
+        optionsParams: { is_active: 1, sort_by: 'name', order: 'asc', limit: 100 },
+        optionValue: (r) => r.name,
+        optionLabel: (r) => r.code ? `${r.name} (${r.code})` : r.name,
+        help: 'Dapat ditambah atau diedit di menu Master Data > Bahan Kemasan.',
+        default: 'SMS Wrap',
+      },
       { name: 'quantity', label: 'Jumlah paket', type: 'number', required: true, min: 1, default: 1 },
       { name: 'unit_label', label: 'Satuan', type: 'select', required: true, options: ['set', 'pcs', 'paket', 'pouch', 'lembar'], default: 'set' },
       fieldOfficer,
@@ -267,10 +279,25 @@ export const sterilizationsConfig = {
     fields: [
       {
         type: 'remote-select', name: 'machine_id', label: 'Mesin', required: true, placeholder: 'Pilih mesin...',
-        optionsEndpoint: API_ENDPOINTS.MACHINES.LIST, optionsParams: { type: 'Autoklaf,Plasma', is_active: 1, sort_by: 'name', order: 'asc' },
-        optionLabel: (r) => `${r.name} (${r.code})`,
-        onChange: (_, { option, setValues }) =>
-          option && setValues(option.type === 'Plasma' ? { temperature: 50, duration_min: 45 } : { temperature: 134, duration_min: 40 }),
+        optionsEndpoint: API_ENDPOINTS.MACHINES.LIST, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+        optionLabel: (r) => `${r.name} (${r.code})${r.type ? ` • ${r.type}` : ''}`,
+        onChange: (_, { option, setValues }) => {
+          if (!option) return;
+          const t = (option.type || '').toLowerCase();
+          if (t.includes('plasma')) {
+            setValues({ temperature: 50, duration_min: 45 });
+          } else if (t.includes('dtt')) {
+            setValues({ temperature: 90, duration_min: 20 });
+          } else if (t.includes('washer')) {
+            setValues({ temperature: 60, duration_min: 30 });
+          } else if (t.includes('eto')) {
+            setValues({ temperature: 55, duration_min: 120 });
+          } else if (t.includes('dry') || t.includes('oven')) {
+            setValues({ temperature: 160, duration_min: 120 });
+          } else {
+            setValues({ temperature: 134, duration_min: 40 });
+          }
+        },
       },
       { name: 'cycle_no', label: 'No. siklus', maxLength: 20, placeholder: 'Otomatis', help: 'Kosongkan agar dibuat otomatis.' },
       { name: 'temperature', label: 'Suhu (°C)', type: 'number', required: true, min: 50, max: 200, default: 134 },

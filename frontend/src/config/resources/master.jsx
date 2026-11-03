@@ -1,4 +1,4 @@
-import { Building2, Cog, ShieldCheck, Tags, UserCheck, Users } from 'lucide-react';
+import { Building2, Cog, Package, ShieldCheck, Tags, UserCheck, Users } from 'lucide-react';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { PACKAGE_TYPES } from '@/utils/constants';
 import { fileUrl } from '@/utils/format';
@@ -10,6 +10,7 @@ export const MASTER_TABS = [
   { label: 'Unit', to: ROUTES.MASTER_UNITS, icon: Building2 },
   { label: 'Jenis Alat', to: ROUTES.MASTER_ITEMS, icon: Tags },
   { label: 'Mesin', to: ROUTES.MASTER_MACHINES, icon: Cog },
+  { label: 'Bahan Kemasan', to: ROUTES.MASTER_PACKAGING_MATERIALS, icon: Package },
   { label: 'Petugas CSSD', to: ROUTES.MASTER_OFFICERS, icon: UserCheck },
   { label: 'Pengguna', to: ROUTES.MASTER_USERS, icon: Users },
 ];
@@ -95,11 +96,11 @@ export const machinesConfig = {
   ...masterBase,
   key: 'master-mesin',
   title: 'Mesin',
-  subtitle: 'Autoclave, Plasma, Washer, dan DTT',
+  subtitle: 'Autoclave, Plasma, Washer, DTT, dan tipe mesin lainnya',
   icon: Cog,
   endpoint: API_ENDPOINTS.MACHINES,
-  searchPlaceholder: 'Cari kode atau nama mesin...',
-  filters: [{ name: 'type', label: 'Tipe', options: ['Autoklaf', 'Plasma', 'Washer', 'DTT'] }, ...masterBase.filters],
+  searchPlaceholder: 'Cari kode, nama, atau tipe mesin...',
+  filters: [{ name: 'type', label: 'Tipe', options: ['Autoklaf', 'Plasma', 'Washer', 'DTT', 'EtO', 'Dry Heat', 'Ultrasonik'] }, ...masterBase.filters],
   columns: [
     { key: 'code', label: 'Kode', sortable: true, render: mono('code') },
     { key: 'name', label: 'Nama Mesin', sortable: true, render: bold('name') },
@@ -111,7 +112,53 @@ export const machinesConfig = {
     fields: [
       { name: 'code', label: 'Kode', required: true, maxLength: 10, placeholder: 'AU1' },
       { name: 'name', label: 'Nama mesin', required: true, maxLength: 100, placeholder: 'Autoclave 1' },
-      { name: 'type', label: 'Tipe', type: 'select', required: true, options: ['Autoklaf', 'Plasma', 'Washer', 'DTT'], placeholder: 'Pilih tipe...' },
+      {
+        name: 'type',
+        label: 'Tipe mesin',
+        type: 'custom',
+        required: true,
+        span: 2,
+        render: ({ values, setValue }) => {
+          const PRESETS = ['Autoklaf', 'Plasma', 'Washer', 'DTT', 'EtO', 'Dry Heat', 'Ultrasonik'];
+          const current = values.type || '';
+          return (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={current}
+                onChange={(e) => setValue('type', e.target.value)}
+                placeholder="Pilih dari tombol di bawah atau ketik tipe mesin bebas..."
+                className="input-base text-sm"
+                required
+                maxLength={50}
+              />
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[11px] font-semibold text-slate-400">Pilihan Cepat:</span>
+                {PRESETS.map((p) => {
+                  const isSelected = current.toLowerCase() === p.toLowerCase();
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setValue('type', p)}
+                      className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                        isSelected
+                          ? 'bg-brand-700 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                💡 Anda dapat memilih dari tombol cepat di atas atau mengetik tipe mesin sendiri secara bebas.
+              </p>
+            </div>
+          );
+        },
+      },
       activeField,
     ],
   },
@@ -196,6 +243,31 @@ export const officersConfig = {
         type: 'signature',
         help: 'Gambarkan tanda tangan petugas di sini. Tanda tangan ini otomatis digunakan saat petugas dipilih pada form transaksi.',
       },
+      activeField,
+    ],
+  },
+};
+
+export const packagingMaterialsConfig = {
+  ...masterBase,
+  key: 'master-bahan-kemasan',
+  title: 'Bahan Kemasan',
+  subtitle: 'Daftar jenis dan bahan pembungkus alat steril (SMS Wrap, Pouch, Container, Linen, dll.)',
+  icon: Package,
+  endpoint: API_ENDPOINTS.PACKAGING_MATERIALS,
+  searchPlaceholder: 'Cari kode, nama, atau keterangan bahan...',
+  columns: [
+    { key: 'code', label: 'Kode', sortable: true, render: mono('code') },
+    { key: 'name', label: 'Nama Bahan Kemasan', sortable: true, render: bold('name') },
+    { key: 'description', label: 'Keterangan' },
+    activeColumn,
+  ],
+  form: {
+    subtitle: 'Bahan kemasan ini akan otomatis muncul sebagai opsi di menu Catat Pengemasan.',
+    fields: [
+      { name: 'code', label: 'Kode bahan', required: true, maxLength: 30, placeholder: 'SMS / POUCH / CONT' },
+      { name: 'name', label: 'Nama bahan kemasan', required: true, maxLength: 100, placeholder: 'SMS Wrap / Pouch / Container' },
+      { name: 'description', label: 'Keterangan / Spesifikasi', maxLength: 255, placeholder: 'Kain pembungkus standar CSSD tahan panas...' },
       activeField,
     ],
   },

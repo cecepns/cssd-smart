@@ -91,7 +91,7 @@ CREATE TABLE `machines` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `code` VARCHAR(10) NOT NULL,
   `name` VARCHAR(100) NOT NULL,
-  `type` ENUM('Autoklaf','Plasma','Washer','DTT') NOT NULL,
+  `type` VARCHAR(50) NOT NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -112,6 +112,20 @@ CREATE TABLE `officers` (
   PRIMARY KEY (`id`),
   KEY `idx_officers_active` (`is_active`),
   KEY `idx_officers_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `packaging_materials` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `code` VARCHAR(30) NOT NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `description` VARCHAR(255) DEFAULT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_pkg_mat_code` (`code`),
+  KEY `idx_pkg_mat_name` (`name`),
+  KEY `idx_pkg_mat_active` (`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `instrument_sets` (
@@ -428,6 +442,13 @@ INSERT INTO `machines` (`id`,`code`,`name`,`type`) VALUES
 (3,'PL1','Plasma','Plasma'),
 (4,'WS1','Washer 1','Washer'),
 (5,'DT1','DTT 1','DTT');
+
+INSERT INTO `packaging_materials` (`id`,`code`,`name`,`description`,`is_active`) VALUES
+(1,'SMS','SMS Wrap','Kain pembungkus SMS non-woven standar CSSD',1),
+(2,'POUCH','Pouch','Kantung sterilisasi kertas / film transparan',1),
+(3,'CONT','Container','Kotak kontainer instrumen tahan panas',1),
+(4,'LINEN','Linen','Kain katun / linen pembungkus alat steril',1),
+(5,'KREP','Kertas Krep','Kertas krep medikal untuk pembungkus',1);
 
 INSERT INTO `officers` (`id`,`nip`,`name`,`role`,`phone`) VALUES
 (1,'PEG-001','Inge Kusryaningsih','Petugas CSSD','081234567890'),

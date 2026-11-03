@@ -15,7 +15,7 @@ import {
 } from '@/config/resources/process';
 import { distGauzeConfig, distToolsConfig } from '@/config/resources/distribution';
 import { bmhpInConfig, bmhpItemsConfig, bmhpMutationConfig, bmhpOutConfig } from '@/config/resources/stock';
-import { itemsConfig, machinesConfig, officersConfig, unitsConfig, usersConfig } from '@/config/resources/master';
+import { itemsConfig, machinesConfig, officersConfig, packagingMaterialsConfig, unitsConfig, usersConfig } from '@/config/resources/master';
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
@@ -84,6 +84,7 @@ export default function App() {
               <Route path={ROUTES.MASTER_UNITS} element={resource(unitsConfig)} />
               <Route path={ROUTES.MASTER_ITEMS} element={resource(itemsConfig)} />
               <Route path={ROUTES.MASTER_MACHINES} element={resource(machinesConfig)} />
+              <Route path={ROUTES.MASTER_PACKAGING_MATERIALS} element={resource(packagingMaterialsConfig)} />
               <Route path={ROUTES.MASTER_OFFICERS} element={resource(officersConfig)} />
               <Route path={ROUTES.MASTER_USERS} element={resource(usersConfig)} />
             </Route>

@@ -27,6 +27,7 @@ export const ROUTES = {
   MASTER_ITEMS: '/master/jenis-alat',
   MASTER_MACHINES: '/master/mesin',
   MASTER_OFFICERS: '/master/petugas',
+  MASTER_PACKAGING_MATERIALS: '/master/bahan-kemasan',
   MASTER_USERS: '/master/pengguna',
 
   GUIDE: '/panduan',

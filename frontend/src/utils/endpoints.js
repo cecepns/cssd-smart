@@ -30,6 +30,7 @@ export const API_ENDPOINTS = {
   ITEMS: crud('/items'),
   MACHINES: crud('/machines'),
   OFFICERS: crud('/officers'),
+  PACKAGING_MATERIALS: crud('/packaging-materials'),
 
   // Set Instrumen & Monitoring
   INSTRUMENT_SETS: {

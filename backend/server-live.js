@@ -487,7 +487,7 @@ registerCrud({
   table: 'machines',
   from: 'machines t',
   select: 't.*',
-  search: ['t.code', 't.name'],
+  search: ['t.code', 't.name', 't.type'],
   sort: { id: 't.id', code: 't.code', name: 't.name', type: 't.type' },
   defaultSort: 'id',
   filters: { type: 't.type', is_active: 't.is_active' },
@@ -496,7 +496,7 @@ registerCrud({
   fields: [
     field('code', 'string', { required: true, label: 'Kode', max: 10 }),
     field('name', 'string', { required: true, label: 'Nama mesin', max: 100 }),
-    field('type', 'enum', { values: ['Autoklaf', 'Plasma', 'Washer', 'DTT'], required: true, label: 'Tipe' }),
+    field('type', 'string', { required: true, label: 'Tipe mesin', max: 50 }),
     field('is_active', 'bool', { default: 1, label: 'Aktif' }),
   ],
 });
@@ -519,6 +519,26 @@ registerCrud({
     field('role', 'string', { default: 'Petugas CSSD', label: 'Jabatan / Peran', max: 50 }),
     field('phone', 'string', { label: 'Telepon', max: 30 }),
     field('signature', 'path', { label: 'Tanda tangan' }),
+    field('is_active', 'bool', { default: 1, label: 'Aktif' }),
+  ],
+});
+
+// ---------- Master: Bahan Kemasan ----------
+registerCrud({
+  path: 'packaging-materials',
+  table: 'packaging_materials',
+  from: 'packaging_materials t',
+  select: 't.*',
+  search: ['t.code', 't.name', 't.description'],
+  sort: { id: 't.id', code: 't.code', name: 't.name', is_active: 't.is_active' },
+  defaultSort: 'name',
+  filters: { is_active: 't.is_active' },
+  exportColumns: [['code', 'Kode'], ['name', 'Nama Bahan'], ['description', 'Keterangan'], ['is_active', 'Aktif']],
+  roles: MASTER_ROLES,
+  fields: [
+    field('code', 'string', { required: true, label: 'Kode', max: 30 }),
+    field('name', 'string', { required: true, label: 'Nama bahan kemasan', max: 100 }),
+    field('description', 'string', { label: 'Keterangan', max: 255 }),
     field('is_active', 'bool', { default: 1, label: 'Aktif' }),
   ],
 });
@@ -728,7 +748,6 @@ registerCrud({
     }
     const [[machine]] = await conn.query('SELECT * FROM machines WHERE id = ? AND is_active = 1', [data.machine_id]);
     if (!machine) throw new HttpError(422, 'Mesin tidak ditemukan atau tidak aktif', { machine_id: 'Mesin tidak valid' });
-    if (!['Autoklaf', 'Plasma'].includes(machine.type)) throw new HttpError(422, 'Mesin harus bertipe Autoklaf atau Plasma', { machine_id: 'Pilih mesin sterilisasi' });
 
     const [packages] = await conn.query("SELECT id FROM packagings WHERE id IN (?) AND status = 'Dikemas' FOR UPDATE", [ids]);
     if (packages.length !== ids.length) throw new HttpError(409, 'Sebagian paket tidak tersedia atau sudah disterilkan', { package_ids: 'Paket tidak valid' });
@@ -2318,6 +2337,48 @@ async function ensureDiscrepancyTable() {
   }
 }
 
+async function ensurePackagingMaterialsTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS packaging_materials (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        code VARCHAR(30) NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        description VARCHAR(255) DEFAULT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_pkg_mat_code (code),
+        KEY idx_pkg_mat_name (name),
+        KEY idx_pkg_mat_active (is_active)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM packaging_materials');
+    if (total === 0) {
+      await pool.query(`
+        INSERT INTO packaging_materials (code, name, description, is_active) VALUES
+        ('SMS', 'SMS Wrap', 'Kain pembungkus SMS non-woven standar CSSD', 1),
+        ('POUCH', 'Pouch', 'Kantung sterilisasi kertas / film transparan', 1),
+        ('CONT', 'Container', 'Kotak kontainer instrumen tahan panas', 1),
+        ('LINEN', 'Linen', 'Kain katun / linen pembungkus alat steril', 1),
+        ('KREP', 'Kertas Krep', 'Kertas krep medikal untuk pembungkus', 1)
+      `);
+    }
+  } catch (err) {
+    console.error('ensurePackagingMaterialsTable notice:', err.message);
+  }
+}
+
+async function ensureMachineTypeMigration() {
+  try {
+    await pool.query('ALTER TABLE machines MODIFY COLUMN type VARCHAR(50) NOT NULL');
+  } catch (err) {
+    // Abaikan jika sudah VARCHAR(50)
+  }
+}
+
 async function start() {
   try {
     await pool.query('SELECT 1');
@@ -2326,6 +2387,8 @@ async function start() {
     await ensureInstrumentSetsTable();
     await ensureDiscrepancyTable();
     await ensureCategoryMigration();
+    await ensurePackagingMaterialsTable();
+    await ensureMachineTypeMigration();
   } catch (err) {
     console.error('Gagal terhubung ke database. Pastikan MySQL berjalan dan sql/database.sql sudah diimport.');
     console.error(err.message);
