@@ -58,6 +58,9 @@ export const API_ENDPOINTS = {
   DISTRIBUTIONS: crud('/distributions'),
 
   // BMHP
-  BMHP_ITEMS: crud('/bmhp-items'),
+  BMHP_ITEMS: {
+    ...crud('/bmhp-items'),
+    SUMMARY: '/bmhp-summary',
+  },
   BMHP_TRANSACTIONS: crud('/bmhp-transactions'),
 };

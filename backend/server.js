@@ -235,6 +235,11 @@ async function runList(cfg, query, { all = false } = {}) {
   for (const [key, column] of Object.entries(cfg.filters || {})) {
     const value = query[key];
     if (value === undefined || value === '' || typeof value !== 'string') continue;
+    if (typeof column === 'function') {
+      const customCond = column(value);
+      if (customCond) where.push(customCond);
+      continue;
+    }
     const values = value.split(',').map((v) => v.trim()).filter(Boolean);
     if (values.length > 1) {
       where.push(`${column} IN (?)`);
@@ -1233,21 +1238,90 @@ registerCrud({
   path: 'bmhp-items',
   table: 'bmhp_items',
   from: 'bmhp_items t',
-  select: 't.*, (t.stock <= t.min_stock) AS is_low',
-  search: ['t.code', 't.barcode', 't.name'],
-  sort: { id: 't.id', code: 't.code', name: 't.name', stock: 't.stock', min_stock: 't.min_stock' },
+  select: `t.*,
+    COALESCE((SELECT SUM(quantity) FROM bmhp_transactions WHERE bmhp_item_id = t.id AND type = 'MASUK'), 0) AS total_in,
+    COALESCE((SELECT SUM(quantity) FROM bmhp_transactions WHERE bmhp_item_id = t.id AND type = 'KELUAR'), 0) AS total_out,
+    (t.stock <= 0) AS is_empty,
+    (t.stock > 0 AND t.stock <= t.min_stock) AS is_low,
+    DATEDIFF(t.expiry_date, CURDATE()) AS days_left,
+    (CASE
+      WHEN t.expiry_date IS NULL THEN 'Tidak Ada Exp'
+      WHEN t.expiry_date < CURDATE() THEN 'Kedaluwarsa'
+      WHEN DATEDIFF(t.expiry_date, CURDATE()) <= 30 THEN 'Mendekati Expired'
+      ELSE 'Aman'
+    END) AS expiry_status`,
+  search: ['t.code', 't.barcode', 't.name', 't.category', 't.item_type', 't.specification', 't.batch_no'],
+  sort: { id: 't.id', code: 't.code', name: 't.name', category: 't.category', stock: 't.stock', min_stock: 't.min_stock', expiry_date: 't.expiry_date' },
   defaultSort: 'id',
-  filters: { is_active: 't.is_active', barcode: 't.barcode', is_low: '(t.stock <= t.min_stock)' },
-  exportColumns: [['code', 'Kode'], ['barcode', 'Barcode'], ['name', 'Nama BMHP'], ['unit_label', 'Satuan'], ['stock', 'Stok'], ['min_stock', 'Stok Minimum']],
-  roles: { write: ['admin'], remove: ['admin'] },
+  filters: {
+    is_active: 't.is_active',
+    category: 't.category',
+    barcode: 't.barcode',
+    is_low: '(t.stock <= t.min_stock)',
+    stock_status: (val) => {
+      if (val === 'empty') return 't.stock <= 0';
+      if (val === 'low') return 't.stock > 0 AND t.stock <= t.min_stock';
+      if (val === 'safe') return 't.stock > t.min_stock';
+      return null;
+    },
+    expiry_status: (val) => {
+      if (val === 'expired') return 't.expiry_date IS NOT NULL AND t.expiry_date < CURDATE()';
+      if (val === 'expiring') return 't.expiry_date IS NOT NULL AND t.expiry_date >= CURDATE() AND t.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)';
+      if (val === 'safe') return 't.expiry_date IS NULL OR t.expiry_date > DATE_ADD(CURDATE(), INTERVAL 30 DAY)';
+      return null;
+    },
+  },
+  exportColumns: [
+    ['code', 'Kode'],
+    ['barcode', 'Barcode'],
+    ['name', 'Nama BMHP'],
+    ['category', 'Kategori'],
+    ['item_type', 'Jenis'],
+    ['specification', 'Spesifikasi'],
+    ['package_volume', 'Volume Kemasan'],
+    ['unit_label', 'Satuan'],
+    ['initial_stock', 'Stok Awal'],
+    ['total_in', 'Masuk'],
+    ['total_out', 'Keluar'],
+    ['stock', 'Stok Akhir'],
+    ['min_stock', 'Stok Minimum'],
+    ['batch_no', 'No. Batch'],
+    ['expiry_date', 'Tanggal Expired'],
+    ['expiry_status', 'Status Expired'],
+  ],
+  roles: { write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
   fields: [
     field('code', 'string', { required: true, label: 'Kode', max: 30 }),
     field('barcode', 'string', { label: 'Barcode', max: 50 }),
     field('name', 'string', { required: true, label: 'Nama BMHP', max: 150 }),
+    field('category', 'string', { label: 'Kategori', max: 100 }),
+    field('item_type', 'string', { label: 'Jenis', max: 100 }),
+    field('specification', 'string', { label: 'Spesifikasi', max: 255 }),
+    field('package_volume', 'string', { label: 'Volume kemasan', max: 100 }),
     field('unit_label', 'string', { default: 'pcs', max: 30, label: 'Satuan' }),
+    field('initial_stock', 'int', { min: 0, default: 0, label: 'Stok awal' }),
+    field('stock', 'int', { default: 0, label: 'Stok akhir' }),
     field('min_stock', 'int', { min: 0, default: 0, label: 'Stok minimum' }),
+    field('batch_no', 'string', { label: 'No. batch', max: 50 }),
+    field('expiry_date', 'date', { label: 'Tanggal expired' }),
     field('is_active', 'bool', { default: 1, label: 'Aktif' }),
   ],
+  async beforeCreate(conn, data) {
+    if (data.initial_stock !== undefined && (data.stock === undefined || data.stock === 0)) {
+      data.stock = data.initial_stock;
+    }
+  },
+  async beforeUpdate(conn, id, data, existing) {
+    if (data.initial_stock !== undefined && Number(data.initial_stock) !== Number(existing.initial_stock)) {
+      const [[mut]] = await conn.query(`
+        SELECT
+          COALESCE(SUM(CASE WHEN type = 'MASUK' THEN quantity ELSE 0 END), 0) AS total_in,
+          COALESCE(SUM(CASE WHEN type = 'KELUAR' THEN quantity ELSE 0 END), 0) AS total_out
+        FROM bmhp_transactions WHERE bmhp_item_id = ?
+      `, [id]);
+      data.stock = Number(data.initial_stock) + Number(mut.total_in) - Number(mut.total_out);
+    }
+  },
   async beforeDelete(conn, existing) {
     if (existing.stock > 0) throw new HttpError(409, 'BMHP masih memiliki stok dan tidak dapat dihapus');
   },
@@ -1257,13 +1331,13 @@ registerCrud({
   path: 'bmhp-transactions',
   table: 'bmhp_transactions',
   from: 'bmhp_transactions t JOIN bmhp_items b ON b.id = t.bmhp_item_id LEFT JOIN units u ON u.id = t.unit_id',
-  select: 't.*, b.name AS item_name, b.code AS item_code, b.unit_label, u.name AS unit_name',
-  search: ['b.name', 'b.code', 'b.barcode', 't.batch_no', 't.officer'],
+  select: 't.*, b.name AS item_name, b.code AS item_code, b.unit_label, b.category, u.name AS unit_name',
+  search: ['b.name', 'b.code', 'b.barcode', 't.batch_no', 't.officer', 'b.category'],
   sort: { id: 't.id', trx_date: 't.trx_date', item_name: 'b.name', type: 't.type', quantity: 't.quantity' },
   defaultSort: 'id',
   filters: { type: 't.type', bmhp_item_id: 't.bmhp_item_id', unit_id: 't.unit_id' },
   dateColumn: 't.trx_date',
-  exportColumns: [['trx_date', 'Tanggal'], ['type', 'Jenis'], ['item_code', 'Kode'], ['item_name', 'Nama BMHP'], ['quantity', 'Jumlah'], ['unit_label', 'Satuan'], ['batch_no', 'Batch'], ['unit_name', 'Unit Pemakai'], ['stock_after', 'Stok Akhir'], ['officer', 'Petugas']],
+  exportColumns: [['trx_date', 'Tanggal'], ['type', 'Jenis'], ['item_code', 'Kode'], ['item_name', 'Nama BMHP'], ['quantity', 'Jumlah'], ['unit_label', 'Satuan'], ['batch_no', 'Batch'], ['expiry_date', 'Tanggal Expired'], ['unit_name', 'Unit Pemakai'], ['stock_after', 'Stok Akhir'], ['officer', 'Petugas']],
   noUpdate: true,
   noDelete: true,
   fields: [
@@ -1271,6 +1345,7 @@ registerCrud({
     field('type', 'enum', { values: ['MASUK', 'KELUAR'], required: true, label: 'Jenis transaksi' }),
     field('quantity', 'int', { required: true, min: 1, label: 'Jumlah' }),
     field('batch_no', 'string', { label: 'Batch', max: 50 }),
+    field('expiry_date', 'date', { label: 'Tanggal expired' }),
     field('unit_id', 'int', { min: 1, label: 'Unit pemakai' }),
     field('officer', 'string', { required: true, label: 'Petugas', max: 100 }),
     field('trx_date', 'date', { default: todayStr, label: 'Tanggal' }),
@@ -1285,6 +1360,22 @@ registerCrud({
   },
   async afterCreate(conn, id, data) {
     await conn.query('UPDATE bmhp_items SET stock = ? WHERE id = ?', [data.stock_after, data.bmhp_item_id]);
+    if (data.type === 'MASUK') {
+      const updates = [];
+      const params = [];
+      if (data.batch_no) {
+        updates.push('batch_no = ?');
+        params.push(data.batch_no);
+      }
+      if (data.expiry_date) {
+        updates.push('expiry_date = ?');
+        params.push(data.expiry_date);
+      }
+      if (updates.length) {
+        params.push(data.bmhp_item_id);
+        await conn.query(`UPDATE bmhp_items SET ${updates.join(', ')} WHERE id = ?`, params);
+      }
+    }
   },
 });
 
@@ -1919,6 +2010,22 @@ router.put('/auth/password', auth, wrap(async (req, res) => {
   res.json({ success: true, message: 'Password berhasil diubah' });
 }));
 
+// ---------- BMHP Ringkasan / Summary ----------
+router.get('/bmhp-summary', auth, wrap(async (req, res) => {
+  const [[summary]] = await pool.query(`
+    SELECT
+      COUNT(*) AS total_items,
+      COALESCE(SUM(stock), 0) AS total_stock,
+      COUNT(CASE WHEN stock <= 0 THEN 1 END) AS empty_count,
+      COUNT(CASE WHEN stock > 0 AND stock <= min_stock THEN 1 END) AS low_count,
+      COUNT(CASE WHEN expiry_date IS NOT NULL AND expiry_date < CURDATE() THEN 1 END) AS expired_count,
+      COUNT(CASE WHEN expiry_date IS NOT NULL AND expiry_date >= CURDATE() AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 END) AS expiring_count
+    FROM bmhp_items
+    WHERE is_active = 1
+  `);
+  res.json({ success: true, data: summary });
+}));
+
 // ---------- Dashboard ----------
 router.get('/dashboard', auth, wrap(async (req, res) => {
   const [pipelineRows] = await pool.query("SELECT stage, COUNT(*) AS total FROM dirty_receipts WHERE status IN ('Diterima','Proses') GROUP BY stage");
@@ -1932,14 +2039,26 @@ router.get('/dashboard', auth, wrap(async (req, res) => {
       (SELECT COALESCE(SUM(quantity), 0) FROM sterile_stock WHERE status = 'Tersedia' AND expiry_date >= CURDATE()) AS sterile_stock,
       (SELECT COUNT(*) FROM sterile_stock WHERE status = 'Tersedia' AND expiry_date < CURDATE()) AS expired,
       (SELECT COUNT(*) FROM quarantines WHERE status = 'Karantina') AS quarantine,
-      (SELECT COUNT(*) FROM bmhp_items WHERE is_active = 1 AND stock <= min_stock) AS bmhp_low,
+      (SELECT COUNT(*) FROM bmhp_items WHERE is_active = 1 AND stock <= min_stock AND stock > 0) AS bmhp_low,
+      (SELECT COUNT(*) FROM bmhp_items WHERE is_active = 1 AND stock <= 0) AS bmhp_empty,
+      (SELECT COUNT(*) FROM bmhp_items WHERE is_active = 1 AND expiry_date IS NOT NULL AND expiry_date < CURDATE()) AS bmhp_expired,
+      (SELECT COUNT(*) FROM bmhp_items WHERE is_active = 1 AND expiry_date IS NOT NULL AND expiry_date >= CURDATE() AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)) AS bmhp_expiring_soon,
       (SELECT COALESCE(SUM(quantity), 0) FROM distributions WHERE dist_date = CURDATE()) AS distributed_today
   `);
 
   const [expiring] = await pool.query(
     "SELECT id, barcode, item_name, expiry_date, quantity, unit_label, DATEDIFF(expiry_date, CURDATE()) AS days_left FROM sterile_stock WHERE status = 'Tersedia' AND quantity > 0 AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) ORDER BY expiry_date ASC LIMIT 5"
   );
-  const [lowBmhp] = await pool.query('SELECT id, code, name, stock, min_stock, unit_label FROM bmhp_items WHERE is_active = 1 AND stock <= min_stock ORDER BY stock ASC LIMIT 5');
+  const [lowBmhp] = await pool.query(`
+    SELECT id, code, name, stock, min_stock, unit_label, category, batch_no, expiry_date,
+      (stock <= 0) AS is_empty,
+      (stock > 0 AND stock <= min_stock) AS is_low,
+      DATEDIFF(expiry_date, CURDATE()) AS days_left
+    FROM bmhp_items
+    WHERE is_active = 1 AND (stock <= min_stock OR (expiry_date IS NOT NULL AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)))
+    ORDER BY (stock <= 0) DESC, (stock <= min_stock) DESC, (expiry_date IS NOT NULL AND expiry_date < CURDATE()) DESC, expiry_date ASC
+    LIMIT 6
+  `);
   const [recentVerifications] = await pool.query(
     'SELECT v.id, v.result, v.verify_date, s.batch_no, v.fail_reason FROM verifications v JOIN sterilizations s ON s.id = v.sterilization_id ORDER BY v.id DESC LIMIT 5'
   );
@@ -2379,6 +2498,95 @@ async function ensureMachineTypeMigration() {
   }
 }
 
+async function ensureBmhpColumns() {
+  try {
+    const addCol = async (table, colDef) => {
+      try {
+        await pool.query(`ALTER TABLE ${table} ADD COLUMN ${colDef}`);
+      } catch (err) {
+        if (err.errno !== 1060 && !err.message.includes('Duplicate column name')) {
+          console.error(`ensureBmhpColumns notice on ${table}:`, err.message);
+        }
+      }
+    };
+
+    await addCol('bmhp_items', "category VARCHAR(100) DEFAULT 'Kemasan & Pembungkus'");
+    await addCol('bmhp_items', 'item_type VARCHAR(100) DEFAULT NULL');
+    await addCol('bmhp_items', 'specification VARCHAR(255) DEFAULT NULL');
+    await addCol('bmhp_items', 'package_volume VARCHAR(100) DEFAULT NULL');
+    await addCol('bmhp_items', 'initial_stock INT NOT NULL DEFAULT 0');
+    await addCol('bmhp_items', 'batch_no VARCHAR(50) DEFAULT NULL');
+    await addCol('bmhp_items', 'expiry_date DATE DEFAULT NULL');
+
+    await addCol('bmhp_transactions', 'expiry_date DATE DEFAULT NULL');
+
+    await pool.query(`
+      UPDATE bmhp_items 
+      SET initial_stock = stock 
+      WHERE initial_stock = 0 
+        AND stock > 0 
+        AND id NOT IN (SELECT DISTINCT bmhp_item_id FROM bmhp_transactions WHERE type = 'MASUK')
+    `);
+
+    await pool.query(`
+      UPDATE bmhp_items SET 
+        category = 'Kemasan Steril',
+        item_type = 'Pouch Sterilisasi',
+        specification = '100mm x 200m Film/Kertas Transparan',
+        package_volume = '1 Roll = 200 Meter',
+        batch_no = 'LOT-2610-A',
+        expiry_date = DATE_ADD(CURDATE(), INTERVAL 365 DAY)
+      WHERE code = 'BMHP-001' AND (specification IS NULL OR specification = '')
+    `);
+
+    await pool.query(`
+      UPDATE bmhp_items SET 
+        category = 'Indikator Kimia & Biologi',
+        item_type = 'Chemical Indicator Tape',
+        specification = 'Autoklaf Steam Kelas 1 (19mm x 50m)',
+        package_volume = '1 Roll = 50 Meter',
+        batch_no = 'LOT-2609-B',
+        expiry_date = DATE_ADD(CURDATE(), INTERVAL 180 DAY)
+      WHERE code = 'BMHP-002' AND (specification IS NULL OR specification = '')
+    `);
+
+    await pool.query(`
+      UPDATE bmhp_items SET 
+        category = 'Indikator Kimia & Biologi',
+        item_type = 'Biological Indicator',
+        specification = 'G. stearothermophilus 10^6 Spora',
+        package_volume = '1 Box = 50 Ampul',
+        batch_no = 'LOT-2608-C',
+        expiry_date = DATE_ADD(CURDATE(), INTERVAL 15 DAY)
+      WHERE code = 'BMHP-003' AND (specification IS NULL OR specification = '')
+    `);
+
+    await pool.query(`
+      UPDATE bmhp_items SET 
+        category = 'Kemasan Steril',
+        item_type = 'Wrap SMS Non-Woven',
+        specification = '60 cm x 60 cm Standar Medis 45 GSM',
+        package_volume = '1 Pack = 100 Lembar',
+        batch_no = 'LOT-2607-D',
+        expiry_date = DATE_ADD(CURDATE(), INTERVAL 400 DAY)
+      WHERE code = 'BMHP-004' AND (specification IS NULL OR specification = '')
+    `);
+
+    await pool.query(`
+      UPDATE bmhp_items SET 
+        category = 'Desinfektan & Pembersih',
+        item_type = 'Enzymatic Detergent',
+        specification = 'Cairan Pembersih Multi-Enzim Netral pH',
+        package_volume = '1 Galon = 5 Liter',
+        batch_no = 'LOT-2606-E',
+        expiry_date = DATE_ADD(CURDATE(), INTERVAL 240 DAY)
+      WHERE code = 'BMHP-005' AND (specification IS NULL OR specification = '')
+    `);
+  } catch (err) {
+    console.error('ensureBmhpColumns notice:', err.message);
+  }
+}
+
 async function start() {
   try {
     await pool.query('SELECT 1');
@@ -2389,6 +2597,7 @@ async function start() {
     await ensureCategoryMigration();
     await ensurePackagingMaterialsTable();
     await ensureMachineTypeMigration();
+    await ensureBmhpColumns();
   } catch (err) {
     console.error('Gagal terhubung ke database. Pastikan MySQL berjalan dan sql/database.sql sudah diimport.');
     console.error(err.message);

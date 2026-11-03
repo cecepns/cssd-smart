@@ -121,7 +121,7 @@ export default function DashboardPage() {
             }))}
           />
           <InfoPanel
-            title="BMHP Stok Menipis"
+            title="BMHP Menipis & Kedaluwarsa"
             icon={Archive}
             tone="bg-sky-100 text-sky-600"
             to={ROUTES.BMHP_STOCK}
@@ -129,8 +129,12 @@ export default function DashboardPage() {
             rows={(data.lowBmhp || []).map((b) => ({
               key: b.id,
               title: b.name,
-              meta: `${b.code} • minimum ${b.min_stock} ${b.unit_label}`,
-              badge: <Badge tone={b.stock <= 0 ? 'rose' : 'amber'}>{b.stock} {b.unit_label}</Badge>,
+              meta: `${b.code} • Min: ${b.min_stock} ${b.unit_label}${b.batch_no ? ` • Batch: ${b.batch_no}` : ''}${b.expiry_date ? ` • Exp: ${formatDate(b.expiry_date)}` : ''}`,
+              badge: (
+                <Badge tone={b.stock <= 0 ? 'rose' : b.expiry_status === 'Kedaluwarsa' ? 'rose' : 'amber'}>
+                  {b.stock <= 0 ? 'Habis (0)' : b.expiry_status === 'Kedaluwarsa' ? 'Expired' : `${b.stock} ${b.unit_label}`}
+                </Badge>
+              ),
             }))}
           />
           <InfoPanel
