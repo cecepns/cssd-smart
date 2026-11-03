@@ -1429,6 +1429,19 @@ router.post('/instrument-sets', auth, allow('admin', 'petugas'), wrap(async (req
         }
       }
     }
+
+    // Sinkronisasi otomatis ke master items (agar langsung muncul di transaksi & punya masa steril)
+    const [[existingItem]] = await conn.query('SELECT id FROM items WHERE code = ? OR name = ?', [code, body.name.trim().toUpperCase()]);
+    if (!existingItem) {
+      await conn.query('INSERT INTO items (code, name, category, shelf_life_months, description) VALUES (?, ?, ?, ?, ?)', [
+        code,
+        body.name.trim().toUpperCase(),
+        'Set Instrumen',
+        6,
+        description || 'Set instrumen bedah',
+      ]);
+    }
+
     return setId;
   });
 
@@ -1898,6 +1911,16 @@ async function ensureInstrumentSetsTable() {
       (?, 'Setengah kocher', 1, 'Buah', 7)
     `, [set4, set4, set4, set4, set4, set4, set4]);
   }
+
+  // Sinkronisasi otomatis instrument_sets ke master items
+  await pool.query(`
+    INSERT INTO items (code, name, category, shelf_life_months, description)
+    SELECT s.code, s.name, 'Set Instrumen', 6, s.description
+    FROM instrument_sets s
+    WHERE NOT EXISTS (
+      SELECT 1 FROM items i WHERE i.code = s.code OR i.name = s.name
+    )
+  `).catch(() => {});
 }
 
 async function ensureCategoryMigration() {
