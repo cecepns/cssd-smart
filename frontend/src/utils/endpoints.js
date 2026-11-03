@@ -31,6 +31,12 @@ export const API_ENDPOINTS = {
   MACHINES: crud('/machines'),
   OFFICERS: crud('/officers'),
 
+  // Set Instrumen
+  INSTRUMENT_SETS: {
+    ...crud('/instrument-sets'),
+    COMPLETENESS: (id) => `/instrument-sets/${id}/completeness`,
+  },
+
   // Proses CSSD
   RECEIPTS: crud('/dirty-receipts'),
   WASHINGS: crud('/washings'),

@@ -112,7 +112,7 @@ export default function TraceabilityPage() {
           <EmptyState
             icon={History}
             title="Belum ada pencarian"
-            hint="Masukkan barcode alat kotor (AK-), barcode paket (PG-, KS-, SM-), atau nomor batch sterilisasi untuk melihat riwayatnya."
+            hint="Masukkan barcode alat kotor (AK-), barcode paket (AS-, ST-, PG-, KS-), atau nomor batch sterilisasi untuk melihat riwayatnya."
           />
         </div>
       ) : loading && !data ? (

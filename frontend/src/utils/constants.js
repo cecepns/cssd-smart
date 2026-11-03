@@ -5,8 +5,8 @@ export const PAGE_LIMITS = [10, 25, 50, 100];
 export const DEFAULT_LIMIT = 10;
 export const SEARCH_DEBOUNCE_MS = 400;
 
-export const PACKAGE_TYPES = ['Duk & Jas Operasi', 'Kasa Steril', 'Instrumen / Set Alat'];
-export const UNIT_LABELS = ['set', 'pcs', 'paket', 'lembar'];
+export const PACKAGE_TYPES = ['Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi', 'Kasa Steril'];
+export const UNIT_LABELS = ['set', 'pcs', 'paket', 'lembar', 'pouch'];
 export const INDICATOR_OPTIONS = ['Sesuai', 'Tidak Sesuai'];
 export const WASH_METHODS = ['Washer', 'Manual', 'Ultrasonik'];
 

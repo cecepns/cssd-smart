@@ -53,7 +53,7 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
     fields: [
       {
         name: 'barcode', label: 'Barcode paket steril', type: 'barcode', required: true, span: 2,
-        placeholder: gauze ? 'Scan barcode kasa (KS-...)' : 'Scan barcode alat (PG-... / SM-...)',
+        placeholder: gauze ? 'Scan barcode kasa (KS-...)' : 'Scan barcode alat (AS-... / ST-... / PG-... / SM-...)',
         onScan: lookupStock(gauze),
       },
       {

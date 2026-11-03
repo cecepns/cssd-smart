@@ -19,6 +19,7 @@ import { itemsConfig, machinesConfig, officersConfig, unitsConfig, usersConfig }
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+const InstrumentSetsPage = lazy(() => import('@/pages/InstrumentSetsPage'));
 const TraceabilityPage = lazy(() => import('@/pages/TraceabilityPage'));
 const BmhpHubPage = lazy(() => import('@/pages/BmhpHubPage'));
 const ReportsHubPage = lazy(() => import('@/pages/ReportsHubPage'));
@@ -58,6 +59,7 @@ export default function App() {
             <Route index element={<DashboardPage />} />
 
             <Route path={ROUTES.RECEIPTS} element={resource(receiptsConfig)} />
+            <Route path={ROUTES.INSTRUMENT_SETS} element={<InstrumentSetsPage />} />
             <Route path={ROUTES.WASHINGS} element={resource(washingsConfig)} />
             <Route path={ROUTES.DRYINGS} element={resource(dryingsConfig)} />
             <Route path={ROUTES.PACKAGINGS} element={resource(packagingsConfig)} />

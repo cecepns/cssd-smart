@@ -46,8 +46,14 @@ if (!JWT_SECRET) {
 
 ['images', 'signatures'].forEach((dir) => fs.mkdirSync(path.join(UPLOAD_DIR, dir), { recursive: true }));
 
-const PACKAGE_TYPES = ['Duk & Jas Operasi', 'Kasa Steril', 'Instrumen / Set Alat'];
-const PREFIX_BY_TYPE = { 'Duk & Jas Operasi': 'PG', 'Kasa Steril': 'KS', 'Instrumen / Set Alat': 'SM' };
+const PACKAGE_TYPES = ['Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi', 'Kasa Steril'];
+const PREFIX_BY_TYPE = {
+  'Alat Satuan': 'AS',
+  'Set Instrumen': 'ST',
+  'Duk & Jas Operasi': 'PG',
+  'Kasa Steril': 'KS',
+  'Instrumen / Set Alat': 'SM',
+};
 const ROLES = ['admin', 'petugas'];
 const INDICATOR = ['Sesuai', 'Tidak Sesuai'];
 
@@ -955,6 +961,256 @@ registerCrud({
 });
 
 /* ============================================================
+ * SET INSTRUMEN (MONITORING STOK & RINCIAN INSTRUMEN)
+ * ============================================================ */
+async function getInstrumentSetsWithStock(query = {}) {
+  let sql = 'SELECT * FROM instrument_sets WHERE 1=1';
+  const params = [];
+  if (query.is_active !== undefined) {
+    sql += ' AND is_active = ?';
+    params.push(Number(query.is_active));
+  }
+  if (query.completeness_status) {
+    sql += ' AND completeness_status = ?';
+    params.push(query.completeness_status);
+  }
+  if (query.search) {
+    const like = `%${query.search.trim()}%`;
+    sql += ' AND (name LIKE ? OR code LIKE ?)';
+    params.push(like, like);
+  }
+  sql += ' ORDER BY id ASC';
+
+  const [sets] = await pool.query(sql, params);
+  if (!sets.length) return [];
+
+  const setIds = sets.map((s) => s.id);
+  const [items] = await pool.query(
+    'SELECT * FROM instrument_set_items WHERE set_id IN (?) ORDER BY sort_order ASC, id ASC',
+    [setIds]
+  );
+
+  const itemsBySet = {};
+  for (const it of items) {
+    if (!itemsBySet[it.set_id]) itemsBySet[it.set_id] = [];
+    itemsBySet[it.set_id].push(it);
+  }
+
+  // Hitung stok siap pakai (Tersedia) dari sterile_stock
+  const [stockRows] = await pool.query(`
+    SELECT 
+      LOWER(TRIM(item_name)) AS norm_name,
+      SUM(CASE WHEN status = 'Tersedia' AND expiry_date >= CURDATE() THEN quantity ELSE 0 END) AS available_qty
+    FROM sterile_stock
+    GROUP BY LOWER(TRIM(item_name))
+  `);
+  const stockMap = {};
+  for (const row of stockRows) {
+    stockMap[row.norm_name] = Number(row.available_qty) || 0;
+  }
+
+  // Hitung alat kotor yang sedang diproses (Diterima / Proses)
+  const [processRows] = await pool.query(`
+    SELECT LOWER(TRIM(item_name)) AS norm_name, SUM(quantity) AS in_process_qty
+    FROM dirty_receipts
+    WHERE status IN ('Diterima', 'Proses')
+    GROUP BY LOWER(TRIM(item_name))
+  `);
+  const processMap = {};
+  for (const row of processRows) {
+    processMap[row.norm_name] = Number(row.in_process_qty) || 0;
+  }
+
+  // Hitung alat yang sedang terdistribusi di unit
+  const [distRows] = await pool.query(`
+    SELECT LOWER(TRIM(s.item_name)) AS norm_name, SUM(t.quantity) AS distributed_qty
+    FROM distributions t
+    JOIN sterile_stock s ON s.id = t.stock_id
+    GROUP BY LOWER(TRIM(s.item_name))
+  `);
+  const distMap = {};
+  for (const row of distRows) {
+    distMap[row.norm_name] = Number(row.distributed_qty) || 0;
+  }
+
+  return sets.map((set) => {
+    const setItems = itemsBySet[set.id] || [];
+    const totalInstruments = setItems.reduce((acc, cur) => acc + (Number(cur.quantity) || 0), 0);
+    const normName = set.name.toLowerCase().trim();
+
+    let avail = stockMap[normName] ?? 0;
+    let inProcess = processMap[normName] ?? 0;
+    let dist = distMap[normName] ?? 0;
+
+    // Fuzzy matching jika nama agak berbeda (misal: "Set Laparotomi" vs "SET LAPAROTOMI")
+    if (avail === 0) {
+      for (const [k, v] of Object.entries(stockMap)) {
+        if (k.includes(normName) || normName.includes(k)) {
+          avail = v;
+          break;
+        }
+      }
+    }
+    if (inProcess === 0) {
+      for (const [k, v] of Object.entries(processMap)) {
+        if (k.includes(normName) || normName.includes(k)) {
+          inProcess = v;
+          break;
+        }
+      }
+    }
+    if (dist === 0) {
+      for (const [k, v] of Object.entries(distMap)) {
+        if (k.includes(normName) || normName.includes(k)) {
+          dist = v;
+          break;
+        }
+      }
+    }
+
+    return {
+      ...set,
+      items: setItems,
+      total_instruments: totalInstruments,
+      available_stock: avail,
+      in_process_stock: inProcess,
+      distributed_stock: dist,
+      is_available: avail > 0,
+    };
+  });
+}
+
+router.get('/instrument-sets', auth, wrap(async (req, res) => {
+  const sets = await getInstrumentSetsWithStock(req.query);
+  res.json({ success: true, data: sets });
+}));
+
+router.get('/instrument-sets/:id', auth, wrap(async (req, res) => {
+  const id = parseId(req.params.id);
+  const sets = await getInstrumentSetsWithStock();
+  const set = sets.find((s) => s.id === id);
+  if (!set) throw new HttpError(404, 'Set instrumen tidak ditemukan');
+  res.json({ success: true, data: set });
+}));
+
+router.post('/instrument-sets', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const body = req.body || {};
+  if (!body.name || !body.name.trim()) throw new HttpError(422, 'Nama set instrumen wajib diisi');
+  const code = (body.code && body.code.trim()) || `SET-${Date.now().toString().slice(-5)}`;
+  const completeness = body.completeness_status === 'Tidak Lengkap' ? 'Tidak Lengkap' : 'Lengkap';
+  const missingNotes = body.missing_notes ? String(body.missing_notes).trim() : null;
+  const description = body.description ? String(body.description).trim() : null;
+  const items = Array.isArray(body.items) ? body.items : [];
+
+  const id = await withTx(async (conn) => {
+    const [result] = await conn.query('INSERT INTO instrument_sets SET ?', [{
+      code,
+      name: body.name.trim().toUpperCase(),
+      completeness_status: completeness,
+      missing_notes: missingNotes,
+      description,
+      is_active: body.is_active !== undefined ? (body.is_active ? 1 : 0) : 1,
+    }]);
+    const setId = result.insertId;
+
+    if (items.length) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.instrument_name && item.instrument_name.trim()) {
+          await conn.query('INSERT INTO instrument_set_items SET ?', [{
+            set_id: setId,
+            instrument_name: item.instrument_name.trim(),
+            quantity: Math.max(parseInt(item.quantity, 10) || 1, 1),
+            unit_label: item.unit_label || 'Buah',
+            sort_order: i + 1,
+          }]);
+        }
+      }
+    }
+    return setId;
+  });
+
+  const all = await getInstrumentSetsWithStock();
+  const created = all.find((s) => s.id === id);
+  res.status(201).json({ success: true, message: 'Set instrumen berhasil ditambahkan', data: created });
+}));
+
+router.put('/instrument-sets/:id', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const id = parseId(req.params.id);
+  const body = req.body || {};
+  if (!body.name || !body.name.trim()) throw new HttpError(422, 'Nama set instrumen wajib diisi');
+
+  await withTx(async (conn) => {
+    const [[existing]] = await conn.query('SELECT * FROM instrument_sets WHERE id = ? FOR UPDATE', [id]);
+    if (!existing) throw new HttpError(404, 'Set instrumen tidak ditemukan');
+
+    const updateData = {
+      name: body.name.trim().toUpperCase(),
+      code: (body.code && body.code.trim()) || existing.code,
+      completeness_status: body.completeness_status === 'Tidak Lengkap' ? 'Tidak Lengkap' : 'Lengkap',
+      missing_notes: body.missing_notes !== undefined ? (body.missing_notes ? String(body.missing_notes).trim() : null) : existing.missing_notes,
+      description: body.description !== undefined ? String(body.description).trim() : existing.description,
+    };
+    if (body.is_active !== undefined) updateData.is_active = body.is_active ? 1 : 0;
+
+    await conn.query('UPDATE instrument_sets SET ? WHERE id = ?', [updateData, id]);
+
+    if (Array.isArray(body.items)) {
+      await conn.query('DELETE FROM instrument_set_items WHERE set_id = ?', [id]);
+      for (let i = 0; i < body.items.length; i++) {
+        const item = body.items[i];
+        if (item.instrument_name && item.instrument_name.trim()) {
+          await conn.query('INSERT INTO instrument_set_items SET ?', [{
+            set_id: id,
+            instrument_name: item.instrument_name.trim(),
+            quantity: Math.max(parseInt(item.quantity, 10) || 1, 1),
+            unit_label: item.unit_label || 'Buah',
+            sort_order: i + 1,
+          }]);
+        }
+      }
+    }
+  });
+
+  const all = await getInstrumentSetsWithStock();
+  const updated = all.find((s) => s.id === id);
+  res.json({ success: true, message: 'Set instrumen berhasil diperbarui', data: updated });
+}));
+
+router.patch('/instrument-sets/:id/completeness', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const id = parseId(req.params.id);
+  const body = req.body || {};
+  const status = body.completeness_status === 'Tidak Lengkap' ? 'Tidak Lengkap' : 'Lengkap';
+  const missingNotes = body.missing_notes ? String(body.missing_notes).trim() : null;
+
+  const [[existing]] = await pool.query('SELECT * FROM instrument_sets WHERE id = ?', [id]);
+  if (!existing) throw new HttpError(404, 'Set instrumen tidak ditemukan');
+
+  await pool.query('UPDATE instrument_sets SET completeness_status = ?, missing_notes = ? WHERE id = ?', [
+    status,
+    status === 'Lengkap' ? null : missingNotes,
+    id,
+  ]);
+
+  const all = await getInstrumentSetsWithStock();
+  const updated = all.find((s) => s.id === id);
+  res.json({
+    success: true,
+    message: `Status kelengkapan set diubah menjadi ${status}`,
+    data: updated,
+  });
+}));
+
+router.delete('/instrument-sets/:id', auth, allow('admin'), wrap(async (req, res) => {
+  const id = parseId(req.params.id);
+  const [[existing]] = await pool.query('SELECT * FROM instrument_sets WHERE id = ?', [id]);
+  if (!existing) throw new HttpError(404, 'Set instrumen tidak ditemukan');
+
+  await pool.query('DELETE FROM instrument_sets WHERE id = ?', [id]);
+  res.json({ success: true, message: 'Set instrumen berhasil dihapus' });
+}));
+
+/* ============================================================
  * CUSTOM ROUTES
  * ============================================================ */
 const loginLimiter = rateLimit({
@@ -1241,11 +1497,162 @@ async function ensureOfficersTable() {
   }
 }
 
+async function ensureInstrumentSetsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS instrument_sets (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      code VARCHAR(30) NOT NULL,
+      name VARCHAR(150) NOT NULL,
+      completeness_status ENUM('Lengkap','Tidak Lengkap') NOT NULL DEFAULT 'Lengkap',
+      missing_notes VARCHAR(255) DEFAULT NULL,
+      description VARCHAR(255) DEFAULT NULL,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_instrument_sets_code (code),
+      KEY idx_instrument_sets_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS instrument_set_items (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      set_id INT UNSIGNED NOT NULL,
+      instrument_name VARCHAR(150) NOT NULL,
+      quantity INT UNSIGNED NOT NULL DEFAULT 1,
+      unit_label VARCHAR(30) NOT NULL DEFAULT 'Buah',
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_set_items_set_id (set_id),
+      CONSTRAINT fk_set_items_set FOREIGN KEY (set_id) REFERENCES instrument_sets (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM instrument_sets');
+  if (total === 0) {
+    const [r1] = await pool.query(`
+      INSERT INTO instrument_sets (code, name, completeness_status, description)
+      VALUES ('SET-LAP', 'SET LAPAROTOMI', 'Lengkap', 'Set instrumen bedah laparotomi mayor')
+    `);
+    const set1 = r1.insertId;
+    await pool.query(`
+      INSERT INTO instrument_set_items (set_id, instrument_name, quantity, unit_label, sort_order) VALUES
+      (?, 'Pinset anatomis', 2, 'Buah', 1),
+      (?, 'Pinset sirurgis', 2, 'Buah', 2),
+      (?, 'Gunting Mayo', 2, 'Buah', 3),
+      (?, 'Klem Pean', 6, 'Buah', 4),
+      (?, 'Needle holder', 2, 'Buah', 5)
+    `, [set1, set1, set1, set1, set1]);
+
+    const [r2] = await pool.query(`
+      INSERT INTO instrument_sets (code, name, completeness_status, description)
+      VALUES ('SET-MNR', 'SET MINOR', 'Lengkap', 'Set bedah minor rawat jalan & IGD')
+    `);
+    const set2 = r2.insertId;
+    await pool.query(`
+      INSERT INTO instrument_set_items (set_id, instrument_name, quantity, unit_label, sort_order) VALUES
+      (?, 'Gunting bedah lurus', 1, 'Buah', 1),
+      (?, 'Gunting bedah bengkok', 1, 'Buah', 2),
+      (?, 'Pinset anatomis', 2, 'Buah', 3),
+      (?, 'Pinset sirurgis', 2, 'Buah', 4),
+      (?, 'Klem arteri Pean', 2, 'Buah', 5),
+      (?, 'Needle holder', 1, 'Buah', 6),
+      (?, 'Bak instrumen', 1, 'Buah', 7)
+    `, [set2, set2, set2, set2, set2, set2, set2]);
+
+    const [r3] = await pool.query(`
+      INSERT INTO instrument_sets (code, name, completeness_status, description)
+      VALUES ('SET-SC', 'SET SECTIO CAESAREA', 'Lengkap', 'Set bedah sesar / SC kamar operasi VK')
+    `);
+    const set3 = r3.insertId;
+    await pool.query(`
+      INSERT INTO instrument_set_items (set_id, instrument_name, quantity, unit_label, sort_order) VALUES
+      (?, 'Pinset sirurgis', 2, 'Buah', 1),
+      (?, 'Pinset anatomis', 2, 'Buah', 2),
+      (?, 'Gunting Metzenbaum', 2, 'Buah', 3),
+      (?, 'Gunting Mayo', 2, 'Buah', 4),
+      (?, 'Klem Kocher', 4, 'Buah', 5),
+      (?, 'Klem Pean', 4, 'Buah', 6),
+      (?, 'Needle holder', 2, 'Buah', 7),
+      (?, 'Retraktor Abdomen', 2, 'Buah', 8),
+      (?, 'Ring forceps / Klem kassa', 2, 'Buah', 9)
+    `, [set3, set3, set3, set3, set3, set3, set3, set3, set3]);
+
+    const [r4] = await pool.query(`
+      INSERT INTO instrument_sets (code, name, completeness_status, missing_notes, description)
+      VALUES ('SET-PRT', 'SET PARTUS', 'Tidak Lengkap', 'Gunting episiotomi kurang 1 pcs dalam perbaikan teknisi', 'Set pertolongan persalinan normal')
+    `);
+    const set4 = r4.insertId;
+    await pool.query(`
+      INSERT INTO instrument_set_items (set_id, instrument_name, quantity, unit_label, sort_order) VALUES
+      (?, 'Gunting episiotomi', 1, 'Buah', 1),
+      (?, 'Gunting tali pusat', 1, 'Buah', 2),
+      (?, 'Klem tali pusat', 2, 'Buah', 3),
+      (?, 'Pinset anatomis', 1, 'Buah', 4),
+      (?, 'Needle holder', 1, 'Buah', 5),
+      (?, 'Catheter nelaton', 1, 'Buah', 6),
+      (?, 'Setengah kocher', 1, 'Buah', 7)
+    `, [set4, set4, set4, set4, set4, set4, set4]);
+  }
+}
+
+async function ensureCategoryMigration() {
+  try {
+    // 1. Perluas ENUM jika belum mencakup 4 kategori baru
+    await pool.query(`
+      ALTER TABLE items MODIFY COLUMN category ENUM('Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi', 'Kasa Steril', 'Instrumen / Set Alat') NOT NULL
+    `);
+    await pool.query(`
+      ALTER TABLE packagings MODIFY COLUMN package_type ENUM('Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi', 'Kasa Steril', 'Instrumen / Set Alat') NOT NULL
+    `);
+    await pool.query(`
+      ALTER TABLE sterile_stock MODIFY COLUMN category ENUM('Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi', 'Kasa Steril', 'Instrumen / Set Alat') NOT NULL
+    `);
+
+    // 2. Migrasi data lama dari 'Instrumen / Set Alat'
+    await pool.query(`
+      UPDATE items SET category = CASE 
+        WHEN name LIKE '%Set%' OR name LIKE '%SET%' OR code LIKE 'SET%' OR code LIKE 'INS%' THEN 'Set Instrumen'
+        ELSE 'Alat Satuan'
+      END WHERE category = 'Instrumen / Set Alat'
+    `);
+    await pool.query(`
+      UPDATE packagings SET package_type = CASE
+        WHEN material = 'Container' OR unit_label = 'set' THEN 'Set Instrumen'
+        ELSE 'Alat Satuan'
+      END WHERE package_type = 'Instrumen / Set Alat'
+    `);
+    await pool.query(`
+      UPDATE sterile_stock SET category = CASE
+        WHEN item_name LIKE '%Set%' OR item_name LIKE '%SET%' OR unit_label = 'set' THEN 'Set Instrumen'
+        ELSE 'Alat Satuan'
+      END WHERE category = 'Instrumen / Set Alat'
+    `);
+
+    // 3. Kunci ENUM 4 kategori
+    await pool.query(`
+      ALTER TABLE items MODIFY COLUMN category ENUM('Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi', 'Kasa Steril') NOT NULL
+    `);
+    await pool.query(`
+      ALTER TABLE packagings MODIFY COLUMN package_type ENUM('Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi', 'Kasa Steril') NOT NULL
+    `);
+    await pool.query(`
+      ALTER TABLE sterile_stock MODIFY COLUMN category ENUM('Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi', 'Kasa Steril') NOT NULL
+    `);
+  } catch (e) {
+    // Abaikan jika sudah termigrasi atau tabel belum ada
+  }
+}
+
 async function start() {
   try {
     await pool.query('SELECT 1');
     await ensureAdmin();
     await ensureOfficersTable();
+    await ensureInstrumentSetsTable();
+    await ensureCategoryMigration();
   } catch (err) {
     console.error('Gagal terhubung ke database. Pastikan MySQL berjalan dan sql/database.sql sudah diimport.');
     console.error(err.message);

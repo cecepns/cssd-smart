@@ -76,7 +76,7 @@ CREATE TABLE `items` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `code` VARCHAR(30) NOT NULL,
   `name` VARCHAR(150) NOT NULL,
-  `category` ENUM('Duk & Jas Operasi','Kasa Steril','Instrumen / Set Alat') NOT NULL,
+  `category` ENUM('Alat Satuan','Set Instrumen','Duk & Jas Operasi','Kasa Steril') NOT NULL,
   `shelf_life_months` TINYINT UNSIGNED NOT NULL DEFAULT 6,
   `photo` VARCHAR(255) DEFAULT NULL,
   `description` VARCHAR(255) DEFAULT NULL,
@@ -112,6 +112,34 @@ CREATE TABLE `officers` (
   PRIMARY KEY (`id`),
   KEY `idx_officers_active` (`is_active`),
   KEY `idx_officers_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `instrument_sets` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `code` VARCHAR(30) NOT NULL,
+  `name` VARCHAR(150) NOT NULL,
+  `completeness_status` ENUM('Lengkap','Tidak Lengkap') NOT NULL DEFAULT 'Lengkap',
+  `missing_notes` VARCHAR(255) DEFAULT NULL,
+  `description` VARCHAR(255) DEFAULT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_instrument_sets_code` (`code`),
+  KEY `idx_instrument_sets_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `instrument_set_items` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `set_id` INT UNSIGNED NOT NULL,
+  `instrument_name` VARCHAR(150) NOT NULL,
+  `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
+  `unit_label` VARCHAR(30) NOT NULL DEFAULT 'Buah',
+  `sort_order` INT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_set_items_set_id` (`set_id`),
+  CONSTRAINT `fk_set_items_set` FOREIGN KEY (`set_id`) REFERENCES `instrument_sets` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
@@ -183,7 +211,7 @@ CREATE TABLE `dryings` (
 CREATE TABLE `packagings` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `receipt_id` INT UNSIGNED NOT NULL,
-  `package_type` ENUM('Duk & Jas Operasi','Kasa Steril','Instrumen / Set Alat') NOT NULL,
+  `package_type` ENUM('Alat Satuan','Set Instrumen','Duk & Jas Operasi','Kasa Steril') NOT NULL,
   `material` VARCHAR(80) NOT NULL,
   `barcode` VARCHAR(50) NOT NULL,
   `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
@@ -258,7 +286,7 @@ CREATE TABLE `sterile_stock` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `packaging_id` INT UNSIGNED NOT NULL,
   `barcode` VARCHAR(50) NOT NULL,
-  `category` ENUM('Duk & Jas Operasi','Kasa Steril','Instrumen / Set Alat') NOT NULL,
+  `category` ENUM('Alat Satuan','Set Instrumen','Duk & Jas Operasi','Kasa Steril') NOT NULL,
   `item_name` VARCHAR(150) NOT NULL,
   `batch_no` VARCHAR(50) NOT NULL,
   `sterile_date` DATE NOT NULL,
@@ -365,11 +393,13 @@ INSERT INTO `units` (`id`,`code`,`name`,`pic_name`,`phone`) VALUES
 (6,'PG','Poli Gigi','drg. Andi','081200000006');
 
 INSERT INTO `items` (`id`,`code`,`name`,`category`,`shelf_life_months`,`description`) VALUES
-(1,'INS-LAP','Set Laparotomi','Instrumen / Set Alat',6,'Set instrumen laparotomi'),
-(2,'INS-MNR','Set Minor','Instrumen / Set Alat',6,'Set bedah minor'),
+(1,'SET-LAP','Set Laparotomi','Set Instrumen',6,'Set instrumen laparotomi'),
+(2,'SET-MNR','Set Minor','Set Instrumen',6,'Set bedah minor'),
 (3,'DUK-LAP','Duk Laparotomi','Duk & Jas Operasi',6,'Duk steril laparotomi'),
 (4,'KSA-10','Kasa 10x10','Kasa Steril',6,'Kasa steril 10x10 cm'),
-(5,'JAS-OP','Jas Operasi','Duk & Jas Operasi',6,'Jas operasi steril');
+(5,'JAS-OP','Jas Operasi','Duk & Jas Operasi',6,'Jas operasi steril'),
+(6,'ALT-GNT','Gunting Hecting Satuan','Alat Satuan',6,'Gunting angkat jahitan / hecting lepasan'),
+(7,'ALT-PNS','Pinset Sirurgis Satuan','Alat Satuan',6,'Pinset sirurgis lepasan IGD/Poli');
 
 INSERT INTO `machines` (`id`,`code`,`name`,`type`) VALUES
 (1,'AU1','Autoclave 1','Autoklaf'),
@@ -409,8 +439,8 @@ INSERT INTO `packagings`
 (`id`,`receipt_id`,`package_type`,`material`,`barcode`,`quantity`,`unit_label`,`officer`,`pack_date`,`status`) VALUES
 (1,3,'Duk & Jas Operasi','SMS Wrap','PG-301026-001',10,'paket','Inge','2026-10-30','Lulus'),
 (2,4,'Kasa Steril','Pouch','KS-301026-001',50,'paket','Inge','2026-10-30','Lulus'),
-(3,1,'Instrumen / Set Alat','Container','SM-301026-001',10,'set','Inge','2026-10-30','Lulus'),
-(4,2,'Instrumen / Set Alat','Container','SM-301026-002',2,'set','Inge','2026-10-30','Karantina');
+(3,1,'Set Instrumen','Container','SM-301026-001',10,'set','Inge','2026-10-30','Lulus'),
+(4,2,'Set Instrumen','Container','SM-301026-002',2,'set','Inge','2026-10-30','Karantina');
 
 INSERT INTO `sterilizations`
 (`id`,`machine_id`,`cycle_no`,`batch_no`,`temperature`,`duration_min`,`officer`,`steril_date`,`status`) VALUES
@@ -428,7 +458,48 @@ INSERT INTO `sterile_stock`
 (`packaging_id`,`barcode`,`category`,`item_name`,`batch_no`,`sterile_date`,`expiry_date`,`quantity`,`unit_label`,`status`) VALUES
 (1,'PG-301026-001','Duk & Jas Operasi','Duk Laparotomi','AU1-301026-025','2026-10-30','2027-04-30',10,'paket','Tersedia'),
 (2,'KS-301026-001','Kasa Steril','Kasa 10x10','AU1-301026-025','2026-10-30','2027-04-30',50,'paket','Tersedia'),
-(3,'SM-301026-001','Instrumen / Set Alat','Set Minor','AU1-301026-025','2026-10-30','2027-04-30',10,'set','Tersedia');
+(3,'SM-301026-001','Set Instrumen','Set Minor','AU1-301026-025','2026-10-30','2027-04-30',10,'set','Tersedia'),
+(1,'SM-301026-003','Set Instrumen','SET LAPAROTOMI','AU1-301026-025','2026-10-30','2027-04-30',5,'set','Tersedia');
+
+INSERT INTO `instrument_sets` (`id`, `code`, `name`, `completeness_status`, `missing_notes`, `description`) VALUES
+(1, 'SET-LAP', 'SET LAPAROTOMI', 'Lengkap', NULL, 'Set instrumen bedah laparotomi mayor'),
+(2, 'SET-MNR', 'SET MINOR', 'Lengkap', NULL, 'Set bedah minor rawat jalan & IGD'),
+(3, 'SET-SC', 'SET SECTIO CAESAREA', 'Lengkap', NULL, 'Set bedah sesar / SC kamar operasi VK'),
+(4, 'SET-PRT', 'SET PARTUS', 'Tidak Lengkap', 'Gunting episiotomi kurang 1 pcs dalam perbaikan teknisi', 'Set pertolongan persalinan normal');
+
+INSERT INTO `instrument_set_items` (`set_id`, `instrument_name`, `quantity`, `unit_label`, `sort_order`) VALUES
+-- Set Laparotomi (14 buah)
+(1, 'Pinset anatomis', 2, 'Buah', 1),
+(1, 'Pinset sirurgis', 2, 'Buah', 2),
+(1, 'Gunting Mayo', 2, 'Buah', 3),
+(1, 'Klem Pean', 6, 'Buah', 4),
+(1, 'Needle holder', 2, 'Buah', 5),
+-- Set Minor (10 buah)
+(2, 'Gunting bedah lurus', 1, 'Buah', 1),
+(2, 'Gunting bedah bengkok', 1, 'Buah', 2),
+(2, 'Pinset anatomis', 2, 'Buah', 3),
+(2, 'Pinset sirurgis', 2, 'Buah', 4),
+(2, 'Klem arteri Pean', 2, 'Buah', 5),
+(2, 'Needle holder', 1, 'Buah', 6),
+(2, 'Bak instrumen', 1, 'Buah', 7),
+-- Set SC (22 buah)
+(3, 'Pinset sirurgis', 2, 'Buah', 1),
+(3, 'Pinset anatomis', 2, 'Buah', 2),
+(3, 'Gunting Metzenbaum', 2, 'Buah', 3),
+(3, 'Gunting Mayo', 2, 'Buah', 4),
+(3, 'Klem Kocher', 4, 'Buah', 5),
+(3, 'Klem Pean', 4, 'Buah', 6),
+(3, 'Needle holder', 2, 'Buah', 7),
+(3, 'Retraktor Abdomen', 2, 'Buah', 8),
+(3, 'Ring forceps / Klem kassa', 2, 'Buah', 9),
+-- Set Partus (8 buah)
+(4, 'Gunting episiotomi', 1, 'Buah', 1),
+(4, 'Gunting tali pusat', 1, 'Buah', 2),
+(4, 'Klem tali pusat', 2, 'Buah', 3),
+(4, 'Pinset anatomis', 1, 'Buah', 4),
+(4, 'Needle holder', 1, 'Buah', 5),
+(4, 'Catheter nelaton', 1, 'Buah', 6),
+(4, 'Setengah kocher', 1, 'Buah', 7);
 
 INSERT INTO `quarantines` (`packaging_id`,`verification_id`,`barcode`,`batch_no`,`reason`,`status`) VALUES
 (4,2,'SM-301026-002','AU2-301026-021','Indikator biologi (BI) tidak sesuai','Karantina');

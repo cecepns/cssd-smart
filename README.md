@@ -16,8 +16,11 @@ Verifikasi → **Lulus**: masuk Stok Alat Steril → Distribusi Alat/Kasa Steril
 
 ## Menjalankan
 ```bash
-# 1. Database
+# 1. Database (Setup Awal)
 mysql -u root -p < backend/sql/database.sql
+
+# Jika melakukan update/migrasi tabel pada database yang sudah berjalan:
+mysql -u root -p < backend/sql/migrations/migrate_all_new_tables.sql
 
 # 2. Backend
 cd backend

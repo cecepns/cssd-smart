@@ -56,7 +56,7 @@ export const itemsConfig = {
   ...masterBase,
   key: 'master-jenis-alat',
   title: 'Jenis Alat',
-  subtitle: 'Master instrumen, duk & jas, dan kasa beserta masa steril',
+  subtitle: 'Master alat satuan, set instrumen, duk & jas, dan kasa beserta masa steril',
   icon: Tags,
   endpoint: API_ENDPOINTS.ITEMS,
   searchPlaceholder: 'Cari kode, nama alat...',
@@ -80,8 +80,8 @@ export const itemsConfig = {
   ],
   form: {
     fields: [
-      { name: 'code', label: 'Kode', required: true, maxLength: 30, placeholder: 'INS-LAP' },
-      { name: 'name', label: 'Nama alat', required: true, maxLength: 150, placeholder: 'Set Laparotomi' },
+      { name: 'code', label: 'Kode', required: true, maxLength: 30, placeholder: 'SET-LAP / ALT-GNT' },
+      { name: 'name', label: 'Nama alat', required: true, maxLength: 150, placeholder: 'Set Laparotomi / Gunting Hecting' },
       { name: 'category', label: 'Kategori', type: 'select', required: true, options: PACKAGE_TYPES, placeholder: 'Pilih kategori...' },
       { name: 'shelf_life_months', label: 'Masa steril (bulan)', type: 'number', required: true, min: 1, max: 60, default: 6, help: 'Dipakai menghitung tanggal kedaluwarsa otomatis.' },
       { name: 'description', label: 'Keterangan', maxLength: 255, span: 2 },

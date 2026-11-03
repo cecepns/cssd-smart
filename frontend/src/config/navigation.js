@@ -26,6 +26,7 @@ export const NAV_SECTIONS = [
     title: 'Transaksi Utama (Pakai Barcode)',
     items: [
       { label: 'Alat Kotor Masuk', to: ROUTES.RECEIPTS, icon: ScanLine },
+      { label: 'Set Instrumen', to: ROUTES.INSTRUMENT_SETS, icon: Layers },
       { label: 'Distribusi Alat Steril', to: ROUTES.DIST_TOOLS, icon: Truck },
       { label: 'Distribusi Kasa Steril', to: ROUTES.DIST_GAUZE, icon: Boxes },
     ],
@@ -68,6 +69,7 @@ export const NAV_SECTIONS = [
 /** Kartu "Menu Utama" pada beranda. `tone` merujuk ke TONES di utils/constants. */
 export const MENU_CARDS = [
   { title: 'Alat Kotor Masuk', desc: 'Penerimaan dari unit memakai barcode / kamera HP', to: ROUTES.RECEIPTS, icon: ScanLine, tone: 'red' },
+  { title: 'Set Instrumen', desc: 'Monitoring stok riil dan kelengkapan instrumen per set', to: ROUTES.INSTRUMENT_SETS, icon: Layers, tone: 'green' },
   { title: 'Pencucian', desc: 'Pencucian dengan Washer / DTT, cairan dan waktu', to: ROUTES.WASHINGS, icon: Droplets, tone: 'blue' },
   { title: 'Pengeringan & Pemeriksaan', desc: 'Cek kering, bebas karat, dan fungsi alat', to: ROUTES.DRYINGS, icon: Wind, tone: 'amber' },
   { title: 'Pengemasan', desc: 'Penyusunan, kemasan, dan label barcode paket', to: ROUTES.PACKAGINGS, icon: Package, tone: 'amber' },

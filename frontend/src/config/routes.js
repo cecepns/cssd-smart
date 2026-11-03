@@ -11,6 +11,7 @@ export const ROUTES = {
   VERIFICATIONS: '/verifikasi',
   DIST_TOOLS: '/distribusi-alat',
   DIST_GAUZE: '/distribusi-kasa',
+  INSTRUMENT_SETS: '/set-instrumen',
 
   BMHP: '/bmhp',
   BMHP_IN: '/bmhp/masuk',

@@ -204,10 +204,23 @@ export const packagingsConfig = {
         help: 'Hanya alat yang sudah lolos pengeringan & pemeriksaan yang tampil di sini.',
         onChange: (_, { option, setValues }) => option && setValues({ quantity: option.quantity }),
       }),
-      { name: 'package_type', label: 'Jenis kemasan', type: 'select', required: true, options: PACKAGE_TYPES, placeholder: 'Pilih jenis...' },
+      {
+        name: 'package_type',
+        label: 'Jenis kemasan',
+        type: 'select',
+        required: true,
+        options: PACKAGE_TYPES,
+        placeholder: 'Pilih jenis...',
+        onChange: (val, { setValues }) => {
+          if (val === 'Alat Satuan') setValues({ unit_label: 'pcs', material: 'Pouch' });
+          else if (val === 'Set Instrumen') setValues({ unit_label: 'set', material: 'SMS Wrap' });
+          else if (val === 'Duk & Jas Operasi') setValues({ unit_label: 'paket', material: 'SMS Wrap' });
+          else if (val === 'Kasa Steril') setValues({ unit_label: 'pouch', material: 'Pouch' });
+        },
+      },
       { name: 'material', label: 'Bahan kemasan', type: 'select', required: true, options: ['SMS Wrap', 'Pouch', 'Container', 'Linen', 'Kertas Krep'], default: 'SMS Wrap' },
       { name: 'quantity', label: 'Jumlah paket', type: 'number', required: true, min: 1, default: 1 },
-      { name: 'unit_label', label: 'Satuan', type: 'select', required: true, options: ['paket', 'set', 'pcs'], default: 'paket' },
+      { name: 'unit_label', label: 'Satuan', type: 'select', required: true, options: ['set', 'pcs', 'paket', 'pouch', 'lembar'], default: 'set' },
       fieldOfficer,
       fieldDate('pack_date'),
     ],

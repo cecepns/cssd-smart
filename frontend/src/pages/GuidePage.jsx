@@ -6,7 +6,7 @@ const DETAILS = {
   1: 'Scan/ketik barcode atau terima alat dari unit. Isi unit asal, jenis alat, jumlah, petugas penyerah & penerima, lalu tanda tangan. Barcode AK-DDMMYY-001 dibuat otomatis.',
   2: 'Pilih alat kotor, isi metode (Washer / Manual / Ultrasonik), cairan, waktu, dan petugas.',
   3: 'Centang alat kering sempurna, tidak ada karat/noda, dan fungsi baik. Jika ada yang tidak terpenuhi, alat otomatis kembali ke Pencucian.',
-  4: 'Pilih alat yang lolos pemeriksaan, tentukan jenis & bahan kemasan, lalu cetak label barcode paket (PG-/KS-/SM-).',
+  4: 'Pilih alat yang lolos pemeriksaan, tentukan jenis & bahan kemasan, lalu cetak label barcode paket (AS-/ST-/PG-/KS-).',
   5: 'Pilih mesin (Autoclave 1, 2, atau Plasma), suhu, waktu, dan paket yang disterilkan. No. siklus dan batch dibuat otomatis.',
   6: 'Isi kondisi kemasan, indikator kimia internal & eksternal, indikator biologi, dan Bowie-Dick. Semua sesuai = LULUS, selain itu = GAGAL.',
   7: 'Terisi otomatis hanya dari verifikasi LULUS, lengkap dengan tanggal kedaluwarsa. Verifikasi GAGAL otomatis masuk Karantina.',
