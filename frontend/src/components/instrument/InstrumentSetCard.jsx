@@ -32,27 +32,27 @@ export default function InstrumentSetCard({
   const discrepancyCount = Number(set.discrepancy_count) || 0;
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+    <div className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-sm transition-all hover:shadow-md">
       {/* Header Kartu */}
       <div>
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-2.5">
           <div className="min-w-0">
-            <h3 className="text-lg font-black tracking-tight text-slate-800 uppercase">
+            <h3 className="text-base sm:text-lg font-black tracking-tight text-slate-800 uppercase truncate">
               {set.name}
             </h3>
             {set.code && (
-              <p className="mt-0.5 text-xs font-mono font-medium text-slate-600">
+              <p className="mt-0.5 text-xs font-mono font-medium text-slate-600 truncate">
                 {set.code} {set.description ? `• ${set.description}` : ''}
               </p>
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {isAvailable ? (
-              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-0.5 text-xs font-semibold text-emerald-700">
+              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold text-emerald-700">
                 Tersedia
               </span>
             ) : (
-              <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-0.5 text-xs font-semibold text-rose-700">
+              <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold text-rose-700">
                 Kosong
               </span>
             )}
@@ -60,37 +60,37 @@ export default function InstrumentSetCard({
         </div>
 
         {/* 2 Box Statistik Utama: Jumlah Set Tersedia & Instrumen Per Set */}
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="mt-3.5 grid grid-cols-2 gap-2.5">
           {/* Box 1: Jumlah set tersedia (Siap Pakai di CSSD) */}
-          <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3.5">
-            <span className="block text-xs font-medium text-slate-500">
+          <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+            <span className="block text-[11px] sm:text-xs font-medium text-slate-500">
               Stok siap pakai
             </span>
-            <span className="mt-1 block text-2xl font-black text-emerald-700 sm:text-3xl">
+            <span className="mt-0.5 block text-xl font-black text-emerald-700 sm:text-2xl">
               {set.available_stock} Set
             </span>
           </div>
 
           {/* Box 2: Instrumen per set */}
-          <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3.5">
-            <span className="block text-xs font-medium text-slate-500">
+          <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+            <span className="block text-[11px] sm:text-xs font-medium text-slate-500">
               Instrumen per set
             </span>
-            <span className="mt-1 block text-2xl font-black text-slate-800 sm:text-3xl">
+            <span className="mt-0.5 block text-xl font-black text-slate-800 sm:text-2xl">
               {set.total_instruments} Buah
             </span>
           </div>
         </div>
 
         {/* Status Pergerakan: Sedang di Unit & Sedang Diproses */}
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <div className="flex items-center gap-1.5 rounded-lg border border-sky-100 bg-sky-50/70 px-2.5 py-1.5 text-sky-800 font-medium">
-            <Users size={14} className="text-sky-600 shrink-0" />
-            <span>Di Unit: <strong>{inUnitStock} Set</strong></span>
+        <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+          <div className="flex items-center gap-1.5 rounded-lg border border-sky-100 bg-sky-50/70 px-2 py-1 text-sky-800 font-medium truncate">
+            <Users size={13} className="text-sky-600 shrink-0" />
+            <span className="truncate">Di Unit: <strong>{inUnitStock}</strong></span>
           </div>
-          <div className="flex items-center gap-1.5 rounded-lg border border-amber-100 bg-amber-50/70 px-2.5 py-1.5 text-amber-800 font-medium">
-            <Clock size={14} className="text-amber-600 shrink-0" />
-            <span>Proses: <strong>{inProcessStock} Set</strong></span>
+          <div className="flex items-center gap-1.5 rounded-lg border border-amber-100 bg-amber-50/70 px-2 py-1 text-amber-800 font-medium truncate">
+            <Clock size={13} className="text-amber-600 shrink-0" />
+            <span className="truncate">Proses: <strong>{inProcessStock}</strong></span>
           </div>
         </div>
 
@@ -170,8 +170,9 @@ export default function InstrumentSetCard({
               title="Catat instrumen hilang, rusak, atau kurang pada set ini"
               className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 transition-colors border border-amber-200"
             >
-              <AlertTriangle size={12} />
-              <span>Lapor Kurang/Rusak</span>
+              <AlertTriangle size={12} className="shrink-0" />
+              <span className="hidden sm:inline">Lapor Kurang/Rusak</span>
+              <span className="sm:hidden">Lapor</span>
             </button>
 
             {canEdit && (

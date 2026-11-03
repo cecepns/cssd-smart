@@ -264,104 +264,113 @@ export default function InstrumentSetsPage() {
         subtitle="Monitoring jumlah set, kelengkapan instrumen, pergerakan peminjaman, serta riwayat alat hilang/rusak per set"
         icon={Layers}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <Button
               variant="secondary"
+              size="sm"
               onClick={handleRefreshAll}
               disabled={setsLoading}
               title="Perbarui seluruh data"
+              className="sm:h-10 sm:px-4 sm:text-sm"
             >
               <RefreshCw size={15} className={setsLoading ? 'animate-spin' : ''} />
               <span className="hidden sm:inline">Refresh Data</span>
             </Button>
             <Button
               variant="secondary"
+              size="sm"
               onClick={() => handleOpenReportDiscrepancy(null)}
-              className="text-amber-700 hover:bg-amber-50 border-amber-200"
+              className="text-amber-700 hover:bg-amber-50 border-amber-200 sm:h-10 sm:px-4 sm:text-sm"
             >
               <AlertTriangle size={15} />
-              <span>Lapor Hilang/Rusak</span>
+              <span className="hidden sm:inline">Lapor Hilang/Rusak</span>
+              <span className="sm:hidden">Lapor</span>
             </Button>
-            <Button onClick={handleOpenCreate}>
+            <Button
+              size="sm"
+              onClick={handleOpenCreate}
+              className="sm:h-10 sm:px-4 sm:text-sm"
+            >
               <Plus size={16} />
-              <span>Tambah Set Baru</span>
+              <span className="hidden sm:inline">Tambah Set Baru</span>
+              <span className="sm:hidden">Tambah Set</span>
             </Button>
           </div>
         }
       />
 
-      {/* KPI Statistic Cards (5 Box Ringkasan Realtime) */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {/* KPI Statistic Cards (5 Box Ringkasan Realtime - Responsif Mobile) */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {/* Total Jenis Set */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-sm">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Jenis Set</span>
-            <Layers size={18} className="text-brand-600" />
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider">Jenis Set</span>
+            <Layers size={17} className="text-brand-600 shrink-0" />
           </div>
-          <p className="mt-2 text-2xl font-black text-slate-900 sm:text-3xl">
+          <p className="mt-1.5 text-xl sm:text-2xl font-black text-slate-900">
             {stats.totalSets}
           </p>
-          <span className="mt-0.5 block text-xs font-medium text-slate-600">
+          <span className="mt-0.5 block text-[11px] sm:text-xs font-medium text-slate-600 truncate">
             Set aktif terdaftar
           </span>
         </div>
 
         {/* Total Set Siap Pakai (Tersedia di CSSD) */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-sm">
           <div className="flex items-center justify-between text-emerald-600">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500">
               Stok Tersedia
             </span>
-            <CheckCircle2 size={18} className="text-emerald-600" />
+            <CheckCircle2 size={17} className="text-emerald-600 shrink-0" />
           </div>
-          <p className="mt-2 text-2xl font-black text-emerald-700 sm:text-3xl">
+          <p className="mt-1.5 text-xl sm:text-2xl font-black text-emerald-700">
             {stats.totalAvailable}
           </p>
-          <span className="mt-0.5 block text-xs font-medium text-emerald-600">
+          <span className="mt-0.5 block text-[11px] sm:text-xs font-medium text-emerald-600 truncate">
             Siap pakai di CSSD
           </span>
         </div>
 
         {/* Set Sedang di Unit / Ruangan */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-sm">
           <div className="flex items-center justify-between text-sky-600">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Di Unit / Ruangan
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Di Ruangan
             </span>
-            <Users size={18} className="text-sky-600" />
+            <Users size={17} className="text-sky-600 shrink-0" />
           </div>
-          <p className="mt-2 text-2xl font-black text-sky-700 sm:text-3xl">
+          <p className="mt-1.5 text-xl sm:text-2xl font-black text-sky-700">
             {stats.totalInUnit}
           </p>
-          <span className="mt-0.5 block text-xs font-medium text-sky-600">
-            Sedang dipinjam/dipakai
+          <span className="mt-0.5 block text-[11px] sm:text-xs font-medium text-sky-600 truncate">
+            Dipinjam ruangan
           </span>
         </div>
 
         {/* Set Sedang Diproses (Alat kotor, cuci, steril) */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-sm">
           <div className="flex items-center justify-between text-amber-600">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500">
               Dalam Proses
             </span>
-            <Clock size={18} className="text-amber-600" />
+            <Clock size={17} className="text-amber-600 shrink-0" />
           </div>
-          <p className="mt-2 text-2xl font-black text-amber-700 sm:text-3xl">
+          <p className="mt-1.5 text-xl sm:text-2xl font-black text-amber-700">
             {stats.totalInProcess}
           </p>
-          <span className="mt-0.5 block text-xs font-medium text-amber-600">
-            Sedang dicuci/disteril
+          <span className="mt-0.5 block text-[11px] sm:text-xs font-medium text-amber-600 truncate">
+            Cuci / sterilisasi
           </span>
         </div>
 
         {/* Status Kelengkapan */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm col-span-2 sm:col-span-1">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-sm col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Kelengkapan</span>
-            <Sparkles size={18} className="text-purple-600" />
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider">Kelengkapan</span>
+            <Sparkles size={17} className="text-purple-600 shrink-0" />
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-emerald-700 sm:text-3xl">
+          <div className="mt-1.5 flex items-baseline gap-2">
+            <span className="text-xl sm:text-2xl font-black text-emerald-700">
               {stats.completeCount}
             </span>
             <span className="text-xs font-semibold text-slate-600">Lengkap</span>
@@ -371,64 +380,152 @@ export default function InstrumentSetsPage() {
               </span>
             )}
           </div>
-          <span className="mt-0.5 block text-xs font-medium text-slate-600">
+          <span className="mt-0.5 block text-[11px] sm:text-xs font-medium text-slate-600 truncate">
             Status isi instrumen
           </span>
         </div>
       </div>
 
-      {/* Main Tab Navigation Buttons */}
-      <div className="flex border-b border-slate-200">
-        <button
-          type="button"
-          onClick={() => setActiveTab('SETS')}
-          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${
-            activeTab === 'SETS'
-              ? 'border-brand-600 text-brand-700'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Layers size={16} />
-          <span>Daftar & Stok Set ({stats.totalSets})</span>
-        </button>
+      {/* Main Tab Navigation Buttons (Mobile Optimized Segmented Bar + Desktop Tabs) */}
+      <div className="no-print">
+        {/* Mobile View: Clean Segmented Bar */}
+        <div className="sm:hidden -mx-3 px-3 overflow-x-auto pb-1 scrollbar-none">
+          <div className="inline-flex min-w-full p-1 bg-slate-100 rounded-2xl gap-1 border border-slate-200/80 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setActiveTab('SETS')}
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                activeTab === 'SETS'
+                  ? 'bg-brand-700 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <Layers size={14} className="shrink-0" />
+              <span>Daftar & Stok</span>
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-black ${
+                  activeTab === 'SETS' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                {stats.totalSets}
+              </span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('MOVEMENTS')}
-          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${
-            activeTab === 'MOVEMENTS'
-              ? 'border-brand-600 text-brand-700'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <History size={16} />
-          <span>Pergerakan (Pengambilan & Pengembalian)</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('MOVEMENTS')}
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                activeTab === 'MOVEMENTS'
+                  ? 'bg-brand-700 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <History size={14} className="shrink-0" />
+              <span>Pergerakan</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('DISCREPANCIES')}
-          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${
-            activeTab === 'DISCREPANCIES'
-              ? 'border-brand-600 text-brand-700'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <AlertTriangle size={16} className={stats.incompleteCount > 0 ? 'text-amber-600' : ''} />
-          <span>Riwayat Hilang / Rusak / Kurang</span>
-          {stats.incompleteCount > 0 && (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-extrabold text-amber-800">
-              {stats.incompleteCount}
+            <button
+              type="button"
+              onClick={() => setActiveTab('DISCREPANCIES')}
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                activeTab === 'DISCREPANCIES'
+                  ? 'bg-brand-700 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <AlertTriangle
+                size={14}
+                className={`shrink-0 ${
+                  activeTab === 'DISCREPANCIES' ? 'text-amber-300' : stats.incompleteCount > 0 ? 'text-amber-600' : ''
+                }`}
+              />
+              <span>Hilang/Rusak</span>
+              {stats.incompleteCount > 0 && (
+                <span
+                  className={`shrink-0 rounded-full px-1.5 py-0.2 text-[10px] font-black ${
+                    activeTab === 'DISCREPANCIES'
+                      ? 'bg-amber-400 text-slate-900'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {stats.incompleteCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Desktop View: Classic Clean Underline Tabs */}
+        <div className="hidden sm:flex items-center gap-2 border-b border-slate-200">
+          <button
+            type="button"
+            onClick={() => setActiveTab('SETS')}
+            className={`inline-flex items-center gap-2 rounded-t-xl px-4 py-3 text-sm font-bold transition-all border-b-2 ${
+              activeTab === 'SETS'
+                ? 'border-brand-700 text-brand-700 bg-brand-50/40'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <Layers size={17} className="shrink-0" />
+            <span>Daftar & Stok Set</span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-black ${
+                activeTab === 'SETS' ? 'bg-brand-100 text-brand-800' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {stats.totalSets}
             </span>
-          )}
-        </button>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('MOVEMENTS')}
+            className={`inline-flex items-center gap-2 rounded-t-xl px-4 py-3 text-sm font-bold transition-all border-b-2 ${
+              activeTab === 'MOVEMENTS'
+                ? 'border-brand-700 text-brand-700 bg-brand-50/40'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <History size={17} className="shrink-0" />
+            <span>Pergerakan (Pengambilan & Pengembalian)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('DISCREPANCIES')}
+            className={`inline-flex items-center gap-2 rounded-t-xl px-4 py-3 text-sm font-bold transition-all border-b-2 ${
+              activeTab === 'DISCREPANCIES'
+                ? 'border-brand-700 text-brand-700 bg-brand-50/40'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <AlertTriangle
+              size={17}
+              className={`shrink-0 ${
+                activeTab === 'DISCREPANCIES' ? 'text-amber-600' : stats.incompleteCount > 0 ? 'text-amber-600' : ''
+              }`}
+            />
+            <span>Riwayat Hilang / Rusak / Kurang</span>
+            {stats.incompleteCount > 0 && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-black ${
+                  activeTab === 'DISCREPANCIES'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                {stats.incompleteCount}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* TAB 1: DAFTAR & STOK SET INSTRUMEN */}
       {activeTab === 'SETS' && (
         <div className="space-y-4">
           {/* Bar Pencarian & Filter Set */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3 sm:p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             {/* Input Search */}
             <div className="relative flex-1">
               <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -436,47 +533,47 @@ export default function InstrumentSetsPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari nama set instrumen atau nama alat di dalamnya (mis. Laparotomi, Pinset, Klem)..."
+                placeholder="Cari set atau alat (mis. Laparotomi, Pinset, Klem)..."
                 className="input-base pl-9 text-sm"
               />
             </div>
 
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Filters (Grid 2 kolom rapi di mobile) */}
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:w-auto">
               <select
                 value={filterStock}
                 onChange={(e) => setFilterStock(e.target.value)}
-                className="input-base w-auto text-xs font-medium py-2"
+                className="input-base w-full sm:w-auto text-xs font-medium py-2"
               >
                 <option value="ALL">Semua Stok</option>
-                <option value="AVAILABLE">Tersedia Siap Pakai (&gt; 0)</option>
+                <option value="AVAILABLE">Tersedia (&gt; 0)</option>
                 <option value="EMPTY">Stok Kosong (0)</option>
               </select>
 
               <select
                 value={filterComplete}
                 onChange={(e) => setFilterComplete(e.target.value)}
-                className="input-base w-auto text-xs font-medium py-2"
+                className="input-base w-full sm:w-auto text-xs font-medium py-2"
               >
                 <option value="ALL">Semua Kelengkapan</option>
                 <option value="COMPLETE">Hanya Lengkap</option>
                 <option value="INCOMPLETE">Tidak Lengkap</option>
               </select>
-
-              {(search || filterStock !== 'ALL' || filterComplete !== 'ALL') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch('');
-                    setFilterStock('ALL');
-                    setFilterComplete('ALL');
-                  }}
-                  className="text-xs font-semibold text-brand-700 hover:underline px-2"
-                >
-                  Reset
-                </button>
-              )}
             </div>
+
+            {(search || filterStock !== 'ALL' || filterComplete !== 'ALL') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setFilterStock('ALL');
+                  setFilterComplete('ALL');
+                }}
+                className="self-end text-xs font-semibold text-brand-700 hover:underline px-1 sm:self-auto"
+              >
+                Reset Filter
+              </button>
+            )}
           </div>
 
           {/* Grid Kartu Set Instrumen */}
@@ -539,7 +636,7 @@ export default function InstrumentSetsPage() {
       {activeTab === 'MOVEMENTS' && (
         <div className="space-y-4">
           {/* Header Info & Filter */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3 sm:p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="relative flex-1">
               <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -549,30 +646,30 @@ export default function InstrumentSetsPage() {
                   setMovementSearch(e.target.value);
                   setMovementPage(1);
                 }}
-                placeholder="Cari mutasi pergerakan set (nama set, barcode, unit, petugas)..."
+                placeholder="Cari pergerakan (set, barcode, unit, petugas)..."
                 className="input-base pl-9 text-sm"
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <select
                 value={movementType}
                 onChange={(e) => {
                   setMovementType(e.target.value);
                   setMovementPage(1);
                 }}
-                className="input-base w-auto text-xs font-semibold py-2"
+                className="input-base w-full sm:w-auto text-xs font-semibold py-2"
               >
                 <option value="ALL">Semua Pergerakan</option>
-                <option value="PENGAMBILAN">Pengambilan oleh Unit (Stok Berkurang)</option>
-                <option value="PENGEMBALIAN">Pengembalian Set Kotor (Masuk Sterilisasi)</option>
+                <option value="PENGAMBILAN">Pengambilan (Distribusi)</option>
+                <option value="PENGEMBALIAN">Pengembalian (Alat Kotor)</option>
               </select>
 
               {movementSearch && (
                 <button
                   type="button"
                   onClick={() => setMovementSearch('')}
-                  className="text-xs font-semibold text-brand-700 hover:underline px-2"
+                  className="self-end sm:self-auto text-xs font-semibold text-brand-700 hover:underline px-2"
                 >
                   Reset
                 </button>
@@ -679,7 +776,7 @@ export default function InstrumentSetsPage() {
       {activeTab === 'DISCREPANCIES' && (
         <div className="space-y-4">
           {/* Header Info & Filter */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3 sm:p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="relative flex-1">
               <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -689,23 +786,23 @@ export default function InstrumentSetsPage() {
                   setDiscrepancySearch(e.target.value);
                   setDiscrepancyPage(1);
                 }}
-                placeholder="Cari nama alat hilang/rusak, set instrumen, unit, atau catatan..."
+                placeholder="Cari alat hilang/rusak, set, unit..."
                 className="input-base pl-9 text-sm"
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:w-auto">
               <select
                 value={discrepancyStatus}
                 onChange={(e) => {
                   setDiscrepancyStatus(e.target.value);
                   setDiscrepancyPage(1);
                 }}
-                className="input-base w-auto text-xs font-semibold py-2"
+                className="input-base w-full sm:w-auto text-xs font-semibold py-2"
               >
                 <option value="ALL">Semua Status</option>
-                <option value="Belum Selesai">Belum Selesai (Kurang/Rusak)</option>
-                <option value="Selesai">Sudah Selesai / Diganti</option>
+                <option value="Belum Selesai">Belum Selesai</option>
+                <option value="Selesai">Sudah Selesai</option>
               </select>
 
               <select
@@ -714,19 +811,22 @@ export default function InstrumentSetsPage() {
                   setDiscrepancyType(e.target.value);
                   setDiscrepancyPage(1);
                 }}
-                className="input-base w-auto text-xs font-semibold py-2"
+                className="input-base w-full sm:w-auto text-xs font-semibold py-2"
               >
-                <option value="ALL">Semua Jenis Insiden</option>
+                <option value="ALL">Semua Jenis</option>
                 <option value="Kurang">Kurang</option>
                 <option value="Hilang">Hilang</option>
                 <option value="Rusak">Rusak</option>
               </select>
-
-              <Button onClick={() => handleOpenReportDiscrepancy(null)}>
-                <Plus size={15} />
-                <span>Catat Insiden Baru</span>
-              </Button>
             </div>
+
+            <Button
+              onClick={() => handleOpenReportDiscrepancy(null)}
+              className="w-full sm:w-auto justify-center"
+            >
+              <Plus size={15} />
+              <span>Catat Insiden Baru</span>
+            </Button>
           </div>
 
           {/* Tabel Riwayat Discrepancy */}

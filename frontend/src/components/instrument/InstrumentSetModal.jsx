@@ -30,11 +30,11 @@ export default function InstrumentSetModal({
         setItems(
           Array.isArray(initialData.items) && initialData.items.length
             ? initialData.items.map((it) => ({
-                id: it.id,
-                instrument_name: it.instrument_name || '',
-                quantity: it.quantity || 1,
-                unit_label: it.unit_label || 'Buah',
-              }))
+              id: it.id,
+              instrument_name: it.instrument_name || '',
+              quantity: it.quantity || 1,
+              unit_label: it.unit_label || 'Buah',
+            }))
             : [{ instrument_name: '', quantity: 1, unit_label: 'Buah' }]
         );
       } else {
@@ -163,7 +163,7 @@ export default function InstrumentSetModal({
 
           <div className="sm:col-span-2">
             <label className="mb-1 block text-sm font-semibold text-slate-700">
-              Keterangan / Fungsi Set (Opsional)
+              Keterangan
             </label>
             <input
               type="text"
