@@ -386,90 +386,22 @@ export default function InstrumentSetsPage() {
         </div>
       </div>
 
-      {/* Main Tab Navigation Buttons (Mobile Optimized Segmented Bar + Desktop Tabs) */}
-      <div className="no-print">
-        {/* Mobile View: Clean Segmented Bar */}
-        <div className="sm:hidden -mx-3 px-3 overflow-x-auto pb-1 scrollbar-none">
-          <div className="inline-flex min-w-full p-1 bg-slate-100 rounded-2xl gap-1 border border-slate-200/80 shadow-inner">
-            <button
-              type="button"
-              onClick={() => setActiveTab('SETS')}
-              className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
-                activeTab === 'SETS'
-                  ? 'bg-brand-700 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-              }`}
-            >
-              <Layers size={14} className="shrink-0" />
-              <span>Daftar & Stok</span>
-              <span
-                className={`rounded-full px-1.5 py-0.2 text-[10px] font-black ${
-                  activeTab === 'SETS' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-                }`}
-              >
-                {stats.totalSets}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('MOVEMENTS')}
-              className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
-                activeTab === 'MOVEMENTS'
-                  ? 'bg-brand-700 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-              }`}
-            >
-              <History size={14} className="shrink-0" />
-              <span>Pergerakan</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('DISCREPANCIES')}
-              className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
-                activeTab === 'DISCREPANCIES'
-                  ? 'bg-brand-700 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-              }`}
-            >
-              <AlertTriangle
-                size={14}
-                className={`shrink-0 ${
-                  activeTab === 'DISCREPANCIES' ? 'text-amber-300' : stats.incompleteCount > 0 ? 'text-amber-600' : ''
-                }`}
-              />
-              <span>Hilang/Rusak</span>
-              {stats.incompleteCount > 0 && (
-                <span
-                  className={`shrink-0 rounded-full px-1.5 py-0.2 text-[10px] font-black ${
-                    activeTab === 'DISCREPANCIES'
-                      ? 'bg-amber-400 text-slate-900'
-                      : 'bg-amber-100 text-amber-800'
-                  }`}
-                >
-                  {stats.incompleteCount}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Desktop View: Classic Clean Underline Tabs */}
-        <div className="hidden sm:flex items-center gap-2 border-b border-slate-200">
+      {/* Main Tab Navigation Buttons (Unified Responsive Underline Tabs - Bebas Text Wrap di Mobile/Tablet) */}
+      <div className="no-print border-b border-slate-200 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
+        <nav className="flex items-center gap-1 sm:gap-2 min-w-max pb-px" aria-label="Tabs Monitoring Set">
           <button
             type="button"
             onClick={() => setActiveTab('SETS')}
-            className={`inline-flex items-center gap-2 rounded-t-xl px-4 py-3 text-sm font-bold transition-all border-b-2 ${
+            className={`inline-flex items-center gap-2 px-3 sm:px-4 py-3 text-xs sm:text-sm font-bold transition-all border-b-2 whitespace-nowrap shrink-0 rounded-t-xl select-none ${
               activeTab === 'SETS'
-                ? 'border-brand-700 text-brand-700 bg-brand-50/40'
+                ? 'border-brand-700 text-brand-700 bg-brand-50/50'
                 : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
             }`}
           >
-            <Layers size={17} className="shrink-0" />
+            <Layers size={16} className="shrink-0" />
             <span>Daftar & Stok Set</span>
             <span
-              className={`rounded-full px-2 py-0.5 text-xs font-black ${
+              className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-black shrink-0 ${
                 activeTab === 'SETS' ? 'bg-brand-100 text-brand-800' : 'bg-slate-100 text-slate-600'
               }`}
             >
@@ -480,35 +412,37 @@ export default function InstrumentSetsPage() {
           <button
             type="button"
             onClick={() => setActiveTab('MOVEMENTS')}
-            className={`inline-flex items-center gap-2 rounded-t-xl px-4 py-3 text-sm font-bold transition-all border-b-2 ${
+            className={`inline-flex items-center gap-2 px-3 sm:px-4 py-3 text-xs sm:text-sm font-bold transition-all border-b-2 whitespace-nowrap shrink-0 rounded-t-xl select-none ${
               activeTab === 'MOVEMENTS'
-                ? 'border-brand-700 text-brand-700 bg-brand-50/40'
+                ? 'border-brand-700 text-brand-700 bg-brand-50/50'
                 : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
             }`}
           >
-            <History size={17} className="shrink-0" />
-            <span>Pergerakan (Pengambilan & Pengembalian)</span>
+            <History size={16} className="shrink-0" />
+            <span className="hidden sm:inline">Pergerakan (Pengambilan & Pengembalian)</span>
+            <span className="sm:hidden">Pergerakan Set</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('DISCREPANCIES')}
-            className={`inline-flex items-center gap-2 rounded-t-xl px-4 py-3 text-sm font-bold transition-all border-b-2 ${
+            className={`inline-flex items-center gap-2 px-3 sm:px-4 py-3 text-xs sm:text-sm font-bold transition-all border-b-2 whitespace-nowrap shrink-0 rounded-t-xl select-none ${
               activeTab === 'DISCREPANCIES'
-                ? 'border-brand-700 text-brand-700 bg-brand-50/40'
+                ? 'border-brand-700 text-brand-700 bg-brand-50/50'
                 : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
             }`}
           >
             <AlertTriangle
-              size={17}
+              size={16}
               className={`shrink-0 ${
                 activeTab === 'DISCREPANCIES' ? 'text-amber-600' : stats.incompleteCount > 0 ? 'text-amber-600' : ''
               }`}
             />
-            <span>Riwayat Hilang / Rusak / Kurang</span>
+            <span className="hidden sm:inline">Riwayat Hilang / Rusak / Kurang</span>
+            <span className="sm:hidden">Hilang / Rusak / Kurang</span>
             {stats.incompleteCount > 0 && (
               <span
-                className={`rounded-full px-2 py-0.5 text-xs font-black ${
+                className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-black shrink-0 ${
                   activeTab === 'DISCREPANCIES'
                     ? 'bg-amber-100 text-amber-800'
                     : 'bg-amber-100 text-amber-800'
@@ -518,7 +452,7 @@ export default function InstrumentSetsPage() {
               </span>
             )}
           </button>
-        </div>
+        </nav>
       </div>
 
       {/* TAB 1: DAFTAR & STOK SET INSTRUMEN */}
@@ -694,15 +628,15 @@ export default function InstrumentSetsPage() {
                 <table className="table-base">
                   <thead>
                     <tr>
-                      <th>Jenis Transaksi</th>
-                      <th>Tanggal</th>
-                      <th>Nama Set Instrumen</th>
-                      <th>Barcode</th>
-                      <th>Unit / Ruangan</th>
-                      <th>Jumlah</th>
-                      <th>Petugas CSSD</th>
-                      <th>Penerima / Penyerah</th>
-                      <th>Status / Catatan</th>
+                      <th className="whitespace-nowrap">Jenis Transaksi</th>
+                      <th className="whitespace-nowrap">Tanggal</th>
+                      <th className="whitespace-nowrap">Nama Set Instrumen</th>
+                      <th className="whitespace-nowrap">Barcode</th>
+                      <th className="whitespace-nowrap">Unit / Ruangan</th>
+                      <th className="whitespace-nowrap">Jumlah</th>
+                      <th className="whitespace-nowrap">Petugas CSSD</th>
+                      <th className="whitespace-nowrap">Penerima / Penyerah</th>
+                      <th className="whitespace-nowrap">Status / Catatan</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -855,16 +789,16 @@ export default function InstrumentSetsPage() {
                 <table className="table-base">
                   <thead>
                     <tr>
-                      <th>Status Solusi</th>
-                      <th>Set Instrumen</th>
-                      <th>Instrumen Bermasalah</th>
-                      <th>Jenis Insiden</th>
-                      <th>Jumlah</th>
-                      <th>Unit Asal</th>
-                      <th>Tanggal Kejadian</th>
-                      <th>Petugas CSSD</th>
-                      <th>Kronologi / Catatan</th>
-                      <th>Aksi</th>
+                      <th className="whitespace-nowrap">Status Solusi</th>
+                      <th className="whitespace-nowrap">Set Instrumen</th>
+                      <th className="whitespace-nowrap">Instrumen Bermasalah</th>
+                      <th className="whitespace-nowrap">Jenis Insiden</th>
+                      <th className="whitespace-nowrap">Jumlah</th>
+                      <th className="whitespace-nowrap">Unit Asal</th>
+                      <th className="whitespace-nowrap">Tanggal Kejadian</th>
+                      <th className="whitespace-nowrap">Petugas CSSD</th>
+                      <th className="whitespace-nowrap">Kronologi / Catatan</th>
+                      <th className="whitespace-nowrap">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>

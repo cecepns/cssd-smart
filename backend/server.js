@@ -956,7 +956,6 @@ router.get('/sterile-stock/lookup', auth, wrap(async (req, res) => {
       s.id AS set_id,
       s.code AS set_code,
       s.completeness_status,
-      s.total_instruments,
       s.missing_notes
     FROM sterile_stock t
     LEFT JOIN packagings p ON p.id = t.packaging_id
@@ -981,8 +980,10 @@ router.get('/sterile-stock/lookup', auth, wrap(async (req, res) => {
       [stock.set_id]
     );
     stock.items = items;
+    stock.total_instruments = items.reduce((acc, c) => acc + Number(c.quantity || 1), 0);
   } else {
     stock.items = [];
+    stock.total_instruments = 0;
   }
 
   res.json({ success: true, data: stock });
@@ -1003,7 +1004,6 @@ router.get('/sterile-stock/ready', auth, wrap(async (req, res) => {
       s.id AS set_id,
       s.code AS set_code,
       s.completeness_status,
-      s.total_instruments,
       s.missing_notes
     FROM sterile_stock t
     LEFT JOIN packagings p ON p.id = t.packaging_id
@@ -1048,8 +1048,10 @@ router.get('/sterile-stock/ready', auth, wrap(async (req, res) => {
         [row.set_id]
       );
       row.items = items;
+      row.total_instruments = items.reduce((acc, c) => acc + Number(c.quantity || 1), 0);
     } else {
       row.items = [];
+      row.total_instruments = 0;
     }
   }
 
@@ -1078,7 +1080,7 @@ registerCrud({
     s.id AS set_id,
     s.code AS set_code,
     s.completeness_status,
-    s.total_instruments,
+    (SELECT COALESCE(SUM(si.quantity), 0) FROM instrument_set_items si WHERE si.set_id = s.id) AS total_instruments,
     s.missing_notes`,
   search: ['t.barcode', 't.item_name', 't.batch_no', 'r.barcode', 'u.name', 's.code'],
   sort: { id: 't.id', barcode: 't.barcode', item_name: 't.item_name', category: 't.category', batch_no: 't.batch_no', sterile_date: 't.sterile_date', expiry_date: 't.expiry_date', quantity: 't.quantity' },

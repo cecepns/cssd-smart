@@ -269,26 +269,26 @@ export default function SterileSetSelector({ values, setValue, setValues, gauze 
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3.5 sm:p-4 space-y-3">
-      {/* Tab Switcher Mode */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+      {/* Tab Switcher Mode (Mobile-friendly Stack & Full Width Grid) */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 border-b border-slate-200 pb-3">
         <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
           Metode Pemilihan Alat Steril
         </span>
 
-        <div className="inline-flex rounded-xl bg-slate-200/70 p-1 text-xs font-bold">
+        <div className="grid grid-cols-2 sm:inline-flex rounded-xl bg-slate-200/80 p-1 text-xs font-bold w-full sm:w-auto gap-1">
           <button
             type="button"
             onClick={() => setMode('SELECT')}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all ${
+            className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 sm:px-3 py-2 text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
               mode === 'SELECT'
                 ? 'bg-white text-brand-700 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Layers size={14} />
-            <span>Pilih Set Siap Ambil</span>
+            <Layers size={14} className="shrink-0" />
+            <span>Pilih Set Siap</span>
             {readyList.length > 0 && (
-              <span className="rounded-full bg-brand-100 text-brand-800 px-1.5 py-0.2 text-[10px]">
+              <span className="rounded-full bg-brand-100 text-brand-800 px-1.5 py-0.2 text-[10px] font-black shrink-0">
                 {readyList.length}
               </span>
             )}
@@ -297,13 +297,13 @@ export default function SterileSetSelector({ values, setValue, setValues, gauze 
           <button
             type="button"
             onClick={() => setMode('SCAN')}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all ${
+            className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 sm:px-3 py-2 text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
               mode === 'SCAN'
                 ? 'bg-white text-brand-700 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <ScanLine size={14} />
+            <ScanLine size={14} className="shrink-0" />
             <span>Scan Barcode</span>
           </button>
         </div>
@@ -416,8 +416,8 @@ export default function SterileSetSelector({ values, setValue, setValues, gauze 
             Arahkan kamera HP ke barcode stiker paket steril (<strong>ST-...</strong>) atau barcode lembar penerimaan alat kotor (<strong>AK-...</strong>):
           </p>
 
-          <div className="flex gap-2">
-            <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
               <BarcodeInput
                 value={scanCode}
                 onChange={setScanCode}
@@ -429,7 +429,7 @@ export default function SterileSetSelector({ values, setValue, setValues, gauze 
               onClick={() => handleLookupBarcode(scanCode)}
               disabled={searchingCode || !scanCode.trim()}
               size="sm"
-              className="text-xs h-10 px-4"
+              className="text-xs h-10 px-4 shrink-0"
             >
               {searchingCode ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
               <span>Cari</span>
