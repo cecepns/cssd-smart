@@ -48,7 +48,11 @@ export const API_ENDPOINTS = {
   PACKAGINGS: crud('/packagings'),
   STERILIZATIONS: crud('/sterilizations'),
   VERIFICATIONS: crud('/verifications'),
-  STERILE_STOCK: crud('/sterile-stock'),
+  STERILE_STOCK: {
+    ...crud('/sterile-stock'),
+    LOOKUP: '/sterile-stock/lookup',
+    READY: '/sterile-stock/ready',
+  },
   QUARANTINES: crud('/quarantines'),
   DISTRIBUTIONS: crud('/distributions'),
 

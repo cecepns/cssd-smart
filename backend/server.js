@@ -310,7 +310,7 @@ const router = express.Router();
 
 function registerCrud(raw) {
   const cfg = { pk: 't.id', ...raw };
-  const roles = { read: ROLES, write: ['admin', 'petugas'], remove: ['admin'], ...(raw.roles || {}) };
+  const roles = { read: ROLES, write: ['admin', 'petugas'], remove: ['admin', 'petugas'], ...(raw.roles || {}) };
   const base = `/${cfg.path}`;
 
   router.get(base, auth, allow(...roles.read), wrap(async (req, res) => {
@@ -556,7 +556,17 @@ registerCrud({
     data.created_by = ctx.user.id;
   },
   async beforeDelete(conn, existing) {
-    if (existing.stage > 1) throw new HttpError(409, 'Data tidak dapat dihapus karena proses sudah berjalan');
+    // Bersihkan data relasi proses terkait agar penghapusan konsisten
+    await conn.query('DELETE FROM washings WHERE receipt_id = ?', [existing.id]);
+    await conn.query('DELETE FROM dryings WHERE receipt_id = ?', [existing.id]);
+    const [pkgs] = await conn.query('SELECT id FROM packagings WHERE receipt_id = ?', [existing.id]);
+    if (pkgs.length) {
+      const pkgIds = pkgs.map((p) => p.id);
+      await conn.query('DELETE FROM sterile_stock WHERE packaging_id IN (?)', [pkgIds]);
+      await conn.query('DELETE FROM quarantines WHERE packaging_id IN (?)', [pkgIds]);
+      await conn.query('DELETE FROM sterilization_items WHERE packaging_id IN (?)', [pkgIds]);
+      await conn.query('DELETE FROM packagings WHERE id IN (?)', [pkgIds]);
+    }
   },
 });
 
@@ -587,6 +597,15 @@ registerCrud({
   },
   async afterCreate(conn, id, data) {
     await conn.query("UPDATE dirty_receipts SET stage = GREATEST(stage, 2), status = 'Proses' WHERE id = ?", [data.receipt_id]);
+  },
+  async afterDelete(conn, existing) {
+    const [remaining] = await conn.query('SELECT id FROM washings WHERE receipt_id = ?', [existing.receipt_id]);
+    if (!remaining.length) {
+      const [dryings] = await conn.query('SELECT id FROM dryings WHERE receipt_id = ?', [existing.receipt_id]);
+      if (!dryings.length) {
+        await conn.query("UPDATE dirty_receipts SET stage = 1, status = 'Diterima' WHERE id = ?", [existing.receipt_id]);
+      }
+    }
   },
 });
 
@@ -620,6 +639,16 @@ registerCrud({
     const passed = data.is_dry && data.no_rust && data.function_ok;
     // Gagal pemeriksaan -> kembali ke tahap pencucian (cuci ulang)
     await conn.query("UPDATE dirty_receipts SET stage = ?, status = 'Proses' WHERE id = ?", [passed ? 3 : 2, data.receipt_id]);
+  },
+  async afterUpdate(conn, id, data, ctx, existing) {
+    const passed = (data.is_dry ?? existing.is_dry) && (data.no_rust ?? existing.no_rust) && (data.function_ok ?? existing.function_ok);
+    await conn.query("UPDATE dirty_receipts SET stage = ?, status = 'Proses' WHERE id = ?", [passed ? 3 : 2, existing.receipt_id]);
+  },
+  async afterDelete(conn, existing) {
+    const [remaining] = await conn.query('SELECT id FROM dryings WHERE receipt_id = ?', [existing.receipt_id]);
+    if (!remaining.length) {
+      await conn.query("UPDATE dirty_receipts SET stage = 2, status = 'Proses' WHERE id = ?", [existing.receipt_id]);
+    }
   },
 });
 
@@ -658,7 +687,15 @@ registerCrud({
     await conn.query("UPDATE dirty_receipts SET stage = GREATEST(stage, 4), status = 'Proses' WHERE id = ?", [data.receipt_id]);
   },
   async beforeDelete(conn, existing) {
-    if (existing.status !== 'Dikemas') throw new HttpError(409, 'Kemasan sudah masuk proses sterilisasi dan tidak dapat dihapus');
+    await conn.query('DELETE FROM sterilization_items WHERE packaging_id = ?', [existing.id]);
+    await conn.query('DELETE FROM sterile_stock WHERE packaging_id = ?', [existing.id]);
+    await conn.query('DELETE FROM quarantines WHERE packaging_id = ?', [existing.id]);
+  },
+  async afterDelete(conn, existing) {
+    const [remaining] = await conn.query('SELECT id FROM packagings WHERE receipt_id = ?', [existing.receipt_id]);
+    if (!remaining.length) {
+      await conn.query("UPDATE dirty_receipts SET stage = 3, status = 'Proses' WHERE id = ?", [existing.receipt_id]);
+    }
   },
 });
 
@@ -674,8 +711,6 @@ registerCrud({
   filters: { machine_id: 't.machine_id', status: 't.status' },
   dateColumn: 't.steril_date',
   exportColumns: [['steril_date', 'Tanggal'], ['machine_name', 'Mesin'], ['cycle_no', 'No. Siklus'], ['batch_no', 'No. Batch'], ['temperature', 'Suhu (C)'], ['duration_min', 'Waktu (menit)'], ['total_packages', 'Jumlah Paket'], ['officer', 'Petugas'], ['status', 'Status']],
-  noUpdate: true,
-  noDelete: true,
   fields: [
     field('machine_id', 'int', { required: true, min: 1, label: 'Mesin' }),
     field('cycle_no', 'string', { label: 'No. siklus', max: 20 }),
@@ -712,6 +747,21 @@ registerCrud({
       [ctx.packageIds]
     );
   },
+  async beforeDelete(conn, existing) {
+    const [items] = await conn.query('SELECT packaging_id FROM sterilization_items WHERE sterilization_id = ?', [existing.id]);
+    if (items.length) {
+      const pids = items.map((i) => i.packaging_id);
+      await conn.query('DELETE FROM sterile_stock WHERE packaging_id IN (?)', [pids]);
+      await conn.query('DELETE FROM quarantines WHERE packaging_id IN (?)', [pids]);
+      await conn.query("UPDATE packagings SET status = 'Dikemas' WHERE id IN (?)", [pids]);
+      await conn.query(
+        "UPDATE dirty_receipts SET stage = 4, status = 'Proses' WHERE id IN (SELECT DISTINCT receipt_id FROM packagings WHERE id IN (?))",
+        [pids]
+      );
+    }
+    await conn.query('DELETE FROM verifications WHERE sterilization_id = ?', [existing.id]);
+    await conn.query('DELETE FROM sterilization_items WHERE sterilization_id = ?', [existing.id]);
+  },
 });
 
 // ---------- Tahap 6: Verifikasi Sterilisasi ----------
@@ -726,8 +776,6 @@ registerCrud({
   filters: { result: 't.result', sterilization_id: 't.sterilization_id' },
   dateColumn: 't.verify_date',
   exportColumns: [['verify_date', 'Tanggal'], ['batch_no', 'No. Batch'], ['machine_name', 'Mesin'], ['condition_packaging', 'Kondisi Kemasan'], ['chem_internal', 'Indikator Kimia Internal'], ['chem_external', 'Indikator Kimia Eksternal'], ['bio_indicator', 'Indikator Biologi'], ['bowie_dick', 'Bowie-Dick Test'], ['result', 'Hasil'], ['fail_reason', 'Alasan Gagal'], ['officer', 'Petugas']],
-  noUpdate: true,
-  noDelete: true,
   createdMessage: 'Verifikasi tersimpan, status alat diperbarui otomatis',
   fields: [
     field('sterilization_id', 'int', { required: true, min: 1, label: 'Batch sterilisasi' }),
@@ -806,19 +854,236 @@ registerCrud({
       await conn.query("UPDATE dirty_receipts SET stage = 6, status = 'Karantina' WHERE id IN (?)", [receiptIds]);
     }
   },
+  async beforeDelete(conn, existing) {
+    await conn.query("UPDATE sterilizations SET status = 'Menunggu Verifikasi' WHERE id = ?", [existing.sterilization_id]);
+    const [items] = await conn.query('SELECT packaging_id FROM sterilization_items WHERE sterilization_id = ?', [existing.sterilization_id]);
+    if (items.length) {
+      const pids = items.map((i) => i.packaging_id);
+      await conn.query('DELETE FROM sterile_stock WHERE packaging_id IN (?)', [pids]);
+      await conn.query('DELETE FROM quarantines WHERE verification_id = ? OR packaging_id IN (?)', [existing.id, pids]);
+      await conn.query("UPDATE packagings SET status = 'Disterilkan' WHERE id IN (?)", [pids]);
+      await conn.query(
+        "UPDATE dirty_receipts SET stage = 5, status = 'Proses' WHERE id IN (SELECT DISTINCT receipt_id FROM packagings WHERE id IN (?))",
+        [pids]
+      );
+    }
+  },
+  async afterUpdate(conn, id, data, ctx, existing) {
+    const [fresh] = await conn.query('SELECT * FROM verifications WHERE id = ?', [id]);
+    if (fresh.length) {
+      const row = fresh[0];
+      const reasons = [];
+      if (row.condition_packaging === 'Rusak') reasons.push('Kondisi kemasan rusak');
+      if (row.chem_internal !== 'Sesuai') reasons.push('Indikator kimia internal tidak sesuai');
+      if (row.chem_external !== 'Sesuai') reasons.push('Indikator kimia eksternal tidak sesuai');
+      if (row.bio_indicator !== 'Sesuai') reasons.push('Indikator biologi (BI) tidak sesuai');
+      if (row.bowie_dick !== 'Sesuai') reasons.push('Bowie-Dick test tidak sesuai');
+      const nextResult = reasons.length ? 'GAGAL' : 'LULUS';
+      const failReason = reasons.length ? reasons.join('; ') : null;
+
+      if (row.result !== nextResult) {
+        await conn.query('UPDATE verifications SET result = ?, fail_reason = ? WHERE id = ?', [nextResult, failReason, id]);
+        const [[steril]] = await conn.query('SELECT * FROM sterilizations WHERE id = ?', [row.sterilization_id]);
+        const [packages] = await conn.query(
+          `SELECT p.*, r.item_name, r.item_id FROM sterilization_items si
+           JOIN packagings p ON p.id = si.packaging_id
+           JOIN dirty_receipts r ON r.id = p.receipt_id
+           WHERE si.sterilization_id = ?`,
+          [steril.id]
+        );
+        const receiptIds = [...new Set(packages.map((p) => p.receipt_id))];
+
+        if (nextResult === 'LULUS') {
+          await conn.query('DELETE FROM quarantines WHERE verification_id = ?', [id]);
+          for (const pkg of packages) {
+            let months = DEFAULT_SHELF_LIFE_MONTHS;
+            if (pkg.item_id) {
+              const [[item]] = await conn.query('SELECT shelf_life_months FROM items WHERE id = ?', [pkg.item_id]);
+              if (item) months = item.shelf_life_months;
+            }
+            await conn.query('INSERT INTO sterile_stock SET ?', [{
+              packaging_id: pkg.id,
+              barcode: pkg.barcode,
+              category: pkg.package_type,
+              item_name: pkg.item_name,
+              batch_no: steril.batch_no,
+              sterile_date: steril.steril_date,
+              expiry_date: addMonths(steril.steril_date, months),
+              quantity: pkg.quantity,
+              unit_label: pkg.unit_label,
+              status: 'Tersedia',
+            }]);
+          }
+          await conn.query("UPDATE packagings SET status = 'Lulus' WHERE id IN (?)", [packages.map((p) => p.id)]);
+          await conn.query("UPDATE sterilizations SET status = 'Lulus' WHERE id = ?", [steril.id]);
+          await conn.query("UPDATE dirty_receipts SET stage = 6, status = 'Selesai' WHERE id IN (?)", [receiptIds]);
+        } else {
+          await conn.query('DELETE FROM sterile_stock WHERE packaging_id IN (?)', [packages.map((p) => p.id)]);
+          for (const pkg of packages) {
+            await conn.query('INSERT INTO quarantines SET ?', [{
+              packaging_id: pkg.id,
+              verification_id: id,
+              barcode: pkg.barcode,
+              batch_no: steril.batch_no,
+              reason: failReason,
+              status: 'Karantina',
+            }]);
+          }
+          await conn.query("UPDATE packagings SET status = 'Karantina' WHERE id IN (?)", [packages.map((p) => p.id)]);
+          await conn.query("UPDATE sterilizations SET status = 'Gagal' WHERE id = ?", [steril.id]);
+          await conn.query("UPDATE dirty_receipts SET stage = 6, status = 'Karantina' WHERE id IN (?)", [receiptIds]);
+        }
+      }
+    }
+  },
 });
+
+// ---------- Tahap 7: Stok Alat Steril (Lookup & Ready Stock for Distribution) ----------
+router.get('/sterile-stock/lookup', auth, wrap(async (req, res) => {
+  const code = (req.query.code || '').trim();
+  if (!code) throw new HttpError(400, 'Parameter code wajib diisi');
+
+  const [rows] = await pool.query(`
+    SELECT t.*,
+      ${STOCK_STATUS_SQL} AS display_status,
+      DATEDIFF(t.expiry_date, CURDATE()) AS days_left,
+      p.receipt_id,
+      r.barcode AS receipt_barcode,
+      r.unit_id AS origin_unit_id,
+      u.name AS origin_unit_name,
+      r.sender_name AS origin_sender,
+      r.receipt_date,
+      s.id AS set_id,
+      s.code AS set_code,
+      s.completeness_status,
+      s.total_instruments,
+      s.missing_notes
+    FROM sterile_stock t
+    LEFT JOIN packagings p ON p.id = t.packaging_id
+    LEFT JOIN dirty_receipts r ON r.id = p.receipt_id
+    LEFT JOIN units u ON u.id = r.unit_id
+    LEFT JOIN instrument_sets s ON (s.name = t.item_name OR s.code = t.item_name)
+    WHERE t.barcode = ? OR r.barcode = ?
+    ORDER BY (t.status = 'Tersedia' AND t.quantity > 0) DESC, t.id DESC
+    LIMIT 1
+  `, [code, code]);
+
+  if (!rows.length) {
+    throw new HttpError(404, `Barcode "${code}" tidak ditemukan di stok steril`, { code: 'Barcode tidak ditemukan' });
+  }
+
+  const stock = rows[0];
+
+  // Ambil rincian instrumen jika ini adalah set
+  if (stock.set_id) {
+    const [items] = await pool.query(
+      'SELECT id, instrument_name, quantity, unit_label FROM instrument_set_items WHERE set_id = ? ORDER BY id ASC',
+      [stock.set_id]
+    );
+    stock.items = items;
+  } else {
+    stock.items = [];
+  }
+
+  res.json({ success: true, data: stock });
+}));
+
+router.get('/sterile-stock/ready', auth, wrap(async (req, res) => {
+  const { unit_id, category, search, type } = req.query;
+  let sql = `
+    SELECT t.*,
+      ${STOCK_STATUS_SQL} AS display_status,
+      DATEDIFF(t.expiry_date, CURDATE()) AS days_left,
+      p.receipt_id,
+      r.barcode AS receipt_barcode,
+      r.unit_id AS origin_unit_id,
+      u.name AS origin_unit_name,
+      r.sender_name AS origin_sender,
+      r.receipt_date,
+      s.id AS set_id,
+      s.code AS set_code,
+      s.completeness_status,
+      s.total_instruments,
+      s.missing_notes
+    FROM sterile_stock t
+    LEFT JOIN packagings p ON p.id = t.packaging_id
+    LEFT JOIN dirty_receipts r ON r.id = p.receipt_id
+    LEFT JOIN units u ON u.id = r.unit_id
+    LEFT JOIN instrument_sets s ON (s.name = t.item_name OR s.code = t.item_name)
+    WHERE t.status = 'Tersedia' AND t.quantity > 0 AND t.expiry_date >= CURDATE()
+  `;
+  const params = [];
+
+  if (type === 'KASA') {
+    sql += " AND t.category = 'Kasa Steril'";
+  } else if (type === 'ALAT') {
+    sql += " AND t.category != 'Kasa Steril'";
+  }
+
+  if (category) {
+    sql += ' AND t.category = ?';
+    params.push(category);
+  }
+
+  if (unit_id) {
+    sql += ' AND (r.unit_id = ? OR r.unit_id IS NULL)';
+    params.push(unit_id);
+  }
+
+  if (search && search.trim()) {
+    const q = `%${search.trim()}%`;
+    sql += ' AND (t.barcode LIKE ? OR t.item_name LIKE ? OR r.barcode LIKE ? OR u.name LIKE ? OR s.code LIKE ?)';
+    params.push(q, q, q, q, q);
+  }
+
+  sql += ' ORDER BY t.id DESC LIMIT 50';
+
+  const [rows] = await pool.query(sql, params);
+
+  // Ambil rincian instrumen di dalam set jika ada
+  for (const row of rows) {
+    if (row.set_id) {
+      const [items] = await pool.query(
+        'SELECT id, instrument_name, quantity, unit_label FROM instrument_set_items WHERE set_id = ? ORDER BY id ASC',
+        [row.set_id]
+      );
+      row.items = items;
+    } else {
+      row.items = [];
+    }
+  }
+
+  res.json({ success: true, data: rows });
+}));
 
 // ---------- Tahap 7: Stok Alat Steril (read-only, otomatis) ----------
 registerCrud({
   path: 'sterile-stock',
   table: 'sterile_stock',
   readOnly: true,
-  from: 'sterile_stock t',
-  select: `t.*, ${STOCK_STATUS_SQL} AS display_status, DATEDIFF(t.expiry_date, CURDATE()) AS days_left`,
-  search: ['t.barcode', 't.item_name', 't.batch_no'],
+  from: `sterile_stock t
+    LEFT JOIN packagings p ON p.id = t.packaging_id
+    LEFT JOIN dirty_receipts r ON r.id = p.receipt_id
+    LEFT JOIN units u ON u.id = r.unit_id
+    LEFT JOIN instrument_sets s ON (s.name = t.item_name OR s.code = t.item_name)`,
+  select: `t.*,
+    ${STOCK_STATUS_SQL} AS display_status,
+    DATEDIFF(t.expiry_date, CURDATE()) AS days_left,
+    p.receipt_id,
+    r.barcode AS receipt_barcode,
+    r.unit_id AS origin_unit_id,
+    u.name AS origin_unit_name,
+    r.sender_name AS origin_sender,
+    r.receipt_date,
+    s.id AS set_id,
+    s.code AS set_code,
+    s.completeness_status,
+    s.total_instruments,
+    s.missing_notes`,
+  search: ['t.barcode', 't.item_name', 't.batch_no', 'r.barcode', 'u.name', 's.code'],
   sort: { id: 't.id', barcode: 't.barcode', item_name: 't.item_name', category: 't.category', batch_no: 't.batch_no', sterile_date: 't.sterile_date', expiry_date: 't.expiry_date', quantity: 't.quantity' },
   defaultSort: 'id',
-  filters: { category: 't.category', status: STOCK_STATUS_SQL, barcode: 't.barcode', batch_no: 't.batch_no' },
+  filters: { category: 't.category', status: STOCK_STATUS_SQL, barcode: 't.barcode', batch_no: 't.batch_no', origin_unit_id: 'r.unit_id' },
   dateColumn: 't.sterile_date',
   exportColumns: [['item_name', 'Nama Alat'], ['category', 'Kategori'], ['barcode', 'Barcode'], ['batch_no', 'Batch'], ['sterile_date', 'Tgl Steril'], ['expiry_date', 'Tgl Kedaluwarsa'], ['quantity', 'Jumlah'], ['unit_label', 'Satuan'], ['display_status', 'Status']],
 });
@@ -865,8 +1130,6 @@ registerCrud({
   filters: { type: 't.type', unit_id: 't.unit_id', barcode: 't.barcode' },
   dateColumn: 't.dist_date',
   exportColumns: [['dist_date', 'Tanggal'], ['type', 'Jenis'], ['barcode', 'Barcode'], ['item_name', 'Nama'], ['batch_no', 'Batch'], ['unit_name', 'Unit Tujuan'], ['quantity', 'Jumlah'], ['officer', 'Petugas'], ['receiver_name', 'Penerima']],
-  noUpdate: true,
-  noDelete: true,
   fields: [
     field('type', 'enum', { values: ['ALAT', 'KASA'], required: true, label: 'Jenis distribusi' }),
     field('barcode', 'string', { required: true, label: 'Barcode', max: 50 }),
@@ -877,8 +1140,46 @@ registerCrud({
     field('dist_date', 'date', { default: todayStr, label: 'Tanggal' }),
     field('notes', 'string', { label: 'Catatan', max: 500 }),
   ],
+  async beforeDelete(conn, existing) {
+    // Kembalikan jumlah stok yang sudah didistribusikan ke sterile_stock
+    await conn.query(
+      "UPDATE sterile_stock SET quantity = quantity + ?, status = 'Tersedia' WHERE id = ?",
+      [existing.quantity, existing.stock_id]
+    );
+    // Jika packaging berstatus 'Terdistribusi', kembalikan ke 'Lulus'
+    const [[stk]] = await conn.query('SELECT packaging_id FROM sterile_stock WHERE id = ?', [existing.stock_id]);
+    if (stk?.packaging_id) {
+      await conn.query("UPDATE packagings SET status = 'Lulus' WHERE id = ?", [stk.packaging_id]);
+    }
+  },
+  async beforeUpdate(conn, data, ctx, existing) {
+    if (data.quantity !== undefined && data.quantity !== existing.quantity) {
+      const diff = data.quantity - existing.quantity;
+      if (diff > 0) {
+        const [[stk]] = await conn.query('SELECT quantity FROM sterile_stock WHERE id = ?', [existing.stock_id]);
+        if (!stk || stk.quantity < diff) {
+          throw new HttpError(422, `Sisa stok tidak mencukupi untuk menambah jumlah (${stk?.quantity || 0} tersedia)`);
+        }
+      }
+      await conn.query(
+        "UPDATE sterile_stock SET quantity = quantity - ?, status = IF(quantity <= 0, 'Terdistribusi', 'Tersedia') WHERE id = ?",
+        [diff, existing.stock_id]
+      );
+    }
+  },
   async beforeCreate(conn, data, ctx) {
-    const [[stock]] = await conn.query('SELECT * FROM sterile_stock WHERE barcode = ? FOR UPDATE', [data.barcode]);
+    const [[stock]] = await conn.query(`
+      SELECT s.*, p.receipt_id, r.barcode AS receipt_barcode, r.unit_id AS origin_unit_id, u.name AS origin_unit_name
+      FROM sterile_stock s
+      LEFT JOIN packagings p ON p.id = s.packaging_id
+      LEFT JOIN dirty_receipts r ON r.id = p.receipt_id
+      LEFT JOIN units u ON u.id = r.unit_id
+      WHERE (s.barcode = ? OR r.barcode = ?)
+      ORDER BY (s.status = 'Tersedia' AND s.quantity > 0) DESC, s.id DESC
+      LIMIT 1
+      FOR UPDATE
+    `, [data.barcode, data.barcode]);
+
     if (!stock) throw new HttpError(404, 'Barcode tidak ditemukan di stok steril', { barcode: 'Barcode tidak ditemukan di stok steril' });
     if (stock.status !== 'Tersedia' || stock.quantity < 1) throw new HttpError(409, 'Stok untuk barcode ini sudah habis', { barcode: 'Stok sudah habis' });
     if (stock.expiry_date < todayStr()) throw new HttpError(409, 'Alat sudah kedaluwarsa dan tidak boleh didistribusikan', { barcode: 'Alat kedaluwarsa' });
@@ -886,6 +1187,12 @@ registerCrud({
     if (data.type === 'KASA' && !isGauze) throw new HttpError(422, 'Barcode ini bukan kasa steril, gunakan menu Distribusi Alat Steril', { barcode: 'Bukan kasa steril' });
     if (data.type === 'ALAT' && isGauze) throw new HttpError(422, 'Barcode ini adalah kasa steril, gunakan menu Distribusi Kasa Steril', { barcode: 'Ini kasa steril' });
     if (data.quantity > stock.quantity) throw new HttpError(422, `Jumlah melebihi stok tersedia (${stock.quantity})`, { quantity: `Maksimal ${stock.quantity}` });
+
+    // Gunakan barcode resmi paket steril dan isi otomatis unit tujuan jika belum diisi
+    data.barcode = stock.barcode;
+    if (!data.unit_id && stock.origin_unit_id) {
+      data.unit_id = stock.origin_unit_id;
+    }
     data.stock_id = stock.id;
     ctx.stock = stock;
   },

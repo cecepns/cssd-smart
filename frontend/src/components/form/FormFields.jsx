@@ -152,6 +152,8 @@ function FieldInput({ field, value, error, values, setValue, setValues, disabled
       return <SignaturePad value={value} disabled={disabled} onChange={(next) => setValue(field.name, next)} />;
     case 'image':
       return <ImageInput value={value} disabled={disabled} onChange={(next) => setValue(field.name, next)} onError={(msg) => toast.error(msg)} />;
+    case 'custom':
+      return field.render ? field.render({ value, error, values, setValue, setValues, disabled, hasError }) : null;
     default:
       return (
         <input
@@ -171,11 +173,11 @@ function FieldInput({ field, value, error, values, setValue, setValues, disabled
 
 export function FormField({ field, ...props }) {
   if (field.type === 'hidden') return null;
-  const fullWidth = field.span === 2 || ['textarea', 'signature', 'multicheck', 'image'].includes(field.type);
+  const fullWidth = field.span === 2 || ['textarea', 'signature', 'multicheck', 'image', 'custom'].includes(field.type);
 
   return (
     <div className={fullWidth ? 'sm:col-span-2' : ''}>
-      {field.type !== 'checkbox' && (
+      {field.label && field.type !== 'checkbox' && (
         <label className="mb-1.5 block text-sm font-semibold text-slate-700">
           {field.label}
           {field.required && <span className="ml-0.5 text-rose-500">*</span>}

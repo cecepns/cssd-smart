@@ -40,7 +40,8 @@ export default function ResourcePage({ config }) {
   const writable = !config.readOnly && (!config.adminOnlyWrite || isAdmin);
   const canCreate = writable && !config.noCreate;
   const canEdit = writable && Boolean(config.canEdit);
-  const canDelete = (row) => writable && isAdmin && Boolean(config.canDelete) && (config.canDeleteRow ? config.canDeleteRow(row) : true);
+  const canEditRow = (row) => canEdit && (config.canEditRow ? config.canEditRow(row) : true);
+  const canDelete = (row) => writable && (config.adminOnlyDelete ? isAdmin : true) && Boolean(config.canDelete) && (config.canDeleteRow ? config.canDeleteRow(row) : true);
 
   const closeModal = useCallback(() => setModal(CLOSED), []);
 
@@ -87,7 +88,9 @@ export default function ResourcePage({ config }) {
   };
 
   const hasFilters = Boolean(list.searchInput) || Object.values(list.filters).some(Boolean);
-  const showActions = Boolean(config.label || config.traceField || canEdit || (config.canDelete && isAdmin && writable));
+  const showActions = Boolean(
+    config.label || config.traceField || canEdit || (config.canDelete && writable && (config.adminOnlyDelete ? isAdmin : true))
+  );
 
   const renderActions = showActions
     ? (row) => (
@@ -105,7 +108,7 @@ export default function ResourcePage({ config }) {
               <History size={18} />
             </Link>
           )}
-          {canEdit && <IconButton icon={Pencil} label="Ubah" onClick={() => setModal({ open: true, mode: 'edit', row })} />}
+          {canEditRow(row) && <IconButton icon={Pencil} label="Ubah" onClick={() => setModal({ open: true, mode: 'edit', row })} />}
           {canDelete(row) && <IconButton icon={Trash2} label="Hapus" variant="danger" onClick={() => handleDelete(row)} />}
         </>
       )

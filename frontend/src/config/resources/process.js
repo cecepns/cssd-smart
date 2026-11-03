@@ -52,9 +52,9 @@ export const receiptsConfig = {
     { key: 'stage', label: 'Tahap', sortable: true, render: (r) => STAGE_LABELS[r.stage] || '-' },
     { key: 'status', label: 'Status', sortable: true, render: badge('status') },
   ],
+  canEdit: true,
   canDelete: true,
-  canDeleteRow: (row) => row.stage === 1,
-  deleteMessage: (row) => `Hapus penerimaan ${row.barcode}? Hanya bisa jika proses belum berjalan.`,
+  deleteMessage: (row) => `Hapus penerimaan alat kotor ${row.barcode}? Data proses terkait akan ikut dibersihkan.`,
   traceField: 'barcode',
   label: (row) => labelOf(row.barcode, row.item_name, `${row.quantity} ${row.unit_label} • ${row.unit_name || ''} • ${formatDate(row.receipt_date)}`),
   form: {
@@ -115,7 +115,9 @@ export const washingsConfig = {
     { key: 'duration_min', label: 'Waktu', render: (r) => (r.duration_min ? `${r.duration_min} menit` : '-') },
     { key: 'officer', label: 'Petugas', sortable: true },
   ],
+  canEdit: true,
   canDelete: true,
+  deleteMessage: (row) => `Hapus data pencucian ${row.receipt_barcode}?`,
   traceField: 'receipt_barcode',
   form: {
     fields: [
@@ -152,7 +154,9 @@ export const dryingsConfig = {
     { key: 'function_ok', label: 'Fungsi Baik', render: yesNo('function_ok', 'Ya', 'Tidak') },
     { key: 'officer', label: 'Petugas', sortable: true },
   ],
+  canEdit: true,
   canDelete: true,
+  deleteMessage: (row) => `Hapus data pemeriksaan/pengeringan ${row.receipt_barcode}?`,
   traceField: 'receipt_barcode',
   form: {
     createTitle: 'Pengeringan & Pemeriksaan',
@@ -196,8 +200,9 @@ export const packagingsConfig = {
     { key: 'officer', label: 'Petugas' },
     { key: 'status', label: 'Status', sortable: true, render: badge('status') },
   ],
+  canEdit: true,
   canDelete: true,
-  canDeleteRow: (row) => row.status === 'Dikemas',
+  deleteMessage: (row) => `Hapus kemasan ${row.barcode}?`,
   traceField: 'barcode',
   label: (row) => labelOf(row.barcode, row.item_name, `${row.package_type} • ${row.quantity} ${row.unit_label} • ${formatDate(row.pack_date)}`),
   form: {
@@ -252,6 +257,9 @@ export const sterilizationsConfig = {
     { key: 'officer', label: 'Petugas' },
     { key: 'status', label: 'Status', sortable: true, render: badge('status') },
   ],
+  canEdit: true,
+  canDelete: true,
+  deleteMessage: (row) => `Hapus siklus sterilisasi ${row.batch_no}? Status paket akan dikembalikan ke status Dikemas.`,
   traceField: 'batch_no',
   form: {
     size: 'lg',
@@ -315,6 +323,9 @@ export const verificationsConfig = {
     { key: 'result', label: 'Hasil', sortable: true, render: badge('result') },
     { key: 'officer', label: 'Petugas' },
   ],
+  canEdit: true,
+  canDelete: true,
+  deleteMessage: (row) => `Hapus verifikasi batch ${row.batch_no}? Status sterilisasi akan dikembalikan ke Menunggu Verifikasi.`,
   traceField: 'batch_no',
   onCreated: (row, { toast }) => {
     if (row?.result === 'GAGAL') toast.error(`Batch ${row.batch_no} GAGAL dan masuk Karantina: ${row.fail_reason}`, { duration: 7000 });
