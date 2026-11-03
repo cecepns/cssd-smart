@@ -1029,6 +1029,29 @@ async function getInstrumentSetsWithStock(query = {}) {
         distMap[row.norm_name] = Number(row.distributed_qty) || 0;
     }
 
+    // Hitung alat kotor yang sudah dikembalikan oleh unit
+    const [returnRows] = await pool.query(`
+    SELECT LOWER(TRIM(item_name)) AS norm_name, SUM(quantity) AS returned_qty
+    FROM dirty_receipts
+    GROUP BY LOWER(TRIM(item_name))
+  `);
+    const returnMap = {};
+    for (const row of returnRows) {
+        returnMap[row.norm_name] = Number(row.returned_qty) || 0;
+    }
+
+    // Riwayat insiden / discrepancy instrumen yang belum selesai
+    const [discRows] = await pool.query(`
+    SELECT * FROM instrument_discrepancy_logs 
+    WHERE resolution_status = 'Belum Selesai' 
+    ORDER BY incident_date DESC
+  `).catch(() => [[]]);
+    const discBySet = {};
+    for (const d of (discRows || [])) {
+        if (!discBySet[d.set_id]) discBySet[d.set_id] = [];
+        discBySet[d.set_id].push(d);
+    }
+
     return sets.map((set) => {
         const setItems = itemsBySet[set.id] || [];
         const totalInstruments = setItems.reduce((acc, cur) => acc + (Number(cur.quantity) || 0), 0);
@@ -1037,6 +1060,7 @@ async function getInstrumentSetsWithStock(query = {}) {
         let avail = stockMap[normName] ?? 0;
         let inProcess = processMap[normName] ?? 0;
         let dist = distMap[normName] ?? 0;
+        let returned = returnMap[normName] ?? 0;
 
         if (avail === 0) {
             for (const [k, v] of Object.entries(stockMap)) {
@@ -1062,6 +1086,17 @@ async function getInstrumentSetsWithStock(query = {}) {
                 }
             }
         }
+        if (returned === 0) {
+            for (const [k, v] of Object.entries(returnMap)) {
+                if (k.includes(normName) || normName.includes(k)) {
+                    returned = v;
+                    break;
+                }
+            }
+        }
+
+        const inUnit = Math.max(0, dist - returned);
+        const activeDiscrepancies = discBySet[set.id] || [];
 
         return {
             ...set,
@@ -1070,7 +1105,10 @@ async function getInstrumentSetsWithStock(query = {}) {
             available_stock: avail,
             in_process_stock: inProcess,
             distributed_stock: dist,
+            in_unit_stock: inUnit,
             is_available: avail > 0,
+            discrepancy_count: activeDiscrepancies.length,
+            active_discrepancies: activeDiscrepancies,
         };
     });
 }
@@ -1078,6 +1116,266 @@ async function getInstrumentSetsWithStock(query = {}) {
 router.get('/instrument-sets', auth, wrap(async (req, res) => {
     const sets = await getInstrumentSetsWithStock(req.query);
     res.json({ success: true, data: sets });
+}));
+
+// GET /instrument-sets/movements (Monitoring mutasi & pergerakan pengambilan & pengembalian)
+router.get('/instrument-sets/movements', auth, wrap(async (req, res) => {
+    const query = req.query || {};
+    const page = Math.max(parseInt(query.page, 10) || 1, 1);
+    const limit = ALLOWED_LIMITS.includes(Number(query.limit)) ? Number(query.limit) : DEFAULT_LIMIT;
+    const offset = (page - 1) * limit;
+    const typeFilter = query.type || null;
+
+    const [distRows] = await pool.query(`
+    SELECT 
+      'PENGAMBILAN' AS movement_type,
+      d.id,
+      d.dist_date AS trx_date,
+      d.created_at,
+      d.quantity,
+      d.officer,
+      d.receiver_name,
+      u.name AS unit_name,
+      s.item_name AS set_name,
+      s.barcode,
+      s.batch_no,
+      d.notes,
+      'Unit Mengambil Set Steril (Stok Berkurang)' AS description
+    FROM distributions d
+    JOIN sterile_stock s ON s.id = d.stock_id
+    JOIN units u ON u.id = d.unit_id
+    WHERE (s.category = 'Set Instrumen' OR s.item_name LIKE '%SET%' OR s.unit_label = 'set')
+  `);
+
+    const [receiptRows] = await pool.query(`
+    SELECT 
+      'PENGEMBALIAN' AS movement_type,
+      dr.id,
+      dr.receipt_date AS trx_date,
+      dr.created_at,
+      dr.quantity,
+      dr.receiver_name AS officer,
+      dr.sender_name AS receiver_name,
+      u.name AS unit_name,
+      dr.item_name AS set_name,
+      dr.barcode,
+      '-' AS batch_no,
+      CONCAT('Status: ', dr.status, ' (Tahap ', dr.stage, ')') AS notes,
+      'Unit Mengembalikan Set Kotor (Masuk Sterilisasi)' AS description
+    FROM dirty_receipts dr
+    JOIN units u ON u.id = dr.unit_id
+    WHERE (dr.item_name LIKE '%SET%' OR dr.item_name LIKE '%Set%' OR EXISTS (SELECT 1 FROM instrument_sets iset WHERE LOWER(iset.name) = LOWER(dr.item_name)))
+  `);
+
+    let allMovements = [...distRows, ...receiptRows];
+
+    if (typeFilter && typeFilter !== 'ALL') {
+        allMovements = allMovements.filter((m) => m.movement_type === typeFilter);
+    }
+
+    if (query.search) {
+        const q = query.search.trim().toLowerCase();
+        allMovements = allMovements.filter((m) =>
+            (m.set_name && m.set_name.toLowerCase().includes(q)) ||
+            (m.unit_name && m.unit_name.toLowerCase().includes(q)) ||
+            (m.barcode && m.barcode.toLowerCase().includes(q)) ||
+            (m.officer && m.officer.toLowerCase().includes(q))
+        );
+    }
+
+    allMovements.sort((a, b) => new Date(b.created_at || b.trx_date) - new Date(a.created_at || a.trx_date));
+
+    const total = allMovements.length;
+    const totalPages = Math.ceil(total / limit) || 1;
+    const paginated = allMovements.slice(offset, offset + limit);
+
+    res.json({
+        success: true,
+        data: paginated,
+        pagination: {
+            page,
+            limit,
+            total,
+            totalPages,
+        },
+    });
+}));
+
+// GET /instrument-sets/discrepancies (Riwayat instrumen hilang, rusak, atau kurang)
+router.get('/instrument-sets/discrepancies', auth, wrap(async (req, res) => {
+    const query = req.query || {};
+    const page = Math.max(parseInt(query.page, 10) || 1, 1);
+    const limit = ALLOWED_LIMITS.includes(Number(query.limit)) ? Number(query.limit) : DEFAULT_LIMIT;
+    const offset = (page - 1) * limit;
+
+    let where = ['1=1'];
+    let params = [];
+
+    if (query.set_id) {
+        where.push('d.set_id = ?');
+        params.push(parseId(query.set_id));
+    }
+    if (query.resolution_status && query.resolution_status !== 'ALL') {
+        where.push('d.resolution_status = ?');
+        params.push(query.resolution_status);
+    }
+    if (query.incident_type && query.incident_type !== 'ALL') {
+        where.push('d.incident_type = ?');
+        params.push(query.incident_type);
+    }
+    if (query.search) {
+        const like = `%${query.search.trim()}%`;
+        where.push('(d.instrument_name LIKE ? OR s.name LIKE ? OR d.notes LIKE ? OR d.officer LIKE ? OR d.unit_origin LIKE ?)');
+        params.push(like, like, like, like, like);
+    }
+
+    const whereSql = where.join(' AND ');
+
+    const [[{ total }]] = await pool.query(`
+    SELECT COUNT(*) AS total
+    FROM instrument_discrepancy_logs d
+    JOIN instrument_sets s ON s.id = d.set_id
+    WHERE ${whereSql}
+  `, params);
+
+    const [rows] = await pool.query(`
+    SELECT 
+      d.*,
+      s.name AS set_name,
+      s.code AS set_code
+    FROM instrument_discrepancy_logs d
+    JOIN instrument_sets s ON s.id = d.set_id
+    WHERE ${whereSql}
+    ORDER BY d.resolution_status ASC, d.incident_date DESC, d.id DESC
+    LIMIT ? OFFSET ?
+  `, [...params, limit, offset]);
+
+    res.json({
+        success: true,
+        data: rows,
+        pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit) || 1,
+        },
+    });
+}));
+
+// POST /instrument-sets/discrepancies (Catat instrumen hilang, rusak, atau kurang)
+router.post('/instrument-sets/discrepancies', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+    const body = req.body || {};
+    const setId = parseId(body.set_id);
+    if (!body.instrument_name || !body.instrument_name.trim()) {
+        throw new HttpError(422, 'Nama instrumen wajib diisi');
+    }
+    const incidentType = ['Kurang', 'Hilang', 'Rusak', 'Ditemukan Kembali', 'Diganti Baru'].includes(body.incident_type)
+        ? body.incident_type
+        : 'Kurang';
+    const qty = Math.max(parseInt(body.quantity, 10) || 1, 1);
+    const incidentDate = body.incident_date || todayStr();
+    const officer = (body.officer && body.officer.trim()) || req.user.name || 'Petugas CSSD';
+    const unitOrigin = body.unit_origin ? String(body.unit_origin).trim() : null;
+    const notes = body.notes ? String(body.notes).trim() : null;
+
+    const id = await withTx(async (conn) => {
+        const [[set]] = await conn.query('SELECT * FROM instrument_sets WHERE id = ? FOR UPDATE', [setId]);
+        if (!set) throw new HttpError(404, 'Set instrumen tidak ditemukan');
+
+        const [ins] = await conn.query('INSERT INTO instrument_discrepancy_logs SET ?', [{
+            set_id: setId,
+            instrument_name: body.instrument_name.trim(),
+            incident_type: incidentType,
+            quantity: qty,
+            unit_origin: unitOrigin,
+            officer,
+            incident_date: incidentDate,
+            notes,
+            resolution_status: 'Belum Selesai',
+        }]);
+
+        if (['Kurang', 'Hilang', 'Rusak'].includes(incidentType)) {
+            const detailNote = `${body.instrument_name.trim()} (${incidentType.toLowerCase()} ${qty} pcs${notes ? ': ' + notes : ''})`;
+            let updatedNotes = set.missing_notes ? `${set.missing_notes}; ${detailNote}` : detailNote;
+            if (updatedNotes.length > 255) updatedNotes = updatedNotes.slice(0, 252) + '...';
+
+            await conn.query(`
+        UPDATE instrument_sets 
+        SET completeness_status = 'Tidak Lengkap', missing_notes = ?
+        WHERE id = ?
+      `, [updatedNotes, setId]);
+        }
+
+        return ins.insertId;
+    });
+
+    const [[created]] = await pool.query(`
+    SELECT d.*, s.name AS set_name, s.code AS set_code
+    FROM instrument_discrepancy_logs d
+    JOIN instrument_sets s ON s.id = d.set_id
+    WHERE d.id = ?
+  `, [id]);
+
+    res.status(201).json({
+        success: true,
+        message: 'Riwayat instrumen berhasil dicatat',
+        data: created,
+    });
+}));
+
+// PATCH /instrument-sets/discrepancies/:id/resolve (Tandai selesai / diganti baru / ditemukan)
+router.patch('/instrument-sets/discrepancies/:id/resolve', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+    const id = parseId(req.params.id);
+    const body = req.body || {};
+    const resolutionNotes = body.resolution_notes ? String(body.resolution_notes).trim() : 'Sudah diselesaikan / diganti';
+
+    await withTx(async (conn) => {
+        const [[existing]] = await conn.query('SELECT * FROM instrument_discrepancy_logs WHERE id = ? FOR UPDATE', [id]);
+        if (!existing) throw new HttpError(404, 'Riwayat instrumen tidak ditemukan');
+
+        await conn.query(`
+      UPDATE instrument_discrepancy_logs
+      SET resolution_status = 'Selesai', resolution_notes = ?, resolved_at = NOW()
+      WHERE id = ?
+    `, [resolutionNotes, id]);
+
+        const [[{ remaining }]] = await conn.query(`
+      SELECT COUNT(*) AS remaining
+      FROM instrument_discrepancy_logs
+      WHERE set_id = ? AND resolution_status = 'Belum Selesai'
+    `, [existing.set_id]);
+
+        if (remaining === 0) {
+            await conn.query(`
+        UPDATE instrument_sets
+        SET completeness_status = 'Lengkap', missing_notes = NULL
+        WHERE id = ?
+      `, [existing.set_id]);
+        }
+    });
+
+    const [[updated]] = await pool.query(`
+    SELECT d.*, s.name AS set_name, s.code AS set_code
+    FROM instrument_discrepancy_logs d
+    JOIN instrument_sets s ON s.id = d.set_id
+    WHERE d.id = ?
+  `, [id]);
+
+    res.json({
+        success: true,
+        message: 'Insiden instrumen berhasil diselesaikan',
+        data: updated,
+    });
+}));
+
+// DELETE /instrument-sets/discrepancies/:id
+router.delete('/instrument-sets/discrepancies/:id', auth, allow('admin'), wrap(async (req, res) => {
+    const id = parseId(req.params.id);
+    const [[existing]] = await pool.query('SELECT * FROM instrument_discrepancy_logs WHERE id = ?', [id]);
+    if (!existing) throw new HttpError(404, 'Riwayat instrumen tidak ditemukan');
+
+    await pool.query('DELETE FROM instrument_discrepancy_logs WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Riwayat instrumen berhasil dihapus' });
 }));
 
 router.get('/instrument-sets/:id', auth, wrap(async (req, res) => {
@@ -1658,10 +1956,49 @@ async function ensureCategoryMigration() {
     }
 }
 
+async function ensureDiscrepancyTable() {
+    try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS instrument_discrepancy_logs (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            set_id INT UNSIGNED NOT NULL,
+            instrument_name VARCHAR(150) NOT NULL,
+            incident_type ENUM('Kurang', 'Hilang', 'Rusak', 'Ditemukan Kembali', 'Diganti Baru') NOT NULL,
+            quantity INT UNSIGNED NOT NULL DEFAULT 1,
+            unit_origin VARCHAR(100) DEFAULT NULL,
+            officer VARCHAR(100) NOT NULL,
+            incident_date DATE NOT NULL,
+            notes TEXT DEFAULT NULL,
+            resolution_status ENUM('Belum Selesai', 'Selesai') NOT NULL DEFAULT 'Belum Selesai',
+            resolution_notes TEXT DEFAULT NULL,
+            resolved_at DATETIME DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_disc_set_id (set_id),
+            KEY idx_disc_status (resolution_status)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        `);
+
+        const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM instrument_discrepancy_logs');
+        if (total === 0) {
+            await pool.query(`
+            INSERT INTO instrument_discrepancy_logs 
+            (set_id, instrument_name, incident_type, quantity, unit_origin, officer, incident_date, notes, resolution_status)
+            VALUES
+            (4, 'Gunting episiotomi', 'Rusak', 1, 'Ruang Bersalin (VK)', 'Inge Kusryaningsih', CURDATE(), 'Gunting episiotomi mata gunting tumpul / dalam perbaikan teknisi', 'Belum Selesai')
+          `);
+        }
+    } catch (err) {
+        console.error('ensureDiscrepancyTable notice:', err.message);
+    }
+}
+
 // Inisialisasi otomatis saat server dimuat
 ensureAdmin();
 ensureOfficersTable();
 ensureInstrumentSetsTable();
+ensureDiscrepancyTable();
 ensureCategoryMigration();
 
 // async function start() {

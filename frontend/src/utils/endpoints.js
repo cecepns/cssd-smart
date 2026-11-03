@@ -31,10 +31,14 @@ export const API_ENDPOINTS = {
   MACHINES: crud('/machines'),
   OFFICERS: crud('/officers'),
 
-  // Set Instrumen
+  // Set Instrumen & Monitoring
   INSTRUMENT_SETS: {
     ...crud('/instrument-sets'),
     COMPLETENESS: (id) => `/instrument-sets/${id}/completeness`,
+    MOVEMENTS: '/instrument-sets/movements',
+    DISCREPANCIES: '/instrument-sets/discrepancies',
+    DISCREPANCY_DETAIL: (id) => `/instrument-sets/discrepancies/${id}`,
+    DISCREPANCY_RESOLVE: (id) => `/instrument-sets/discrepancies/${id}/resolve`,
   },
 
   // Proses CSSD
