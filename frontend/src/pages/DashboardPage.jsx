@@ -94,11 +94,11 @@ export default function DashboardPage() {
 
             {/* Deskripsi resmi aplikasi sesuai permintaan client */}
             <p className="max-w-3xl text-xs sm:text-sm leading-relaxed text-slate-700 text-justify sm:text-left">
-              Sistem pengelolaan seluruh proses pelayanan CSSD, mulai dari penerimaan alat kotor,
-              pencucian, pengemasan, sterilisasi dan DTT, verifikasi hasil proses, distribusi alat steril
-              dan kasa steril, hingga pengelolaan inventaris BMHP. Dilengkapi sistem pemindaian barcode
-              dan tanda tangan langsung di layar HP untuk memastikan setiap transaksi tercatat, bukti serah
-              terima terdokumentasi, dan seluruh proses mudah ditelusuri.
+              CSSD SMART merupakan sistem digital terintegrasi untuk pengelolaan seluruh pelayanan CSSD,
+              mulai dari penerimaan alat kotor, pencucian, pengeringan, pemeriksaan, pengemasan, sterilisasi
+              dan DTT, verifikasi, penyimpanan, hingga distribusi alat steril, hasil DTT, dan kasa steril.
+              Dilengkapi barcode, tanda tangan digital, serta manajemen inventaris BMHP untuk mendukung
+              efisiensi, ketertelusuran, dan peningkatan mutu pelayanan CSSD.
             </p>
 
             {/* Slogan Banner Chips sesuai revisi */}
