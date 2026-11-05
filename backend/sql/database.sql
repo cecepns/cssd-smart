@@ -84,6 +84,7 @@ CREATE TABLE `item_units` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `code` VARCHAR(20) NOT NULL,
   `name` VARCHAR(50) NOT NULL,
+  `category` ENUM('Semua', 'Steril', 'DTT') NOT NULL DEFAULT 'Semua',
   `description` VARCHAR(255) DEFAULT NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -116,7 +117,9 @@ CREATE TABLE `items` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `code` VARCHAR(30) NOT NULL,
   `name` VARCHAR(150) NOT NULL,
+  `process_type` ENUM('Steril','DTT') NOT NULL DEFAULT 'Steril',
   `category` ENUM('Alat Satuan','Set Instrumen','Duk & Jas Operasi','Kasa Steril') NOT NULL,
+  `unit_label` VARCHAR(50) NOT NULL DEFAULT 'Set',
   `shelf_life_months` TINYINT UNSIGNED NOT NULL DEFAULT 6,
   `photo` VARCHAR(255) DEFAULT NULL,
   `description` VARCHAR(255) DEFAULT NULL,
@@ -124,7 +127,8 @@ CREATE TABLE `items` (
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_items_code` (`code`)
+  UNIQUE KEY `uq_items_code` (`code`),
+  KEY `idx_items_process_type` (`process_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `machines` (
@@ -547,16 +551,17 @@ INSERT INTO `items` (`id`,`code`,`name`,`category`,`shelf_life_months`,`descript
 (6,'ALT-GNT','Gunting Hecting Satuan','Alat Satuan',6,'Gunting angkat jahitan / hecting lepasan'),
 (7,'ALT-PNS','Pinset Sirurgis Satuan','Alat Satuan',6,'Pinset sirurgis lepasan IGD/Poli');
 
-INSERT INTO `item_units` (`id`,`code`,`name`,`description`) VALUES
-(1,'SET','Set','Set instrumen bedah/tindakan lengkap'),
-(2,'PCS','Pcs','Alat satuan / lepasan per buah'),
-(3,'TABUNG','Tabung','Instrumen berbentuk tabung / kanul suction / trocar'),
-(4,'SUNGKUP','Sungkup','Sungkup anestesi / resusitasi / nebulizer'),
-(5,'PASANG','Pasang','Alat / sarung tangan berpasangan'),
-(6,'LEMBAR','Lembar','Duk, kain linen, wrap'),
-(7,'ROL','Rol','Kasa rol dan pita indikator'),
-(8,'PAKET','Paket','Paket gabungan alat atau linen'),
-(9,'POUCH','Pouch','Kemasan steril pouch');
+INSERT INTO `item_units` (`id`,`code`,`name`,`category`,`description`) VALUES
+(1,'SET','Set','Semua','Set instrumen bedah/tindakan lengkap'),
+(2,'PCS','Pcs','Semua','Alat satuan / lepasan per pcs'),
+(3,'BUAH','Buah','Semua','Alat satuan per buah'),
+(4,'TABUNG','Tabung','DTT','Instrumen berbentuk tabung / kanul suction / trocar DTT'),
+(5,'SUNGKUP','Sungkup','DTT','Sungkup anestesi / resusitasi / nebulizer DTT'),
+(6,'PASANG','Pasang','Steril','Alat / sarung tangan berpasangan'),
+(7,'LEMBAR','Lembar','Steril','Duk, kain linen, wrap steril'),
+(8,'ROL','Rol','Steril','Kasa rol dan pita indikator'),
+(9,'PAKET','Paket','Semua','Paket gabungan alat atau linen'),
+(10,'POUCH','Pouch','Steril','Kemasan steril pouch');
 
 INSERT INTO `machines` (`id`,`code`,`name`,`type`) VALUES
 (1,'AU1','Autoclave 1','Autoclave 1'),

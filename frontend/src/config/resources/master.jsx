@@ -58,11 +58,15 @@ export const itemsConfig = {
   ...masterBase,
   key: 'master-jenis-alat',
   title: 'Jenis Alat',
-  subtitle: 'Master alat satuan, set instrumen, duk & jas, dan kasa beserta masa steril',
+  subtitle: 'Master data instrumen dan alat medis untuk Kategori Steril dan DTT',
   icon: Tags,
   endpoint: API_ENDPOINTS.ITEMS,
-  searchPlaceholder: 'Cari kode, nama alat...',
-  filters: [{ name: 'category', label: 'Kategori', options: PACKAGE_TYPES }, ...masterBase.filters],
+  searchPlaceholder: 'Cari kode, nama alat, satuan...',
+  filters: [
+    { name: 'process_type', label: 'Kategori Proses', options: ['Steril', 'DTT'] },
+    { name: 'category', label: 'Kategori Kemasan', options: PACKAGE_TYPES },
+    ...masterBase.filters,
+  ],
   columns: [
     {
       key: 'photo',
@@ -76,28 +80,99 @@ export const itemsConfig = {
     },
     { key: 'code', label: 'Kode', sortable: true, render: mono('code') },
     { key: 'name', label: 'Nama Alat', sortable: true, render: bold('name') },
-    { key: 'category', label: 'Kategori', sortable: true },
+    {
+      key: 'process_type',
+      label: 'Kategori',
+      sortable: true,
+      render: (r) => (
+        <span
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${
+            r.process_type === 'DTT' ? 'bg-violet-100 text-violet-800' : 'bg-sky-100 text-sky-800'
+          }`}
+        >
+          {r.process_type || 'Steril'}
+        </span>
+      ),
+    },
+    { key: 'category', label: 'Jenis Kemasan', sortable: true },
+    {
+      key: 'unit_label',
+      label: 'Satuan',
+      render: (r) => <span className="font-semibold text-slate-700">{r.unit_label || 'Set'}</span>,
+    },
     { key: 'shelf_life_months', label: 'Masa Steril', render: (r) => `${r.shelf_life_months} bulan` },
     activeColumn,
   ],
   form: {
+    subtitle: 'Petugas memilih Kategori (Steril / DTT) kemudian memilih satuan sesuai jenis alat dari Master Satuan.',
     fields: [
-      { name: 'code', label: 'Kode', required: true, maxLength: 30, placeholder: 'SET-LAP / ALT-GNT' },
-      { name: 'name', label: 'Nama alat', required: true, maxLength: 150, placeholder: 'Set Laparotomi / Gunting Hecting' },
-      { name: 'category', label: 'Kategori', type: 'select', required: true, options: PACKAGE_TYPES, placeholder: 'Pilih kategori...' },
+      {
+        name: 'process_type',
+        label: 'Kategori Proses Layanan',
+        type: 'select',
+        required: true,
+        options: ['Steril', 'DTT'],
+        default: 'Steril',
+        span: 2,
+        help: 'Pilih "Steril" untuk instrumen sterilisasi (Autoclave/Plasma), atau "DTT" untuk alat medis reuse (Tabung, Sungkup, Trocar, dll.).',
+      },
+      { name: 'code', label: 'Kode Alat', required: true, maxLength: 30, placeholder: 'mis. SET-LAP / ALT-GNT / DTT-LMA' },
+      { name: 'name', label: 'Nama Alat Medis', required: true, maxLength: 150, placeholder: 'mis. Set Laparotomi / Sungkup Laring / Gunting Hecting' },
+      { name: 'category', label: 'Kategori Kemasan', type: 'select', required: true, options: PACKAGE_TYPES, placeholder: 'Pilih kategori kemasan...' },
       {
         name: 'unit_label',
-        label: 'Satuan Standar',
-        type: 'remote-select',
-        placeholder: 'Pilih satuan...',
-        optionsEndpoint: API_ENDPOINTS.ITEM_UNITS.LIST,
-        optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
-        optionValue: (u) => u.name.toLowerCase(),
-        optionLabel: (u) => `${u.name} (${u.code})`,
-        default: 'set',
-        help: 'Satuan diambil otomatis dari Master Satuan (Pcs, Set, Tabung, Sungkup, Pasang, Lembar, dll.)',
+        label: 'Satuan Sesuai Jenis Alat',
+        type: 'custom',
+        required: true,
+        span: 2,
+        render: ({ values, setValue }) => {
+          const isDtt = values?.process_type === 'DTT';
+          const sterilPresets = ['Pcs', 'Set', 'Buah', 'Pasang', 'Lembar', 'Rol', 'Pouch', 'Paket'];
+          const dttPresets = ['Pcs', 'Buah', 'Tabung', 'Sungkup', 'Set', 'Paket'];
+          const currentPresets = isDtt ? dttPresets : sterilPresets;
+          const currentVal = values?.unit_label || (isDtt ? 'Pcs' : 'Set');
+
+          return (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-500 mr-1">
+                  Pilihan Satuan {isDtt ? 'Kategori DTT' : 'Kategori Steril'}:
+                </span>
+                {currentPresets.map((u) => {
+                  const active = currentVal?.toLowerCase() === u.toLowerCase();
+                  return (
+                    <button
+                      key={u}
+                      type="button"
+                      onClick={() => setValue('unit_label', u)}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                        active
+                          ? 'bg-[#0A192F] text-[#E5C07B] shadow-xs ring-1 ring-[#0A192F]'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {u}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={values?.unit_label || ''}
+                  onChange={(e) => setValue('unit_label', e.target.value)}
+                  placeholder="Ketik atau pilih dari tombol satuan di atas..."
+                  className="input input-sm flex-1 text-sm font-semibold"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Satuan juga dapat ditambah atau diedit sewaktu-waktu melalui menu <b>Master Satuan</b>.
+              </p>
+            </div>
+          );
+        },
       },
-      { name: 'shelf_life_months', label: 'Masa steril (bulan)', type: 'number', required: true, min: 1, max: 60, default: 6, help: 'Dipakai menghitung tanggal kedaluwarsa otomatis.' },
+      { name: 'shelf_life_months', label: 'Masa Steril / Exp (bulan)', type: 'number', required: true, min: 1, max: 60, default: 6, help: 'Dipakai menghitung tanggal kedaluwarsa otomatis.' },
       { name: 'description', label: 'Keterangan', maxLength: 255, span: 2 },
       { name: 'photo', label: 'Foto alat', type: 'image' },
       activeField,
@@ -109,22 +184,54 @@ export const itemUnitsConfig = {
   ...masterBase,
   key: 'master-satuan',
   title: 'Master Satuan',
-  subtitle: 'Daftar satuan alat medis (Set, Pcs, Tabung, Sungkup, Pasang, Lembar, dll.)',
+  subtitle: 'Pusat pengelolaan satuan alat medis untuk Kategori Steril dan DTT (Pcs, Set, Buah, Tabung, Sungkup, Pasang, Lembar, dll.)',
   icon: Layers,
   endpoint: API_ENDPOINTS.ITEM_UNITS,
   searchPlaceholder: 'Cari kode atau nama satuan...',
+  filters: [
+    { name: 'category', label: 'Kategori Penggunaan', options: ['Semua', 'Steril', 'DTT'] },
+    ...masterBase.filters,
+  ],
   columns: [
     { key: 'code', label: 'Kode', sortable: true, render: mono('code') },
     { key: 'name', label: 'Nama Satuan', sortable: true, render: bold('name') },
+    {
+      key: 'category',
+      label: 'Kategori Penggunaan',
+      sortable: true,
+      render: (r) => {
+        const cat = r.category || 'Semua';
+        if (cat === 'Steril') {
+          return <span className="inline-flex rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-bold text-sky-800">Steril</span>;
+        }
+        if (cat === 'DTT') {
+          return <span className="inline-flex rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-bold text-violet-800">DTT</span>;
+        }
+        return <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">Semua (Steril & DTT)</span>;
+      },
+    },
     { key: 'description', label: 'Keterangan' },
     activeColumn,
   ],
   form: {
-    subtitle: 'Satuan yang ditambahkan di sini otomatis muncul pada dropdown input alat Steril dan DTT.',
+    subtitle: 'Anda dapat menambah atau mengedit satuan sendiri di sini. Satuan otomatis muncul sebagai pilihan saat menginput alat Steril dan DTT.',
     fields: [
-      { name: 'code', label: 'Kode Satuan', required: true, maxLength: 20, placeholder: 'SET / PCS / TABUNG / SUNGKUP' },
-      { name: 'name', label: 'Nama Satuan', required: true, maxLength: 50, placeholder: 'Pcs / Tabung / Sungkup / Pasang / Lembar' },
-      { name: 'description', label: 'Keterangan Penggunaan', maxLength: 255, span: 2, placeholder: 'mis. Untuk alat kanul suction / masker anestesi...' },
+      { name: 'code', label: 'Kode Satuan', required: true, maxLength: 20, placeholder: 'mis. SET / PCS / BUAH / TABUNG / SUNGKUP' },
+      { name: 'name', label: 'Nama Satuan', required: true, maxLength: 50, placeholder: 'mis. Pcs / Set / Buah / Tabung / Sungkup / Pasang / Lembar' },
+      {
+        name: 'category',
+        label: 'Kategori Penggunaan',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'Semua', label: 'Semua (Bisa Steril & DTT)' },
+          { value: 'Steril', label: 'Kategori Steril' },
+          { value: 'DTT', label: 'Kategori DTT' },
+        ],
+        default: 'Semua',
+        help: 'Pilih apakah satuan ini ditujukan untuk alat Steril, DTT, atau Keduanya.',
+      },
+      { name: 'description', label: 'Keterangan Penggunaan', maxLength: 255, span: 2, placeholder: 'mis. Untuk instrumen satuan / kanul suction / masker anestesi...' },
       activeField,
     ],
   },

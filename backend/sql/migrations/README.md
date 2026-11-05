@@ -13,7 +13,8 @@ Folder ini berisi file migrasi SQL terstruktur untuk memperbarui database tanpa 
 | `20261103_003_create_packaging_materials.sql` | Tabel master bahan kemasan steril (`packaging_materials`) |
 | `20261103_004_alter_machines_type_varchar.sql` | Tipe mesin fleksibel VARCHAR (`machines`) |
 | `20261103_005_enhance_bmhp_fields.sql` | Penambahan field lengkap data barang BMHP & expiry date |
-| `20261105_001_master_satuan_dtt_and_unit_roles.sql` | **(Baru)** Master satuan (`item_units`), DTT (`dtt_receipts`, `dtt_distributions`), role `unit`, `gauze_type`, & TTD layar HP |
+| `20261105_001_master_satuan_dtt_and_unit_roles.sql` | Master satuan (`item_units`), DTT (`dtt_receipts`, `dtt_distributions`), role `unit`, `gauze_type`, & TTD layar HP |
+| `20261105_002_enhance_item_units_category_and_items_process_type.sql` | **(Terbaru)** Kategori satuan (`Semua`, `Steril`, `DTT`), satuan `Buah`, dan field `process_type` & `unit_label` pada Master Alat |
 | `migrate_all_new_tables.sql` | **(Recommended)** Seluruh migrasi gabungan idempotent (aman dijalankan berulang kali) |
 
 ---

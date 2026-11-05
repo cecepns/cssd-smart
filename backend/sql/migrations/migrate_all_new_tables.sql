@@ -203,6 +203,7 @@ CREATE TABLE IF NOT EXISTS `item_units` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `code` VARCHAR(20) NOT NULL,
   `name` VARCHAR(50) NOT NULL,
+  `category` ENUM('Semua', 'Steril', 'DTT') NOT NULL DEFAULT 'Semua',
   `description` VARCHAR(255) DEFAULT NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -211,17 +212,18 @@ CREATE TABLE IF NOT EXISTS `item_units` (
   UNIQUE KEY `uq_item_units_code` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `item_units` (`id`, `code`, `name`, `description`) VALUES
-(1, 'SET', 'Set', 'Set instrumen bedah/tindakan lengkap'),
-(2, 'PCS', 'Pcs', 'Alat satuan / lepasan per buah'),
-(3, 'TABUNG', 'Tabung', 'Instrumen berbentuk tabung / kanul suction / trocar'),
-(4, 'SUNGKUP', 'Sungkup', 'Sungkup anestesi / resusitasi / nebulizer'),
-(5, 'PASANG', 'Pasang', 'Alat / sarung tangan berpasangan'),
-(6, 'LEMBAR', 'Lembar', 'Duk, kain linen, wrap'),
-(7, 'ROL', 'Rol', 'Kasa rol dan pita indikator'),
-(8, 'PAKET', 'Paket', 'Paket gabungan alat atau linen'),
-(9, 'POUCH', 'Pouch', 'Kemasan steril pouch')
-ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `description` = VALUES(`description`);
+INSERT INTO `item_units` (`id`, `code`, `name`, `category`, `description`) VALUES
+(1, 'SET', 'Set', 'Semua', 'Set instrumen bedah/tindakan lengkap'),
+(2, 'PCS', 'Pcs', 'Semua', 'Alat satuan / lepasan per pcs'),
+(3, 'BUAH', 'Buah', 'Semua', 'Alat satuan per buah'),
+(4, 'TABUNG', 'Tabung', 'DTT', 'Instrumen berbentuk tabung / kanul suction / trocar DTT'),
+(5, 'SUNGKUP', 'Sungkup', 'DTT', 'Sungkup anestesi / resusitasi / nebulizer DTT'),
+(6, 'PASANG', 'Pasang', 'Steril', 'Alat / sarung tangan berpasangan'),
+(7, 'LEMBAR', 'Lembar', 'Steril', 'Duk, kain linen, wrap steril'),
+(8, 'ROL', 'Rol', 'Steril', 'Kasa rol dan pita indikator'),
+(9, 'PAKET', 'Paket', 'Semua', 'Paket gabungan alat atau linen'),
+(10, 'POUCH', 'Pouch', 'Steril', 'Kemasan steril pouch')
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `category` = VALUES(`category`), `description` = VALUES(`description`);
 
 -- ------------------------------------------------------------
 -- 7. Pembaruan Tabel Users (Role Unit & Relasi Unit Luar)
@@ -251,11 +253,15 @@ DELIMITER ;
 CALL `AddColIfNotExist`('users', 'unit_id', 'INT UNSIGNED DEFAULT NULL AFTER `role`');
 
 -- ------------------------------------------------------------
--- 8. Pembaruan Tabel Distributions (Distribusi Kasa & TTD Layar HP)
+-- 8. Pembaruan Tabel Distributions & Items (Alat Medis)
 -- ------------------------------------------------------------
 CALL `AddColIfNotExist`('distributions', 'gauze_type', 'VARCHAR(100) DEFAULT NULL AFTER `quantity`');
 CALL `AddColIfNotExist`('distributions', 'officer_signature', 'TEXT DEFAULT NULL AFTER `officer`');
 CALL `AddColIfNotExist`('distributions', 'receiver_signature', 'TEXT DEFAULT NULL AFTER `receiver_name`');
+
+-- Kategori Proses (Steril / DTT) dan Satuan Standar pada Master Data Alat
+CALL `AddColIfNotExist`('items', 'process_type', "ENUM('Steril','DTT') NOT NULL DEFAULT 'Steril' AFTER `name`");
+CALL `AddColIfNotExist`('items', 'unit_label', "VARCHAR(50) NOT NULL DEFAULT 'Set' AFTER `category`");
 
 -- ------------------------------------------------------------
 -- 9. Modul DTT (RIUS) & Buku Kontrol Penggunaan Ulang Alat Medis

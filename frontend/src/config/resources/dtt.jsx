@@ -124,15 +124,48 @@ export const dttReceiptsConfig = {
       { name: 'quantity', label: 'Jumlah Alat', type: 'number', required: true, min: 1, default: 1 },
       {
         name: 'unit_label',
-        label: 'Satuan',
-        type: 'remote-select',
+        label: 'Satuan Alat DTT',
+        type: 'custom',
         required: true,
-        placeholder: 'Pilih satuan...',
-        optionsEndpoint: API_ENDPOINTS.ITEM_UNITS.LIST,
-        optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
-        optionValue: (u) => u.name.toLowerCase(),
-        optionLabel: (u) => `${u.name} (${u.code})`,
-        default: 'pcs',
+        span: 2,
+        render: ({ values, setValue }) => {
+          const dttUnits = ['Pcs', 'Buah', 'Tabung', 'Sungkup', 'Set'];
+          const currentVal = values?.unit_label || 'Pcs';
+          return (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">Satuan Alat DTT</label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {dttUnits.map((u) => {
+                  const active = currentVal?.toLowerCase() === u.toLowerCase();
+                  return (
+                    <button
+                      key={u}
+                      type="button"
+                      onClick={() => setValue('unit_label', u)}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                        active
+                          ? 'bg-[#0A192F] text-[#E5C07B] ring-1 ring-[#0A192F]'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {u}
+                    </button>
+                  );
+                })}
+              </div>
+              <input
+                type="text"
+                value={values?.unit_label || ''}
+                onChange={(e) => setValue('unit_label', e.target.value)}
+                placeholder="Pilih tombol di atas atau ketik satuan lain..."
+                className="input input-sm w-full text-sm font-semibold"
+              />
+              <p className="text-[11px] text-slate-400">
+                Tersedia pilihan satuan DTT: Pcs, Buah, Tabung, Sungkup, Set, dan satuan kustom dari Master Satuan.
+              </p>
+            </div>
+          );
+        },
       },
       {
         name: 'reuse_count',
