@@ -19,6 +19,8 @@ import { bmhpInConfig, bmhpItemsConfig, bmhpMutationConfig, bmhpOutConfig } from
 import {
   itemUnitsConfig,
   itemsConfig,
+  itemsDttConfig,
+  itemsSterilConfig,
   machinesConfig,
   officersConfig,
   packagingMaterialsConfig,
@@ -94,8 +96,10 @@ export default function App() {
 
             <Route element={<Protected adminOnly />}>
               <Route path={ROUTES.MASTER_UNITS} element={resource(unitsConfig)} />
-              <Route path={ROUTES.MASTER_ITEMS} element={resource(itemsConfig)} />
               <Route path={ROUTES.MASTER_ITEM_UNITS} element={resource(itemUnitsConfig)} />
+              <Route path={ROUTES.MASTER_ITEMS_STERIL} element={resource(itemsSterilConfig)} />
+              <Route path={ROUTES.MASTER_ITEMS_DTT} element={resource(itemsDttConfig)} />
+              <Route path={ROUTES.MASTER_ITEMS} element={resource(itemsConfig)} />
               <Route path={ROUTES.MASTER_MACHINES} element={resource(machinesConfig)} />
               <Route path={ROUTES.MASTER_PACKAGING_MATERIALS} element={resource(packagingMaterialsConfig)} />
               <Route path={ROUTES.MASTER_OFFICERS} element={resource(officersConfig)} />

@@ -14,10 +14,12 @@ export const API_ENDPOINTS = {
     REGISTER: '/auth/register',
     PROFILE: '/auth/profile',
     PASSWORD: '/auth/password',
+    VERIFY_REPORT: '/auth/verify-report-access',
   },
 
   DASHBOARD: '/dashboard',
   TRACEABILITY: '/traceability',
+  REPORTS_MONTHLY: '/reports/monthly-summary',
 
   UPLOADS: {
     IMAGE: '/uploads/image',

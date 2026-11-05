@@ -28,6 +28,8 @@ export const ROUTES = {
 
   MASTER_UNITS: '/master/unit',
   MASTER_ITEMS: '/master/jenis-alat',
+  MASTER_ITEMS_STERIL: '/master/alat-steril',
+  MASTER_ITEMS_DTT: '/master/alat-dtt',
   MASTER_MACHINES: '/master/mesin',
   MASTER_OFFICERS: '/master/petugas',
   MASTER_PACKAGING_MATERIALS: '/master/bahan-kemasan',

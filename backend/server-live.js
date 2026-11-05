@@ -2212,6 +2212,151 @@ router.put('/auth/password', auth, wrap(async (req, res) => {
   res.json({ success: true, message: 'Password berhasil diubah' });
 }));
 
+// Verifikasi password khusus admin / Kepala Instalasi untuk membuka akses laporan
+router.post('/auth/verify-report-access', auth, wrap(async (req, res) => {
+  const password = String((req.body && req.body.password) || '').trim();
+  if (!password) throw new HttpError(422, 'Password khusus wajib diisi', { password: 'Password khusus wajib diisi' });
+
+  // 1. Cek apakah cocok dengan password akun admin aktif di database
+  const [admins] = await pool.query("SELECT id, password FROM users WHERE role = 'admin' AND is_active = 1");
+  let valid = false;
+  for (const admin of admins) {
+    if (await bcrypt.compare(password, admin.password)) {
+      valid = true;
+      break;
+    }
+  }
+
+  // 2. Cek juga PIN / password default fallback
+  if (!valid && (password === 'admin123' || password === 'cssd123' || password === 'admincssd')) {
+    valid = true;
+  }
+
+  if (!valid) {
+    throw new HttpError(401, 'Password khusus Kepala Instalasi / Admin tidak sesuai');
+  }
+
+  res.json({
+    success: true,
+    message: 'Akses laporan berhasil dibuka',
+    data: { unlocked: true, unlocked_at: new Date().toISOString() },
+  });
+}));
+
+// ---------- Rekap Bulanan Terpadu CSSD SMART ----------
+router.get('/reports/monthly-summary', auth, wrap(async (req, res) => {
+  const month = parseInt(req.query.month, 10) || (new Date().getMonth() + 1);
+  const year = parseInt(req.query.year, 10) || new Date().getFullYear();
+
+  // 1. Rekap Steril Bulanan
+  const [[sterilSummary]] = await pool.query(`
+    SELECT
+      COUNT(DISTINCT s.id) AS total_batches,
+      COUNT(DISTINCT si.packaging_id) AS total_packages,
+      COUNT(DISTINCT CASE WHEN v.result = 'Lolos' THEN v.id END) AS passed_verifications,
+      COUNT(DISTINCT CASE WHEN v.result = 'Gagal' THEN v.id END) AS failed_verifications
+    FROM sterilizations s
+    LEFT JOIN sterilization_items si ON si.sterilization_id = s.id
+    LEFT JOIN verifications v ON v.sterilization_id = s.id
+    WHERE MONTH(s.steril_date) = ? AND YEAR(s.steril_date) = ?
+  `, [month, year]);
+
+  const [machineBreakdown] = await pool.query(`
+    SELECT COALESCE(m.name, s.machine_id) AS machine_name, COUNT(*) AS batch_count
+    FROM sterilizations s
+    LEFT JOIN machines m ON m.id = s.machine_id
+    WHERE MONTH(s.steril_date) = ? AND YEAR(s.steril_date) = ?
+    GROUP BY s.machine_id, m.name
+  `, [month, year]);
+
+  // 2. Rekap DTT (RIUS) Bulanan
+  const [[dttSummary]] = await pool.query(`
+    SELECT
+      COUNT(*) AS total_receipts,
+      COALESCE(SUM(quantity), 0) AS total_tools_received,
+      COUNT(CASE WHEN tool_condition = 'Baik' THEN 1 END) AS condition_baik,
+      COUNT(CASE WHEN tool_condition = 'Perlu Perbaikan' THEN 1 END) AS condition_perbaikan,
+      COUNT(CASE WHEN tool_condition = 'Rusak / Afkir' OR tool_condition = 'Rusak' THEN 1 END) AS condition_rusak
+    FROM dtt_receipts
+    WHERE MONTH(receipt_datetime) = ? AND YEAR(receipt_datetime) = ?
+  `, [month, year]);
+
+  const [[dttDistSummary]] = await pool.query(`
+    SELECT
+      COUNT(*) AS total_distributions,
+      COALESCE(SUM(quantity), 0) AS total_tools_distributed
+    FROM dtt_distributions
+    WHERE MONTH(dist_datetime) = ? AND YEAR(dist_datetime) = ?
+  `, [month, year]);
+
+  // 3. Rekap Kasa Steril Bulanan
+  const [[gauzeSummary]] = await pool.query(`
+    SELECT
+      COUNT(*) AS total_transactions,
+      COALESCE(SUM(quantity), 0) AS total_quantity
+    FROM distributions
+    WHERE (type = 'KASA' OR gauze_type IS NOT NULL)
+      AND MONTH(dist_date) = ? AND YEAR(dist_date) = ?
+  `, [month, year]);
+
+  const [gauzeByType] = await pool.query(`
+    SELECT COALESCE(gauze_type, 'Kasa Steril') AS gauze_type, SUM(quantity) AS quantity
+    FROM distributions
+    WHERE (type = 'KASA' OR gauze_type IS NOT NULL)
+      AND MONTH(dist_date) = ? AND YEAR(dist_date) = ?
+    GROUP BY gauze_type
+  `, [month, year]);
+
+  const [gauzeByUnit] = await pool.query(`
+    SELECT u.name AS unit_name, SUM(d.quantity) AS quantity
+    FROM distributions d
+    JOIN units u ON u.id = d.unit_id
+    WHERE (d.type = 'KASA' OR d.gauze_type IS NOT NULL)
+      AND MONTH(d.dist_date) = ? AND YEAR(d.dist_date) = ?
+    GROUP BY d.unit_id, u.name
+    ORDER BY quantity DESC
+  `, [month, year]);
+
+  // 4. Rekap Seluruh Aktivitas CSSD Bulanan
+  const [[overall]] = await pool.query(`
+    SELECT
+      (SELECT COUNT(*) FROM dirty_receipts WHERE MONTH(receipt_date) = ? AND YEAR(receipt_date) = ?) AS dirty_receipts,
+      (SELECT COALESCE(SUM(quantity), 0) FROM dirty_receipts WHERE MONTH(receipt_date) = ? AND YEAR(receipt_date) = ?) AS dirty_items_count,
+      (SELECT COUNT(*) FROM washings WHERE MONTH(wash_date) = ? AND YEAR(wash_date) = ?) AS washings_count,
+      (SELECT COUNT(*) FROM packagings WHERE MONTH(package_date) = ? AND YEAR(package_date) = ?) AS packagings_count,
+      (SELECT COUNT(*) FROM sterilizations WHERE MONTH(steril_date) = ? AND YEAR(steril_date) = ?) AS steril_batches,
+      (SELECT COALESCE(SUM(quantity), 0) FROM distributions WHERE (type = 'ALAT' AND (gauze_type IS NULL OR gauze_type = '')) AND MONTH(dist_date) = ? AND YEAR(dist_date) = ?) AS sterile_tools_distributed,
+      (SELECT COALESCE(SUM(quantity), 0) FROM distributions WHERE (type = 'KASA' OR gauze_type IS NOT NULL) AND MONTH(dist_date) = ? AND YEAR(dist_date) = ?) AS gauze_distributed,
+      (SELECT COUNT(*) FROM dtt_receipts WHERE MONTH(receipt_datetime) = ? AND YEAR(receipt_datetime) = ?) AS dtt_receipts,
+      (SELECT COUNT(*) FROM dtt_distributions WHERE MONTH(dist_datetime) = ? AND YEAR(dist_datetime) = ?) AS dtt_distributions,
+      (SELECT COALESCE(SUM(quantity), 0) FROM bmhp_transactions WHERE type = 'OUT' AND MONTH(transaction_date) = ? AND YEAR(transaction_date) = ?) AS bmhp_consumed,
+      (SELECT COUNT(*) FROM quarantines WHERE MONTH(created_at) = ? AND YEAR(created_at) = ?) AS quarantines_count
+  `, [month, year, month, year, month, year, month, year, month, year, month, year, month, year, month, year, month, year, month, year, month, year]);
+
+  res.json({
+    success: true,
+    data: {
+      month,
+      year,
+      steril: {
+        ...sterilSummary,
+        machines: machineBreakdown,
+      },
+      dtt: {
+        ...dttSummary,
+        distributed_count: dttDistSummary.total_distributions,
+        distributed_quantity: dttDistSummary.total_tools_distributed,
+      },
+      gauze: {
+        ...gauzeSummary,
+        by_type: gauzeByType,
+        by_unit: gauzeByUnit,
+      },
+      overall,
+    },
+  });
+}));
+
 // ---------- BMHP Ringkasan / Summary ----------
 router.get('/bmhp-summary', auth, wrap(async (req, res) => {
   const [[summary]] = await pool.query(`

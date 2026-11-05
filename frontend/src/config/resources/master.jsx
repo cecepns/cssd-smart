@@ -1,4 +1,4 @@
-import { Building2, Cog, Layers, Package, ShieldCheck, Tags, UserCheck, Users } from 'lucide-react';
+import { Building2, Cog, Layers, Package, ShieldCheck, Sparkles, Tags, UserCheck, Users } from 'lucide-react';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { PACKAGE_TYPES } from '@/utils/constants';
 import { fileUrl } from '@/utils/format';
@@ -9,7 +9,9 @@ import { ROUTES } from '@/config/routes';
 export const MASTER_TABS = [
   { label: 'Unit', to: ROUTES.MASTER_UNITS, icon: Building2 },
   { label: 'Master Satuan', to: ROUTES.MASTER_ITEM_UNITS, icon: Layers },
-  { label: 'Jenis Alat', to: ROUTES.MASTER_ITEMS, icon: Tags },
+  { label: 'Alat Steril', to: ROUTES.MASTER_ITEMS_STERIL, icon: Tags },
+  { label: 'Alat DTT', to: ROUTES.MASTER_ITEMS_DTT, icon: Sparkles },
+  { label: 'Semua Alat', to: ROUTES.MASTER_ITEMS, icon: Package },
   { label: 'Mesin', to: ROUTES.MASTER_MACHINES, icon: Cog },
   { label: 'Bahan Kemasan', to: ROUTES.MASTER_PACKAGING_MATERIALS, icon: Package },
   { label: 'Petugas CSSD', to: ROUTES.MASTER_OFFICERS, icon: UserCheck },
@@ -177,6 +179,38 @@ export const itemsConfig = {
       { name: 'photo', label: 'Foto alat', type: 'image' },
       activeField,
     ],
+  },
+};
+
+export const itemsSterilConfig = {
+  ...itemsConfig,
+  key: 'master-alat-steril',
+  title: 'Master Data Alat Steril',
+  subtitle: 'Daftar alat dan instrumen medis untuk proses sterilisasi Autoclave, Steam, dan Plasma',
+  icon: Tags,
+  fixedParams: { process_type: 'Steril' },
+  form: {
+    ...itemsConfig.form,
+    subtitle: 'Input data instrumen / alat kategori Steril. Satuan: Pcs, Set, Buah, Pasang, Lembar, Rol, Pouch, dll.',
+    fields: itemsConfig.form.fields.map((f) =>
+      f.name === 'process_type' ? { ...f, default: 'Steril', disabled: true } : f
+    ),
+  },
+};
+
+export const itemsDttConfig = {
+  ...itemsConfig,
+  key: 'master-alat-dtt',
+  title: 'Master Data Alat DTT (RIUS)',
+  subtitle: 'Daftar alat medis reuse untuk disinfeksi tingkat tinggi (Kanul Suction, Sungkup, Selang Ventilator, Trocar, dll.)',
+  icon: Sparkles,
+  fixedParams: { process_type: 'DTT' },
+  form: {
+    ...itemsConfig.form,
+    subtitle: 'Input data alat medis kategori DTT. Satuan: Pcs, Buah, Tabung, Sungkup, Set, dll.',
+    fields: itemsConfig.form.fields.map((f) =>
+      f.name === 'process_type' ? { ...f, default: 'DTT', disabled: true } : f
+    ),
   },
 };
 
