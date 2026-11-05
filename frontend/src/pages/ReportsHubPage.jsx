@@ -1,51 +1,104 @@
-import { Link } from 'react-router-dom';
-import { ChevronRight, FileText, History } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { FileText, Filter, CheckCircle2 } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
+import ResourcePage from '@/components/resource/ResourcePage';
 import { REPORTS, REPORT_LIST } from '@/config/reports';
-import { ROUTES } from '@/config/routes';
 
-const GROUPS = ['Proses CSSD', 'Stok & Distribusi', 'BMHP'];
-
-/** Pusat laporan & unduhan. Setiap laporan bisa difilter tanggal, dicetak, dan diunduh CSV. */
 export default function ReportsHubPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialSlug = searchParams.get('jenis') || 'alat-kotor';
+  const [selectedSlug, setSelectedSlug] = useState(REPORTS[initialSlug] ? initialSlug : 'alat-kotor');
+
+  const currentConfig = useMemo(() => REPORTS[selectedSlug] || REPORTS['alat-kotor'], [selectedSlug]);
+
+  const handleSelectReport = (slug) => {
+    setSelectedSlug(slug);
+    setSearchParams({ jenis: slug }, { replace: true });
+  };
+
   return (
-    <div>
-      <PageHeader title="Laporan & Unduhan" subtitle="Rekap otomatis transaksi dan stok — filter tanggal, cetak, atau unduh CSV" icon={FileText} />
+    <div className="space-y-6">
+      {/* Header Pusat Laporan */}
+      <PageHeader
+        title="Pusat Laporan Terpadu CSSD SMART"
+        subtitle="Satu pusat laporan terintegrasi dari seluruh transaksi CSSD — otomatis terisi, filter periode, cetak, dan unduh data"
+        icon={FileText}
+      />
 
-      <div className="space-y-6">
-        {GROUPS.map((group) => (
-          <section key={group}>
-            <h2 className="mb-2.5 text-sm font-extrabold uppercase tracking-wider text-slate-400">{group}</h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {REPORT_LIST.filter((r) => r.group === group).map(({ slug }) => (
-                <Link key={slug} to={ROUTES.REPORT(slug)} className="card group flex items-center gap-3 p-4 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700">
-                    <FileText size={20} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-extrabold text-slate-900">{REPORTS[slug].title}</span>
-                    <span className="block text-xs text-slate-500">{REPORTS[slug].subtitle}</span>
-                  </span>
-                  <ChevronRight size={18} className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-600" />
-                </Link>
-              ))}
+      {/* Selector Jenis Laporan */}
+      <div className="no-print rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-50 via-white to-brand-50 p-4 shadow-xs">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-700 text-white shadow-xs">
+              <Filter size={18} />
+            </span>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-brand-900">Pilih Jenis Laporan</p>
+              <p className="text-xs text-slate-500">Pilih laporan transaksi untuk menampilkan tabel, cetak, atau unduh.</p>
             </div>
-          </section>
-        ))}
+          </div>
 
-        <section>
-          <h2 className="mb-2.5 text-sm font-extrabold uppercase tracking-wider text-slate-400">Ketertelusuran</h2>
-          <Link to={ROUTES.TRACE} className="card group flex items-center gap-3 p-4 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md sm:max-w-md">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
-              <History size={20} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-extrabold text-slate-900">Laporan Ketertelusuran</span>
-              <span className="block text-xs text-slate-500">Riwayat lengkap alat dari barcode: tanggal, petugas, batch, hasil verifikasi, unit tujuan</span>
-            </span>
-            <ChevronRight size={18} className="shrink-0 text-slate-300" />
-          </Link>
-        </section>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={selectedSlug}
+              onChange={(e) => handleSelectReport(e.target.value)}
+              className="input-base w-full sm:w-auto text-sm font-bold text-slate-800 py-2.5 px-3.5 border-brand-300 focus:border-brand-600 focus:ring-brand-200"
+            >
+              <optgroup label="Proses CSSD">
+                <option value="alat-kotor">1. Penerimaan Alat Kotor</option>
+                <option value="pencucian">2. Pencucian (Washer & DTT)</option>
+                <option value="pengeringan">3. Pengeringan & Pemeriksaan</option>
+                <option value="pengemasan">4. Pengemasan & Barcode</option>
+                <option value="sterilisasi">5. Sterilisasi (Autoclave & Plasma)</option>
+                <option value="verifikasi">6. Verifikasi Sterilisasi</option>
+                <option value="karantina">7. Karantina / Gagal</option>
+              </optgroup>
+              <optgroup label="Distribusi & Serah Terima">
+                <option value="distribusi-alat">8. Distribusi Alat Steril (TTD)</option>
+                <option value="distribusi-kasa">9. Distribusi Kasa Steril (TTD & Jenis Kasa)</option>
+                <option value="distribusi">10. Distribusi Gabungan (Alat & Kasa)</option>
+              </optgroup>
+              <optgroup label="DTT (RIUS) & Buku Kontrol">
+                <option value="dtt-rius">11. DTT (RIUS) & Buku Kontrol Reuse</option>
+                <option value="dtt-distribusi">12. Distribusi Alat Hasil DTT</option>
+              </optgroup>
+              <optgroup label="Stok & Inventaris BMHP">
+                <option value="stok-steril">13. Stok Alat Steril</option>
+                <option value="stok-bmhp">14. Posisi Stok BMHP</option>
+                <option value="mutasi-bmhp">15. Mutasi & Kartu Stok BMHP</option>
+              </optgroup>
+            </select>
+          </div>
+        </div>
+
+        {/* Quick Category Buttons */}
+        <div className="mt-3.5 flex flex-wrap gap-1.5 border-t border-brand-100 pt-3">
+          <span className="text-[11px] font-semibold text-slate-400 py-1 mr-1">Pintasan Cepat:</span>
+          {REPORT_LIST.slice(0, 8).map((r) => {
+            const isSelected = selectedSlug === r.slug;
+            return (
+              <button
+                key={r.slug}
+                type="button"
+                onClick={() => handleSelectReport(r.slug)}
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                  isSelected
+                    ? 'bg-brand-700 text-white shadow-xs'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-300 hover:bg-brand-50'
+                }`}
+              >
+                {isSelected && <CheckCircle2 size={12} />}
+                {r.label || r.slug}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Konten Laporan Aktif */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-2 sm:p-4 shadow-xs">
+        <ResourcePage key={currentConfig.key} config={currentConfig} />
       </div>
     </div>
   );

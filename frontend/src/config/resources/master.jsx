@@ -1,4 +1,4 @@
-import { Building2, Cog, Package, ShieldCheck, Tags, UserCheck, Users } from 'lucide-react';
+import { Building2, Cog, Layers, Package, ShieldCheck, Tags, UserCheck, Users } from 'lucide-react';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { PACKAGE_TYPES } from '@/utils/constants';
 import { fileUrl } from '@/utils/format';
@@ -8,6 +8,7 @@ import { ROUTES } from '@/config/routes';
 
 export const MASTER_TABS = [
   { label: 'Unit', to: ROUTES.MASTER_UNITS, icon: Building2 },
+  { label: 'Master Satuan', to: ROUTES.MASTER_ITEM_UNITS, icon: Layers },
   { label: 'Jenis Alat', to: ROUTES.MASTER_ITEMS, icon: Tags },
   { label: 'Mesin', to: ROUTES.MASTER_MACHINES, icon: Cog },
   { label: 'Bahan Kemasan', to: ROUTES.MASTER_PACKAGING_MATERIALS, icon: Package },
@@ -84,9 +85,46 @@ export const itemsConfig = {
       { name: 'code', label: 'Kode', required: true, maxLength: 30, placeholder: 'SET-LAP / ALT-GNT' },
       { name: 'name', label: 'Nama alat', required: true, maxLength: 150, placeholder: 'Set Laparotomi / Gunting Hecting' },
       { name: 'category', label: 'Kategori', type: 'select', required: true, options: PACKAGE_TYPES, placeholder: 'Pilih kategori...' },
+      {
+        name: 'unit_label',
+        label: 'Satuan Standar',
+        type: 'remote-select',
+        placeholder: 'Pilih satuan...',
+        optionsEndpoint: API_ENDPOINTS.ITEM_UNITS.LIST,
+        optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+        optionValue: (u) => u.name.toLowerCase(),
+        optionLabel: (u) => `${u.name} (${u.code})`,
+        default: 'set',
+        help: 'Satuan diambil otomatis dari Master Satuan (Pcs, Set, Tabung, Sungkup, Pasang, Lembar, dll.)',
+      },
       { name: 'shelf_life_months', label: 'Masa steril (bulan)', type: 'number', required: true, min: 1, max: 60, default: 6, help: 'Dipakai menghitung tanggal kedaluwarsa otomatis.' },
       { name: 'description', label: 'Keterangan', maxLength: 255, span: 2 },
       { name: 'photo', label: 'Foto alat', type: 'image' },
+      activeField,
+    ],
+  },
+};
+
+export const itemUnitsConfig = {
+  ...masterBase,
+  key: 'master-satuan',
+  title: 'Master Satuan',
+  subtitle: 'Daftar satuan alat medis (Set, Pcs, Tabung, Sungkup, Pasang, Lembar, dll.)',
+  icon: Layers,
+  endpoint: API_ENDPOINTS.ITEM_UNITS,
+  searchPlaceholder: 'Cari kode atau nama satuan...',
+  columns: [
+    { key: 'code', label: 'Kode', sortable: true, render: mono('code') },
+    { key: 'name', label: 'Nama Satuan', sortable: true, render: bold('name') },
+    { key: 'description', label: 'Keterangan' },
+    activeColumn,
+  ],
+  form: {
+    subtitle: 'Satuan yang ditambahkan di sini otomatis muncul pada dropdown input alat Steril dan DTT.',
+    fields: [
+      { name: 'code', label: 'Kode Satuan', required: true, maxLength: 20, placeholder: 'SET / PCS / TABUNG / SUNGKUP' },
+      { name: 'name', label: 'Nama Satuan', required: true, maxLength: 50, placeholder: 'Pcs / Tabung / Sungkup / Pasang / Lembar' },
+      { name: 'description', label: 'Keterangan Penggunaan', maxLength: 255, span: 2, placeholder: 'mis. Untuk alat kanul suction / masker anestesi...' },
       activeField,
     ],
   },
@@ -96,11 +134,11 @@ export const machinesConfig = {
   ...masterBase,
   key: 'master-mesin',
   title: 'Mesin',
-  subtitle: 'Autoclave, Plasma, Washer, DTT, dan tipe mesin lainnya',
+  subtitle: 'Autoclave 1, Autoclave 2, Steam Sterilizer, Plasma Sterilizer, DTT Manual, dll.',
   icon: Cog,
   endpoint: API_ENDPOINTS.MACHINES,
   searchPlaceholder: 'Cari kode, nama, atau tipe mesin...',
-  filters: [{ name: 'type', label: 'Tipe', options: ['Autoklaf', 'Plasma', 'Washer', 'DTT', 'EtO', 'Dry Heat', 'Ultrasonik'] }, ...masterBase.filters],
+  filters: [{ name: 'type', label: 'Tipe', options: ['Autoclave 1', 'Autoclave 2', 'Steam Sterilizer', 'Plasma Sterilizer', 'DTT Manual', 'Washer', 'Ultrasonik'] }, ...masterBase.filters],
   columns: [
     { key: 'code', label: 'Kode', sortable: true, render: mono('code') },
     { key: 'name', label: 'Nama Mesin', sortable: true, render: bold('name') },
@@ -108,9 +146,9 @@ export const machinesConfig = {
     activeColumn,
   ],
   form: {
-    subtitle: 'Kode mesin dipakai pada nomor batch, mis. AU1-301026-025.',
+    subtitle: 'Pilih tipe mesin sesuai standar CSSD: Autoclave 1, Autoclave 2, Steam Sterilizer, Plasma Sterilizer, atau DTT Manual.',
     fields: [
-      { name: 'code', label: 'Kode', required: true, maxLength: 10, placeholder: 'AU1' },
+      { name: 'code', label: 'Kode', required: true, maxLength: 10, placeholder: 'AU1 / AU2 / ST1 / PL1 / DT1' },
       { name: 'name', label: 'Nama mesin', required: true, maxLength: 100, placeholder: 'Autoclave 1' },
       {
         name: 'type',
@@ -119,7 +157,15 @@ export const machinesConfig = {
         required: true,
         span: 2,
         render: ({ values, setValue }) => {
-          const PRESETS = ['Autoklaf', 'Plasma', 'Washer', 'DTT', 'EtO', 'Dry Heat', 'Ultrasonik'];
+          const PRESETS = [
+            'Autoclave 1',
+            'Autoclave 2',
+            'Steam Sterilizer',
+            'Plasma Sterilizer',
+            'DTT Manual',
+            'Washer',
+            'Ultrasonik',
+          ];
           const current = values.type || '';
           return (
             <div className="space-y-2">
@@ -127,20 +173,23 @@ export const machinesConfig = {
                 type="text"
                 value={current}
                 onChange={(e) => setValue('type', e.target.value)}
-                placeholder="Pilih dari tombol di bawah atau ketik tipe mesin bebas..."
+                placeholder="Pilih dari tombol cepat di bawah atau ketik tipe mesin bebas..."
                 className="input-base text-sm"
                 required
                 maxLength={50}
               />
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <span className="text-[11px] font-semibold text-slate-400">Pilihan Cepat:</span>
+                <span className="text-[11px] font-semibold text-slate-400">Pilihan Standar:</span>
                 {PRESETS.map((p) => {
                   const isSelected = current.toLowerCase() === p.toLowerCase();
                   return (
                     <button
                       key={p}
                       type="button"
-                      onClick={() => setValue('type', p)}
+                      onClick={() => {
+                        setValue('type', p);
+                        if (!values.name) setValue('name', p);
+                      }}
                       className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
                         isSelected
                           ? 'bg-brand-700 text-white shadow-xs'
@@ -152,9 +201,6 @@ export const machinesConfig = {
                   );
                 })}
               </div>
-              <p className="text-[11px] text-slate-500">
-                💡 Anda dapat memilih dari tombol cepat di atas atau mengetik tipe mesin sendiri secara bebas.
-              </p>
             </div>
           );
         },
@@ -168,15 +214,16 @@ export const usersConfig = {
   ...masterBase,
   key: 'master-pengguna',
   title: 'Pengguna',
-  subtitle: 'Akun admin dan petugas CSSD',
+  subtitle: 'Akun admin, petugas CSSD, dan akun unit luar',
   icon: ShieldCheck,
   endpoint: API_ENDPOINTS.USERS,
-  searchPlaceholder: 'Cari nama atau username...',
-  filters: [{ name: 'role', label: 'Role', options: ['admin', 'petugas'] }, ...masterBase.filters],
+  searchPlaceholder: 'Cari nama, username, atau unit...',
+  filters: [{ name: 'role', label: 'Role', options: ['admin', 'petugas', 'unit'] }, ...masterBase.filters],
   columns: [
     { key: 'name', label: 'Nama', sortable: true, render: bold('name') },
     { key: 'username', label: 'Username', sortable: true, render: mono('username') },
     { key: 'role', label: 'Role', sortable: true, render: (r) => <StatusBadge value={r.role} /> },
+    { key: 'unit_name', label: 'Unit Luar', render: (r) => r.unit_name || <span className="text-slate-400">-</span> },
     activeColumn,
   ],
   form: {
@@ -187,7 +234,27 @@ export const usersConfig = {
         name: 'password', label: 'Password', type: 'password', requiredOnCreate: true, minLength: 6, maxLength: 72,
         skipEmptyOnEdit: true, help: 'Minimal 6 karakter. Kosongkan saat edit jika tidak diubah.',
       },
-      { name: 'role', label: 'Role', type: 'select', required: true, options: ['petugas', 'admin'], default: 'petugas' },
+      {
+        name: 'role',
+        label: 'Role Hak Akses',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'admin', label: 'Admin (Akses Penuh)' },
+          { value: 'petugas', label: 'Petugas CSSD (Operasional CSSD Penuh)' },
+          { value: 'unit', label: 'Unit Luar (Hanya data & transaksi unitnya sendiri)' },
+        ],
+        default: 'petugas',
+      },
+      {
+        type: 'remote-select',
+        name: 'unit_id',
+        label: 'Unit Rumah Sakit (Wajib untuk Role Unit Luar)',
+        placeholder: 'Pilih unit...',
+        optionsEndpoint: API_ENDPOINTS.UNITS.LIST,
+        optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+        help: 'Jika role adalah Unit Luar, akun ini hanya bisa melihat dan mengakses transaksi dari unit ini saja.',
+      },
       activeField,
     ],
   },

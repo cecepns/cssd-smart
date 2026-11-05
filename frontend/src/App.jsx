@@ -14,8 +14,17 @@ import {
   washingsConfig,
 } from '@/config/resources/process';
 import { distGauzeConfig, distToolsConfig } from '@/config/resources/distribution';
+import { dttControlConfig, dttDistributionsConfig, dttReceiptsConfig } from '@/config/resources/dtt';
 import { bmhpInConfig, bmhpItemsConfig, bmhpMutationConfig, bmhpOutConfig } from '@/config/resources/stock';
-import { itemsConfig, machinesConfig, officersConfig, packagingMaterialsConfig, unitsConfig, usersConfig } from '@/config/resources/master';
+import {
+  itemUnitsConfig,
+  itemsConfig,
+  machinesConfig,
+  officersConfig,
+  packagingMaterialsConfig,
+  unitsConfig,
+  usersConfig,
+} from '@/config/resources/master';
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
@@ -67,6 +76,9 @@ export default function App() {
             <Route path={ROUTES.VERIFICATIONS} element={resource(verificationsConfig)} />
             <Route path={ROUTES.DIST_TOOLS} element={resource(distToolsConfig)} />
             <Route path={ROUTES.DIST_GAUZE} element={resource(distGauzeConfig)} />
+            <Route path={ROUTES.DTT_RECEIPTS} element={resource(dttReceiptsConfig)} />
+            <Route path={ROUTES.DTT_DISTRIBUTIONS} element={resource(dttDistributionsConfig)} />
+            <Route path={ROUTES.DTT_CONTROL} element={resource(dttControlConfig)} />
 
             <Route path={ROUTES.BMHP} element={<BmhpHubPage />} />
             <Route path={ROUTES.BMHP_IN} element={resource(bmhpInConfig)} />
@@ -83,6 +95,7 @@ export default function App() {
             <Route element={<Protected adminOnly />}>
               <Route path={ROUTES.MASTER_UNITS} element={resource(unitsConfig)} />
               <Route path={ROUTES.MASTER_ITEMS} element={resource(itemsConfig)} />
+              <Route path={ROUTES.MASTER_ITEM_UNITS} element={resource(itemUnitsConfig)} />
               <Route path={ROUTES.MASTER_MACHINES} element={resource(machinesConfig)} />
               <Route path={ROUTES.MASTER_PACKAGING_MATERIALS} element={resource(packagingMaterialsConfig)} />
               <Route path={ROUTES.MASTER_OFFICERS} element={resource(officersConfig)} />

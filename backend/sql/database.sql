@@ -25,26 +25,31 @@ DROP TABLE IF EXISTS `washings`;
 DROP TABLE IF EXISTS `dirty_receipts`;
 DROP TABLE IF EXISTS `machines`;
 DROP TABLE IF EXISTS `items`;
+DROP TABLE IF EXISTS `dtt_distributions`;
+DROP TABLE IF EXISTS `dtt_receipts`;
+DROP TABLE IF EXISTS `item_units`;
+DROP TABLE IF EXISTS `distributions`;
+DROP TABLE IF EXISTS `quarantines`;
+DROP TABLE IF EXISTS `sterile_stock`;
+DROP TABLE IF EXISTS `verifications`;
+DROP TABLE IF EXISTS `sterilization_items`;
+DROP TABLE IF EXISTS `sterilizations`;
+DROP TABLE IF EXISTS `packagings`;
+DROP TABLE IF EXISTS `dryings`;
+DROP TABLE IF EXISTS `washings`;
+DROP TABLE IF EXISTS `dirty_receipts`;
+DROP TABLE IF EXISTS `instrument_discrepancy_logs`;
+DROP TABLE IF EXISTS `instrument_set_items`;
+DROP TABLE IF EXISTS `instrument_sets`;
+DROP TABLE IF EXISTS `bmhp_transactions`;
+DROP TABLE IF EXISTS `bmhp_items`;
+DROP TABLE IF EXISTS `packaging_materials`;
+DROP TABLE IF EXISTS `officers`;
+DROP TABLE IF EXISTS `machines`;
+DROP TABLE IF EXISTS `items`;
+DROP TABLE IF EXISTS `users`;
 DROP TABLE IF EXISTS `units`;
 DROP TABLE IF EXISTS `counters`;
-DROP TABLE IF EXISTS `users`;
-
--- ------------------------------------------------------------
--- Users (akun admin dibuat otomatis oleh server saat pertama jalan
--- menggunakan ADMIN_USERNAME / ADMIN_PASSWORD dari file .env)
--- ------------------------------------------------------------
-CREATE TABLE `users` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `name` VARCHAR(100) NOT NULL,
-  `username` VARCHAR(50) NOT NULL,
-  `password` VARCHAR(255) NOT NULL,
-  `role` ENUM('admin','petugas') NOT NULL DEFAULT 'petugas',
-  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
-  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_users_username` (`username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- Counters (penomoran otomatis barcode / siklus)
@@ -57,7 +62,7 @@ CREATE TABLE `counters` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
--- Master data
+-- Master data: Unit Rumah Sakit
 -- ------------------------------------------------------------
 CREATE TABLE `units` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -70,6 +75,41 @@ CREATE TABLE `units` (
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_units_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- Master data: Satuan (Item Units)
+-- ------------------------------------------------------------
+CREATE TABLE `item_units` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `code` VARCHAR(20) NOT NULL,
+  `name` VARCHAR(50) NOT NULL,
+  `description` VARCHAR(255) DEFAULT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_item_units_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- Users (akun admin dibuat otomatis oleh server saat pertama jalan)
+-- Role: admin (Akses penuh), petugas (Petugas CSSD), unit (Petugas Unit Luar)
+-- ------------------------------------------------------------
+CREATE TABLE `users` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(100) NOT NULL,
+  `username` VARCHAR(50) NOT NULL,
+  `password` VARCHAR(255) NOT NULL,
+  `role` ENUM('admin','petugas','unit') NOT NULL DEFAULT 'petugas',
+  `unit_id` INT UNSIGNED DEFAULT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_users_username` (`username`),
+  KEY `idx_users_unit_id` (`unit_id`),
+  CONSTRAINT `fk_users_unit` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `items` (
@@ -364,8 +404,11 @@ CREATE TABLE `distributions` (
   `stock_id` INT UNSIGNED NOT NULL,
   `unit_id` INT UNSIGNED NOT NULL,
   `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
+  `gauze_type` VARCHAR(100) DEFAULT NULL,
   `officer` VARCHAR(100) NOT NULL,
+  `officer_signature` TEXT DEFAULT NULL,
   `receiver_name` VARCHAR(100) DEFAULT NULL,
+  `receiver_signature` TEXT DEFAULT NULL,
   `dist_date` DATE NOT NULL,
   `notes` VARCHAR(500) DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -374,6 +417,66 @@ CREATE TABLE `distributions` (
   KEY `idx_distributions_type` (`type`),
   CONSTRAINT `fk_distributions_stock` FOREIGN KEY (`stock_id`) REFERENCES `sterile_stock` (`id`),
   CONSTRAINT `fk_distributions_unit` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- DTT (RIUS) - Buku Kontrol Penggunaan Ulang Alat Medis (2 Barcode Transaksi)
+-- ------------------------------------------------------------
+-- Transaksi 1: Penerimaan Alat Kotor DTT/RIUS (Unit -> CSSD)
+CREATE TABLE `dtt_receipts` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `barcode` VARCHAR(50) NOT NULL,
+  `receipt_datetime` DATETIME NOT NULL,
+  `unit_id` INT UNSIGNED NOT NULL,
+  `item_code` VARCHAR(50) DEFAULT NULL,
+  `item_name` VARCHAR(150) NOT NULL,
+  `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
+  `unit_label` VARCHAR(30) NOT NULL DEFAULT 'pcs',
+  `reuse_count` INT UNSIGNED NOT NULL DEFAULT 1,
+  `max_reuse_limit` INT UNSIGNED NOT NULL DEFAULT 10,
+  `tool_condition` ENUM('Baik', 'Perlu Perbaikan', 'Rusak / Afkir') NOT NULL DEFAULT 'Baik',
+  `sender_name` VARCHAR(100) NOT NULL,
+  `sender_signature` TEXT DEFAULT NULL,
+  `receiver_name` VARCHAR(100) NOT NULL,
+  `receiver_signature` TEXT DEFAULT NULL,
+  `process_stage` ENUM('Diterima', 'Pencucian DTT', 'Penyimpanan DTT', 'Siap Distribusi', 'Selesai') NOT NULL DEFAULT 'Diterima',
+  `dtt_method` VARCHAR(100) DEFAULT 'DTT Manual (Perendaman Enzimatik & Disinfektan)',
+  `dtt_liquid` VARCHAR(100) DEFAULT 'Glutaraldehyde 2%',
+  `dtt_duration_min` INT UNSIGNED DEFAULT 20,
+  `verification_result` ENUM('Belum Diverifikasi', 'Lolos', 'Gagal / Cuci Ulang') NOT NULL DEFAULT 'Belum Diverifikasi',
+  `notes` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_dtt_receipts_barcode` (`barcode`),
+  KEY `idx_dtt_receipts_unit` (`unit_id`),
+  KEY `idx_dtt_receipts_stage` (`process_stage`),
+  CONSTRAINT `fk_dtt_receipts_unit` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Transaksi 2: Distribusi Alat Hasil DTT/RIUS (CSSD -> Unit)
+CREATE TABLE `dtt_distributions` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `barcode` VARCHAR(50) NOT NULL,
+  `dtt_receipt_id` INT UNSIGNED NOT NULL,
+  `dist_datetime` DATETIME NOT NULL,
+  `unit_id` INT UNSIGNED NOT NULL,
+  `item_name` VARCHAR(150) NOT NULL,
+  `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
+  `unit_label` VARCHAR(30) NOT NULL DEFAULT 'pcs',
+  `reuse_count` INT UNSIGNED NOT NULL DEFAULT 1,
+  `tool_condition` ENUM('Baik', 'Perlu Perbaikan', 'Rusak / Afkir') NOT NULL DEFAULT 'Baik',
+  `officer` VARCHAR(100) NOT NULL,
+  `officer_signature` TEXT DEFAULT NULL,
+  `receiver_name` VARCHAR(100) NOT NULL,
+  `receiver_signature` TEXT DEFAULT NULL,
+  `notes` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_dtt_dist_barcode` (`barcode`),
+  KEY `idx_dtt_dist_unit` (`unit_id`),
+  CONSTRAINT `fk_dtt_dist_receipt` FOREIGN KEY (`dtt_receipt_id`) REFERENCES `dtt_receipts` (`id`),
+  CONSTRAINT `fk_dtt_dist_unit` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
@@ -444,12 +547,23 @@ INSERT INTO `items` (`id`,`code`,`name`,`category`,`shelf_life_months`,`descript
 (6,'ALT-GNT','Gunting Hecting Satuan','Alat Satuan',6,'Gunting angkat jahitan / hecting lepasan'),
 (7,'ALT-PNS','Pinset Sirurgis Satuan','Alat Satuan',6,'Pinset sirurgis lepasan IGD/Poli');
 
+INSERT INTO `item_units` (`id`,`code`,`name`,`description`) VALUES
+(1,'SET','Set','Set instrumen bedah/tindakan lengkap'),
+(2,'PCS','Pcs','Alat satuan / lepasan per buah'),
+(3,'TABUNG','Tabung','Instrumen berbentuk tabung / kanul suction / trocar'),
+(4,'SUNGKUP','Sungkup','Sungkup anestesi / resusitasi / nebulizer'),
+(5,'PASANG','Pasang','Alat / sarung tangan berpasangan'),
+(6,'LEMBAR','Lembar','Duk, kain linen, wrap'),
+(7,'ROL','Rol','Kasa rol dan pita indikator'),
+(8,'PAKET','Paket','Paket gabungan alat atau linen'),
+(9,'POUCH','Pouch','Kemasan steril pouch');
+
 INSERT INTO `machines` (`id`,`code`,`name`,`type`) VALUES
-(1,'AU1','Autoclave 1','Autoklaf'),
-(2,'AU2','Autoclave 2','Autoklaf'),
-(3,'PL1','Plasma','Plasma'),
-(4,'WS1','Washer 1','Washer'),
-(5,'DT1','DTT 1','DTT');
+(1,'AU1','Autoclave 1','Autoclave 1'),
+(2,'AU2','Autoclave 2','Autoclave 2'),
+(3,'ST1','Steam Sterilizer','Steam Sterilizer'),
+(4,'PL1','Plasma Sterilizer','Plasma Sterilizer'),
+(5,'DT1','DTT Manual','DTT Manual');
 
 INSERT INTO `packaging_materials` (`id`,`code`,`name`,`description`,`is_active`) VALUES
 (1,'SMS','SMS Wrap','Kain pembungkus SMS non-woven standar CSSD',1),
@@ -571,6 +685,20 @@ INSERT INTO `bmhp_transactions`
 (1,'KELUAR',10,NULL,NULL,'Inge','2026-10-30','Pemakaian pengemasan',40),
 (3,'KELUAR',2,NULL,NULL,'Inge','2026-10-30','Pemakaian verifikasi',8);
 
+INSERT INTO `distributions`
+(`id`,`type`,`barcode`,`stock_id`,`unit_id`,`quantity`,`gauze_type`,`officer`,`officer_signature`,`receiver_name`,`receiver_signature`,`dist_date`,`notes`) VALUES
+(1,'ALAT','PG-301026-001',1,1,10,NULL,'Inge Kusryaningsih',NULL,'dr. Evi',NULL,'2026-10-31','Distribusi duk operasi'),
+(2,'KASA','KS-301026-001',2,2,20,'Kasa Lipat OK','Inge Kusryaningsih',NULL,'Ns. Budi',NULL,'2026-10-31','Distribusi kasa steril IGD');
+
+INSERT INTO `dtt_receipts`
+(`id`,`barcode`,`receipt_datetime`,`unit_id`,`item_code`,`item_name`,`quantity`,`unit_label`,`reuse_count`,`max_reuse_limit`,`tool_condition`,`sender_name`,`receiver_name`,`process_stage`,`dtt_method`,`dtt_liquid`,`dtt_duration_min`,`verification_result`,`notes`) VALUES
+(1,'RD-301026-001','2026-10-30 09:15:00',1,'DTT-SC','Sungkup Laring / LMA',2,'sungkup',3,10,'Baik','dr. Evi','Rahma','Siap Distribusi','DTT Manual (Perendaman Enzimatik & Disinfektan)','Glutaraldehyde 2%',20,'Lolos','DTT selesai, siap diserahkan ke unit'),
+(2,'RD-301026-002','2026-10-31 10:30:00',2,'DTT-TB','Tabung Suction Kaca',1,'tabung',2,8,'Baik','Ns. Budi','Rahma','Diterima','DTT Manual (Perendaman Enzimatik & Disinfektan)','Glutaraldehyde 2%',20,'Belum Diverifikasi','Penerimaan alat kotor DTT');
+
+INSERT INTO `dtt_distributions`
+(`id`,`barcode`,`dtt_receipt_id`,`dist_datetime`,`unit_id`,`item_name`,`quantity`,`unit_label`,`reuse_count`,`tool_condition`,`officer`,`receiver_name`,`notes`) VALUES
+(1,'DDTT-301026-001',1,'2026-10-30 14:00:00',1,'Sungkup Laring / LMA',2,'sungkup',3,'Baik','Inge Kusryaningsih','dr. Evi','Penyerahan alat hasil DTT kembali ke unit OK');
+
 -- Penomoran otomatis dilanjutkan dari data contoh
 INSERT INTO `counters` (`name`,`counter_date`,`value`) VALUES
 ('AK','2026-10-30',4),
@@ -578,5 +706,7 @@ INSERT INTO `counters` (`name`,`counter_date`,`value`) VALUES
 ('PG','2026-10-30',1),
 ('KS','2026-10-30',1),
 ('SM','2026-10-30',2),
+('RD','2026-10-30',2),
+('DDTT','2026-10-30',1),
 ('CYCLE-AU1','1970-01-01',25),
 ('CYCLE-AU2','1970-01-01',21);

@@ -15,7 +15,8 @@ const isActive = (item, pathname) => {
  */
 export default function Sidebar({ collapsed, mobileOpen, onClose, onLogout }) {
   const { pathname } = useLocation();
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const isUnit = user?.role === 'unit';
   const hideOnCollapse = collapsed ? 'lg:hidden' : '';
 
   return (
@@ -36,7 +37,11 @@ export default function Sidebar({ collapsed, mobileOpen, onClose, onLogout }) {
       >
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 scrollbar-thin">
           {NAV_SECTIONS.map((section, index) => {
-            const items = section.items.filter((item) => !item.adminOnly || isAdmin);
+            const items = section.items.filter((item) => {
+              if (item.adminOnly && !isAdmin) return false;
+              if (isUnit && !item.allowUnit) return false;
+              return true;
+            });
             if (!items.length) return null;
             return (
               <div key={section.title || index} className={index > 0 ? 'mt-5' : ''}>

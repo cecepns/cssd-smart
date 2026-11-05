@@ -1,13 +1,22 @@
-import { CalendarDays, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
+import { CalendarDays, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, X } from 'lucide-react';
 import NotificationBell from '@/components/layout/NotificationBell';
 import UserMenu from '@/components/layout/UserMenu';
 import useClock from '@/hooks/useClock';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Topbar({ collapsed, mobileOpen, onToggleMobile, onToggleCollapse, onLogout }) {
   const clock = useClock();
+  const { user } = useAuth();
+
+  const roleLabel =
+    user?.role === 'admin'
+      ? 'Admin CSSD'
+      : user?.role === 'unit'
+      ? `Unit: ${user?.unit_name || 'Luar'}`
+      : 'Petugas CSSD';
 
   return (
-    <header className="no-print fixed inset-x-0 top-0 z-40 flex h-16 items-center gap-3 bg-brand-800 px-3 text-white shadow-md sm:px-5">
+    <header className="no-print fixed inset-x-0 top-0 z-40 flex h-16 items-center gap-3 bg-[#0A192F] px-3 text-white shadow-md border-b border-[#D4AF37]/30 sm:px-5">
       {/* Mobile / tablet: buka-tutup sidebar */}
       <button
         type="button"
@@ -28,26 +37,39 @@ export default function Topbar({ collapsed, mobileOpen, onToggleMobile, onToggle
         {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
       </button>
 
+      {/* Brand Header: CSSD SMART & RSUD SERPONG UTARA */}
       <div className="flex min-w-0 items-center gap-3">
-        <img src="/icon.svg" alt="" className="hidden h-9 w-9 rounded-lg sm:block" />
         <div className="min-w-0 leading-tight">
-          <p className="truncate text-lg font-extrabold tracking-tight sm:text-xl">CSSD SMART</p>
-          <p className="hidden truncate text-[11px] font-medium uppercase tracking-wider text-brand-200 sm:block">RSU Serpong Utara</p>
+          <div className="flex items-center gap-2">
+            <span className="truncate text-lg font-black tracking-tight sm:text-xl text-white">CSSD SMART</span>
+            <span className="hidden rounded-full bg-[#E5C07B] px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#0A192F] shadow-xs sm:inline-block">
+              RSUD SERPONG UTARA
+            </span>
+          </div>
+          <p className="hidden truncate text-[11px] font-medium tracking-wide text-slate-300 sm:block">
+            Sterile Management System
+          </p>
         </div>
       </div>
 
-      <div className="mx-2 hidden h-9 w-px bg-white/20 xl:block" />
+      <div className="mx-2 hidden h-8 w-px bg-white/15 xl:block" />
       <div className="hidden min-w-0 leading-tight xl:block">
-        <p className="truncate text-sm font-bold">Sistem Pencatatan Otomatis</p>
-        <p className="truncate text-xs text-brand-100">Dari alat kotor masuk sampai menjadi alat steril</p>
-        <p className="truncate text-xs font-bold text-amber-300">Barcode hanya pada 3 transaksi utama</p>
+        <p className="truncate text-xs font-semibold text-slate-300">Akurat | Terlacak | Terdokumentasi | Terintegrasi</p>
+        <p className="truncate text-[11px] text-[#E5C07B] font-bold">RSUD Serpong Utara</p>
       </div>
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
-        <div className="hidden items-center gap-2 rounded-xl bg-white px-3 py-1.5 text-slate-700 shadow-sm md:flex">
-          <CalendarDays size={18} className="text-brand-700" />
-          <span className="text-xs font-semibold">{clock}</span>
+        {/* Badge Tulisan Admin CSSD di bagian kanan atas */}
+        <div className="hidden items-center gap-1.5 rounded-full border border-[#D4AF37]/50 bg-[#D4AF37]/15 px-3 py-1 text-xs font-extrabold text-[#F3E5AB] backdrop-blur sm:flex shadow-xs">
+          <ShieldCheck size={14} className="text-[#E5C07B]" />
+          <span>{roleLabel}</span>
         </div>
+
+        <div className="hidden items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-white shadow-xs md:flex">
+          <CalendarDays size={16} className="text-[#E5C07B]" />
+          <span className="text-xs font-semibold text-slate-200">{clock}</span>
+        </div>
+
         <NotificationBell />
         <UserMenu onLogout={onLogout} />
       </div>

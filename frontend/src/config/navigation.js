@@ -1,6 +1,7 @@
 import {
   AlertOctagon,
   Archive,
+  BookOpen,
   Boxes,
   Building2,
   ClipboardList,
@@ -11,24 +12,38 @@ import {
   Home,
   Layers,
   Package,
+  RefreshCw,
   ScanLine,
   Settings,
   ShieldCheck,
+  Sparkles,
   Truck,
   Wind,
 } from 'lucide-react';
 import { ROUTES } from '@/config/routes';
 
-/** Struktur sidebar (mengikuti alur: transaksi barcode, proses tanpa barcode, laporan). */
+/**
+ * Struktur sidebar CSSD SMART.
+ * allowUnit: true menandakan menu dapat diakses oleh akun Unit Luar.
+ * Menu tanpa allowUnit: true hanya dapat diakses oleh Petugas CSSD & Admin.
+ */
 export const NAV_SECTIONS = [
-  { title: null, items: [{ label: 'Beranda', to: ROUTES.HOME, icon: Home, end: true }] },
+  { title: null, items: [{ label: 'Beranda', to: ROUTES.HOME, icon: Home, end: true, allowUnit: true }] },
   {
-    title: 'Transaksi Utama (Pakai Barcode)',
+    title: 'Transaksi Barcode Steril',
     items: [
-      { label: 'Alat Kotor Masuk', to: ROUTES.RECEIPTS, icon: ScanLine },
+      { label: 'Alat Kotor Masuk', to: ROUTES.RECEIPTS, icon: ScanLine, allowUnit: true },
       { label: 'Monitoring Set Instrumen', to: ROUTES.INSTRUMENT_SETS, icon: Layers },
-      { label: 'Distribusi Alat Steril', to: ROUTES.DIST_TOOLS, icon: Truck },
-      { label: 'Distribusi Kasa Steril', to: ROUTES.DIST_GAUZE, icon: Boxes },
+      { label: 'Distribusi Alat Steril', to: ROUTES.DIST_TOOLS, icon: Truck, allowUnit: true },
+      { label: 'Distribusi Kasa Steril', to: ROUTES.DIST_GAUZE, icon: Boxes, allowUnit: true },
+    ],
+  },
+  {
+    title: 'Transaksi Barcode DTT (RIUS)',
+    items: [
+      { label: 'Penerimaan Alat DTT', to: ROUTES.DTT_RECEIPTS, icon: Sparkles, allowUnit: true },
+      { label: 'Distribusi Hasil DTT', to: ROUTES.DTT_DISTRIBUTIONS, icon: Truck, allowUnit: true },
+      { label: 'Buku Kontrol Reuse DTT', to: ROUTES.DTT_CONTROL, icon: BookOpen },
     ],
   },
   {
@@ -45,42 +60,39 @@ export const NAV_SECTIONS = [
   {
     title: 'Laporan',
     items: [
+      { label: 'Pusat Laporan Terpadu', to: ROUTES.REPORTS, icon: FileText },
       { label: 'Laporan Alat Kotor', to: ROUTES.REPORT('alat-kotor'), icon: FileText },
-      { label: 'Laporan Pencucian', to: ROUTES.REPORT('pencucian'), icon: FileText },
-      { label: 'Laporan Pengeringan', to: ROUTES.REPORT('pengeringan'), icon: FileText },
-      { label: 'Laporan Pengemasan', to: ROUTES.REPORT('pengemasan'), icon: FileText },
-      { label: 'Laporan Sterilisasi', to: ROUTES.REPORT('sterilisasi'), icon: FileText },
-      { label: 'Laporan Verifikasi', to: ROUTES.REPORT('verifikasi'), icon: FileText },
-      { label: 'Laporan Stok Alat Steril', to: ROUTES.REPORT('stok-steril'), icon: Layers },
-      { label: 'Laporan Stok BMHP', to: ROUTES.REPORT('stok-bmhp'), icon: Archive },
-      { label: 'Laporan Karantina / Gagal', to: ROUTES.REPORT('karantina'), icon: AlertOctagon },
-      { label: 'Laporan Ketertelusuran', to: ROUTES.TRACE, icon: History },
+      { label: 'Laporan Distribusi Kasa', to: ROUTES.REPORT('distribusi-kasa'), icon: Boxes },
+      { label: 'Laporan DTT (RIUS)', to: ROUTES.REPORT('dtt-rius'), icon: Sparkles },
+      { label: 'Laporan Ketertelusuran', to: ROUTES.TRACE, icon: History, allowUnit: true },
     ],
   },
   {
     title: 'Sistem',
     items: [
       { label: 'Master Data', to: ROUTES.MASTER_UNITS, icon: Building2, match: '/master', adminOnly: true },
-      { label: 'Pengaturan', to: ROUTES.SETTINGS, icon: Settings },
+      { label: 'Pengaturan', to: ROUTES.SETTINGS, icon: Settings, allowUnit: true },
     ],
   },
 ];
 
-/** Kartu "Menu Utama" pada beranda. `tone` merujuk ke TONES di utils/constants. */
+/** Kartu "Menu Utama" pada beranda. */
 export const MENU_CARDS = [
-  { title: 'Alat Kotor Masuk', desc: 'Penerimaan dari unit memakai barcode / kamera HP', to: ROUTES.RECEIPTS, icon: ScanLine, tone: 'red' },
-  { title: 'Monitoring Set Instrumen', desc: 'Monitoring stok, kelengkapan, dan riwayat alat hilang/rusak per set', to: ROUTES.INSTRUMENT_SETS, icon: Layers, tone: 'green' },
-  { title: 'Pencucian', desc: 'Pencucian dengan Washer / DTT, cairan dan waktu', to: ROUTES.WASHINGS, icon: Droplets, tone: 'blue' },
-  { title: 'Pengeringan & Pemeriksaan', desc: 'Cek kering, bebas karat, dan fungsi alat', to: ROUTES.DRYINGS, icon: Wind, tone: 'amber' },
-  { title: 'Pengemasan', desc: 'Penyusunan, kemasan, dan label barcode paket', to: ROUTES.PACKAGINGS, icon: Package, tone: 'amber' },
-  { title: 'Sterilisasi', desc: 'Siklus, suhu, waktu Autoclave 1, 2, dan Plasma', to: ROUTES.STERILIZATIONS, icon: Flame, tone: 'red' },
-  { title: 'Verifikasi Sterilisasi', desc: 'Indikator kimia, biologi, Bowie-Dick', to: ROUTES.VERIFICATIONS, icon: ShieldCheck, tone: 'purple' },
-  { title: 'Distribusi Alat Steril', desc: 'Alat steril siap diambil unit memakai barcode', to: ROUTES.DIST_TOOLS, icon: Truck, tone: 'green' },
-  { title: 'Distribusi Kasa Steril', desc: 'Distribusi kasa steril ke unit memakai barcode', to: ROUTES.DIST_GAUZE, icon: Boxes, tone: 'green' },
-  { title: 'Stok BMHP Barcode', desc: 'Barang masuk, keluar, dan kedaluwarsa', to: ROUTES.BMHP, icon: Archive, tone: 'amber' },
-  { title: 'Laporan', desc: 'Rekap otomatis transaksi dan stok', to: ROUTES.REPORTS, icon: ClipboardList, tone: 'blue' },
-  { title: 'Ketertelusuran', desc: 'Lacak riwayat alat dari barcode atau batch', to: ROUTES.TRACE, icon: History, tone: 'purple' },
-  { title: 'Data Unit', desc: 'Daftar unit, penanggung jawab dan riwayat', to: ROUTES.MASTER_UNITS, icon: Building2, tone: 'red', adminOnly: true },
+  { title: 'Penerimaan Alat Kotor Barcode', desc: 'Penerimaan dari unit dengan scan barcode dan TTD digital', to: ROUTES.RECEIPTS, icon: ScanLine, tone: 'red', allowUnit: true },
+  { title: 'Dekontaminasi Alat Kotor', desc: 'Pencucian, pembilasan, pengeringan dan pemeriksaan alat', to: ROUTES.WASHINGS, icon: Droplets, tone: 'pink' },
+  { title: 'Pengemasan Alat', desc: 'Pemeriksaan, penyusunan dan pengemasan alat steril', to: ROUTES.PACKAGINGS, icon: Package, tone: 'amber' },
+  { title: 'Proses Sterilisasi', desc: 'Pencatatan siklus, suhu, waktu (Autoclave, Steam, Plasma)', to: ROUTES.STERILIZATIONS, icon: Flame, tone: 'blue' },
+  { title: 'Pengambilan Alat Steril Barcode', desc: 'Alat steril siap diambil unit dengan tanda tangan HP', to: ROUTES.DIST_TOOLS, icon: Truck, tone: 'green', allowUnit: true },
+  { title: 'Distribusi Kasa Steril Barcode', desc: 'Distribusi kasa lipat dan rol steril ke unit memakai barcode', to: ROUTES.DIST_GAUZE, icon: Boxes, tone: 'green', allowUnit: true },
+  { title: 'Penerimaan Alat Kotor DTT (RIUS)', desc: 'Barcode penerimaan alat kotor DTT unit ke CSSD dengan TTD HP', to: ROUTES.DTT_RECEIPTS, icon: Sparkles, tone: 'purple', allowUnit: true },
+  { title: 'Distribusi Alat Hasil DTT (RIUS)', desc: 'Barcode serah terima alat hasil DTT CSSD ke unit dengan TTD HP', to: ROUTES.DTT_DISTRIBUTIONS, icon: RefreshCw, tone: 'blue', allowUnit: true },
+  { title: 'Buku Kontrol Reuse DTT', desc: 'Buku kontrol riwayat pemakaian ulang dan batas siklus alat medis', to: ROUTES.DTT_CONTROL, icon: BookOpen, tone: 'purple' },
+  { title: 'Indikator Sterilisasi', desc: 'Bowie-Dick, indikator kimia, biologi, dan verifikasi batch', to: ROUTES.VERIFICATIONS, icon: ShieldCheck, tone: 'purple' },
+  { title: 'Stok BMHP Barcode', desc: 'Barang masuk, keluar, kedaluwarsa dan mutasi stok BMHP', to: ROUTES.BMHP, icon: Archive, tone: 'amber' },
+  { title: 'Pusat Laporan', desc: 'Rekap otomatis seluruh transaksi dan unduh PDF/Excel', to: ROUTES.REPORTS, icon: ClipboardList, tone: 'blue' },
+  { title: 'Monitoring Set Instrumen', desc: 'Monitoring kelengkapan instrumen dan riwayat alat rusak/hilang', to: ROUTES.INSTRUMENT_SETS, icon: Layers, tone: 'green' },
+  { title: 'Ketertelusuran', desc: 'Lacak riwayat perjalanan alat lengkap dari barcode / batch', to: ROUTES.TRACE, icon: History, tone: 'purple', allowUnit: true },
+  { title: 'Master Data & Satuan', desc: 'Pengelolaan unit, master satuan, jenis alat medis, dan mesin', to: ROUTES.MASTER_UNITS, icon: Building2, tone: 'red', adminOnly: true },
 ];
 
 /** Navigasi bawah pada layar mobile. */

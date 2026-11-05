@@ -6,7 +6,7 @@ export const DEFAULT_LIMIT = 10;
 export const SEARCH_DEBOUNCE_MS = 400;
 
 export const PACKAGE_TYPES = ['Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi', 'Kasa Steril'];
-export const UNIT_LABELS = ['set', 'pcs', 'paket', 'lembar', 'pouch'];
+export const UNIT_LABELS = ['set', 'pcs', 'tabung', 'sungkup', 'pasang', 'lembar', 'rol', 'paket', 'pouch'];
 export const INDICATOR_OPTIONS = ['Sesuai', 'Tidak Sesuai'];
 export const WASH_METHODS = ['Washer', 'Manual', 'Ultrasonik'];
 
@@ -27,6 +27,12 @@ export const TONES = {
     solid: 'bg-rose-600',
     chip: 'bg-rose-100 text-rose-700',
   },
+  pink: {
+    soft: 'bg-pink-50 border-pink-200 hover:border-pink-300',
+    text: 'text-pink-700',
+    solid: 'bg-pink-600',
+    chip: 'bg-pink-100 text-pink-700',
+  },
   amber: {
     soft: 'bg-amber-50 border-amber-200 hover:border-amber-300',
     text: 'text-amber-700',
@@ -38,6 +44,12 @@ export const TONES = {
     text: 'text-sky-700',
     solid: 'bg-sky-600',
     chip: 'bg-sky-100 text-sky-700',
+  },
+  cyan: {
+    soft: 'bg-cyan-50 border-cyan-200 hover:border-cyan-300',
+    text: 'text-cyan-700',
+    solid: 'bg-cyan-600',
+    chip: 'bg-cyan-100 text-cyan-700',
   },
   green: {
     soft: 'bg-emerald-50 border-emerald-200 hover:border-emerald-300',
@@ -53,15 +65,14 @@ export const TONES = {
   },
 };
 
-/** Alur proses CSSD (9 tahap). Barcode hanya pada 3 transaksi utama. */
+/** Alur proses CSSD 8 tahap sesuai referensi live workflow. */
 export const FLOW_STAGES = [
-  { no: 1, label: 'Alat Kotor Masuk', sub: 'pakai barcode', barcode: true, tone: 'blue', to: '/alat-kotor' },
-  { no: 2, label: 'Pencucian', sub: 'DTT / Washer', tone: 'green', to: '/pencucian' },
-  { no: 3, label: 'Pengeringan & Pemeriksaan', sub: 'Cek kering, karat, fungsi', tone: 'amber', to: '/pengeringan' },
-  { no: 4, label: 'Pengemasan', sub: 'Duk & Jas, Kasa, Instrumen', tone: 'amber', to: '/pengemasan' },
-  { no: 5, label: 'Sterilisasi', sub: 'Autoclave 1, 2, Plasma', tone: 'red', to: '/sterilisasi' },
-  { no: 6, label: 'Verifikasi Sterilisasi', sub: 'Indikator & Bowie-Dick', tone: 'green', to: '/verifikasi' },
-  { no: 7, label: 'Stok Alat Steril', sub: 'hanya verifikasi lulus', tone: 'purple', to: '/laporan/stok-steril' },
-  { no: 8, label: 'Distribusi Alat Steril', sub: 'pakai barcode', barcode: true, tone: 'blue', to: '/distribusi-alat' },
-  { no: 9, label: 'Distribusi Kasa Steril', sub: 'pakai barcode', barcode: true, tone: 'purple', to: '/distribusi-kasa' },
+  { no: 1, label: 'Penerimaan Alat Kotor', sub: 'Barcode Unit → CSSD', barcode: true, tone: 'red', to: '/alat-kotor' },
+  { no: 2, label: 'Dekontaminasi Alat Kotor', sub: 'Pencucian & DTT', tone: 'pink', to: '/pencucian' },
+  { no: 3, label: 'Pengemasan Alat', sub: 'Pemeriksaan & Packing', tone: 'amber', to: '/pengemasan' },
+  { no: 4, label: 'Proses Sterilisasi', sub: 'Autoclave / Plasma', tone: 'blue', to: '/sterilisasi' },
+  { no: 5, label: 'Verifikasi Sterilisasi', sub: 'Uji Indikator & Batch', tone: 'green', to: '/verifikasi' },
+  { no: 6, label: 'Penyimpanan Alat Steril', sub: 'Stok Siap Pakai', tone: 'cyan', to: '/laporan?jenis=stok-steril' },
+  { no: 7, label: 'Pengambilan Alat Steril', sub: 'Barcode CSSD → Unit', barcode: true, tone: 'green', to: '/distribusi-alat' },
+  { no: 8, label: 'Distribusi Kasa Steril', sub: 'Barcode CSSD → Unit', barcode: true, tone: 'green', to: '/distribusi-kasa' },
 ];

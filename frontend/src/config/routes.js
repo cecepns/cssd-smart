@@ -11,6 +11,9 @@ export const ROUTES = {
   VERIFICATIONS: '/verifikasi',
   DIST_TOOLS: '/distribusi-alat',
   DIST_GAUZE: '/distribusi-kasa',
+  DTT_RECEIPTS: '/dtt-penerimaan',
+  DTT_DISTRIBUTIONS: '/dtt-distribusi',
+  DTT_CONTROL: '/dtt-buku-kontrol',
   INSTRUMENT_SETS: '/set-instrumen',
 
   BMHP: '/bmhp',
@@ -28,6 +31,7 @@ export const ROUTES = {
   MASTER_MACHINES: '/master/mesin',
   MASTER_OFFICERS: '/master/petugas',
   MASTER_PACKAGING_MATERIALS: '/master/bahan-kemasan',
+  MASTER_ITEM_UNITS: '/master/satuan',
   MASTER_USERS: '/master/pengguna',
 
   GUIDE: '/panduan',

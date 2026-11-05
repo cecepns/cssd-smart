@@ -31,6 +31,14 @@ export const API_ENDPOINTS = {
   MACHINES: crud('/machines'),
   OFFICERS: crud('/officers'),
   PACKAGING_MATERIALS: crud('/packaging-materials'),
+  ITEM_UNITS: crud('/item-units'),
+
+  // DTT (RIUS) - Penggunaan Ulang Alat Medis
+  DTT_RECEIPTS: {
+    ...crud('/dtt-receipts'),
+    READY: '/dtt-receipts/ready',
+  },
+  DTT_DISTRIBUTIONS: crud('/dtt-distributions'),
 
   // Set Instrumen & Monitoring
   INSTRUMENT_SETS: {
