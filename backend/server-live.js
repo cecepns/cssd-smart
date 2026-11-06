@@ -54,7 +54,7 @@ const PREFIX_BY_TYPE = {
   'Kasa Steril': 'KS',
   'Instrumen / Set Alat': 'SM',
 };
-const ROLES = ['admin', 'petugas'];
+const ROLES = ['admin', 'petugas', 'unit'];
 const INDICATOR = ['Sesuai', 'Tidak Sesuai'];
 
 const pool = mysql.createPool({
@@ -443,13 +443,23 @@ registerCrud({
     field('username', 'string', { required: true, label: 'Username', min: 3, max: 50, createOnly: true }),
     field('password', 'string', { required: true, label: 'Password', min: 6, max: 72 }),
     field('role', 'enum', { values: ROLES, default: 'petugas', label: 'Role' }),
-    field('unit_id', 'int', { label: 'Unit (Wajib jika Role Unit)', min: 1 }),
+    field('unit_id', 'int', { label: 'Unit', min: 1 }),
     field('is_active', 'bool', { default: 1, label: 'Aktif' }),
   ],
   async beforeCreate(conn, data) {
+    if (data.role === 'unit' && !data.unit_id) {
+      throw new HttpError(422, 'Unit rumah sakit wajib dipilih untuk akun dengan Role Unit Luar', { unit_id: 'Unit wajib dipilih' });
+    }
+    if (data.role !== 'unit') data.unit_id = null;
     data.password = await bcrypt.hash(data.password, 10);
   },
   async beforeUpdate(conn, data, ctx, existing) {
+    const targetRole = data.role || existing.role;
+    const targetUnitId = data.unit_id !== undefined ? data.unit_id : existing.unit_id;
+    if (targetRole === 'unit' && !targetUnitId) {
+      throw new HttpError(422, 'Unit rumah sakit wajib dipilih untuk akun dengan Role Unit Luar', { unit_id: 'Unit wajib dipilih' });
+    }
+    if (data.role && data.role !== 'unit') data.unit_id = null;
     if (data.password) data.password = await bcrypt.hash(data.password, 10);
     else delete data.password;
     if (existing.id === ctx.user.id && (data.is_active === 0 || (data.role && data.role !== 'admin'))) {
@@ -3429,6 +3439,12 @@ ensureOfficersTable();
 ensureInstrumentSetsTable();
 ensureDiscrepancyTable();
 ensureCategoryMigration();
+ensurePackagingMaterialsTable();
+ensureMachineTypeMigration();
+ensureBmhpColumns();
+ensureItemUnitsTable();
+ensureDttTables();
+ensureAppSchemaUpdates();
 
 // async function start() {
 //   try {
