@@ -64,19 +64,19 @@ export default function SettingsPage() {
           </div>
         </Section>
 
-        <Section icon={Smartphone} title="Pasang aplikasi (PWA)">
+        <Section icon={Smartphone} title="Install Aplikasi">
           <p className="text-sm text-slate-600">
-            Pasang CSSD SMART di layar utama HP atau komputer agar terbuka seperti aplikasi biasa dan tetap ringan.
+            Pasang CSSD SMART langsung di layar utama HP maupun komputer seperti aplikasi biasa, memiliki ikon tersendiri, dan dapat dibuka cepat tanpa perlu mengetik alamat website.
           </p>
           <div className="mt-4">
             {installed ? (
-              <p className="text-sm font-semibold text-emerald-600">Aplikasi sudah terpasang di perangkat ini.</p>
-            ) : canInstall ? (
-              <Button icon={Download} onClick={handleInstall}>Pasang Aplikasi</Button>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+                Aplikasi sudah terpasang di perangkat ini
+              </span>
             ) : (
-              <p className="text-sm text-slate-500">
-                Opsi pemasangan belum tersedia. Buka lewat HTTPS di Chrome/Edge, atau pada iPhone pilih Bagikan &rarr; Tambah ke Layar Utama.
-              </p>
+              <Button icon={Download} onClick={handleInstall} className="font-bold">
+                Install Aplikasi
+              </Button>
             )}
           </div>
         </Section>

@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
 
   DASHBOARD: '/dashboard',
   TRACEABILITY: '/traceability',
+  PUBLIC_UNIT_STATUS: (id) => `/public/unit-status/${id}`,
   REPORTS_MONTHLY: '/reports/monthly-summary',
 
   UPLOADS: {

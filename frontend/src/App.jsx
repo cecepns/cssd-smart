@@ -37,6 +37,8 @@ const ReportsHubPage = lazy(() => import('@/pages/ReportsHubPage'));
 const ReportPage = lazy(() => import('@/pages/ReportPage'));
 const GuidePage = lazy(() => import('@/pages/GuidePage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
+const CounterBarcodePage = lazy(() => import('@/pages/CounterBarcodePage'));
+const UnitTrackingPage = lazy(() => import('@/pages/UnitTrackingPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 const PageLoader = () => (
@@ -64,6 +66,7 @@ export default function App() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+        <Route path={ROUTES.UNIT_TRACKING} element={<UnitTrackingPage />} />
 
         <Route element={<Protected />}>
           <Route element={<AdminLayout />}>
@@ -91,6 +94,7 @@ export default function App() {
             <Route path={ROUTES.REPORTS} element={<ReportsHubPage />} />
             <Route path={`${ROUTES.REPORTS}/:slug`} element={<ReportPage />} />
             <Route path={ROUTES.TRACE} element={<TraceabilityPage />} />
+            <Route path={ROUTES.COUNTER_BARCODE} element={<CounterBarcodePage />} />
             <Route path={ROUTES.GUIDE} element={<GuidePage />} />
             <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
 

@@ -1,7 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
+import { Download, LogOut } from 'lucide-react';
 import { NAV_SECTIONS } from '@/config/navigation';
 import { useAuth } from '@/context/AuthContext';
+import useInstallPrompt from '@/hooks/useInstallPrompt';
 
 const isActive = (item, pathname) => {
   if (item.match) return pathname.startsWith(item.match);
@@ -16,6 +17,7 @@ const isActive = (item, pathname) => {
 export default function Sidebar({ collapsed, mobileOpen, onClose, onLogout }) {
   const { pathname } = useLocation();
   const { user, isAdmin } = useAuth();
+  const { installed, install } = useInstallPrompt();
   const isUnit = user?.role === 'unit';
   const hideOnCollapse = collapsed ? 'lg:hidden' : '';
 
@@ -79,7 +81,20 @@ export default function Sidebar({ collapsed, mobileOpen, onClose, onLogout }) {
           })}
         </nav>
 
-        <div className="border-t border-slate-200 p-3">
+        <div className="border-t border-slate-200 p-3 space-y-1">
+          {!installed && (
+            <button
+              type="button"
+              onClick={install}
+              title="Install Aplikasi"
+              className={`flex h-10 w-full items-center gap-3 rounded-xl bg-amber-50 px-3 text-sm font-bold text-amber-900 border border-amber-200 transition hover:bg-amber-100 ${
+                collapsed ? 'lg:justify-center lg:px-0' : ''
+              }`}
+            >
+              <Download size={18} className="shrink-0 text-amber-700" />
+              <span className={hideOnCollapse}>Install Aplikasi</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={onLogout}

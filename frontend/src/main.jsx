@@ -6,6 +6,19 @@ import App from '@/App';
 import { AuthProvider } from '@/context/AuthContext';
 import '@/index.css';
 
+// Tangkap event PWA sebelum render agar prompt instalasi langsung siap
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    window.__pwaPromptEvent = e;
+    window.dispatchEvent(new Event('pwa:ready'));
+  });
+  window.addEventListener('appinstalled', () => {
+    window.__pwaPromptEvent = null;
+    window.dispatchEvent(new Event('pwa:installed'));
+  });
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

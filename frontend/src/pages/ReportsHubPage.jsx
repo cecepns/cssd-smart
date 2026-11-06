@@ -216,9 +216,9 @@ export default function ReportsHubPage() {
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              <p className="mt-1 text-[11px] text-slate-400">
+              {/* <p className="mt-1 text-[11px] text-slate-400">
                 Gunakan password akun Admin Anda (atau PIN standar: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-bold">admin123</code>).
-              </p>
+              </p> */}
             </div>
 
             <button
@@ -279,11 +279,10 @@ export default function ReportsHubPage() {
             setActiveTab('transaksi');
             setSearchParams({ tab: 'transaksi', jenis: selectedSlug }, { replace: true });
           }}
-          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-extrabold transition ${
-            activeTab === 'transaksi'
+          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-extrabold transition ${activeTab === 'transaksi'
               ? 'border-[#0A192F] text-[#0A192F]'
               : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
+            }`}
         >
           <FileText size={18} />
           <span>13 Laporan Transaksi Lengkap</span>
@@ -294,11 +293,10 @@ export default function ReportsHubPage() {
             setActiveTab('bulanan');
             setSearchParams({ tab: 'bulanan' }, { replace: true });
           }}
-          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-extrabold transition ${
-            activeTab === 'bulanan'
+          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-extrabold transition ${activeTab === 'bulanan'
               ? 'border-[#0A192F] text-[#0A192F]'
               : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
+            }`}
         >
           <Calendar size={18} />
           <span>Rekap Bulanan Otomatis</span>
@@ -366,11 +364,10 @@ export default function ReportsHubPage() {
                     key={r.slug}
                     type="button"
                     onClick={() => handleSelectReport(r.slug)}
-                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                      isSelected
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${isSelected
                         ? 'bg-[#0A192F] text-[#E5C07B] shadow-xs'
                         : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-slate-50'
-                    }`}
+                      }`}
                   >
                     {isSelected && <CheckCircle2 size={12} className="text-[#E5C07B]" />}
                     {r.label}

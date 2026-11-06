@@ -76,19 +76,16 @@ export default function DashboardPage() {
           {/* Kolom Informasi & Branding */}
           <div className="space-y-3.5 text-center lg:text-left">
             <div>
-              <p className="font-serif italic text-xl sm:text-2xl text-slate-700 tracking-wide">
+              <p className="font-serif italic text-xl sm:text-2xl text-slate-800 tracking-wide">
                 Selamat Datang di
               </p>
               <div className="mt-1 flex flex-wrap items-baseline justify-center gap-2 lg:justify-start">
                 <h1 className="text-3xl font-black tracking-tight sm:text-5xl text-[#0A192F]">
-                  CSSD <span className="text-[#C89D35]">SMART</span>
+                  CSSD <span className="text-[#D4AF37]">SMART</span>
                 </h1>
-                <span className="rounded-full bg-[#0A192F] px-3 py-1 text-xs font-black uppercase tracking-wider text-[#E5C07B] shadow-xs">
-                  RSUD SERPONG UTARA
-                </span>
               </div>
-              <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-slate-400">
-                Sterile Management System
+              <p className="mt-1.5 text-xs sm:text-sm font-black tracking-[0.25em] uppercase text-slate-700">
+                STERIL MANAJEMEN SYSTEM
               </p>
             </div>
 

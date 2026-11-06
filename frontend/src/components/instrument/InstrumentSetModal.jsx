@@ -3,6 +3,7 @@ import { Plus, Trash2, Layers } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import toast from 'react-hot-toast';
+import { getErrorMessage } from '@/utils/request';
 
 export default function InstrumentSetModal({
   open,
@@ -103,7 +104,7 @@ export default function InstrumentSetModal({
       });
       onClose();
     } catch (err) {
-      toast.error(err?.message || 'Gagal menyimpan set instrumen');
+      toast.error(getErrorMessage(err, 'Gagal menyimpan set instrumen'));
     } finally {
       setSubmitting(false);
     }

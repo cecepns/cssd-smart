@@ -2001,16 +2001,50 @@ router.get('/instrument-sets/:id', auth, wrap(async (req, res) => {
 router.post('/instrument-sets', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
   const body = req.body || {};
   if (!body.name || !body.name.trim()) throw new HttpError(422, 'Nama set instrumen wajib diisi');
-  const code = (body.code && body.code.trim()) || `SET-${Date.now().toString().slice(-5)}`;
   const completeness = body.completeness_status === 'Tidak Lengkap' ? 'Tidak Lengkap' : 'Lengkap';
   const missingNotes = body.missing_notes ? String(body.missing_notes).trim() : null;
   const description = body.description ? String(body.description).trim() : null;
   const items = Array.isArray(body.items) ? body.items : [];
+  const normalizedName = body.name.trim().toUpperCase();
 
   const id = await withTx(async (conn) => {
+    // 1. Tentukan Kode Set yang dijamin unik & tidak pernah duplikat / 409
+    let code = (body.code && body.code.trim().toUpperCase()) || '';
+    if (!code) {
+      // Cari nomor urut SET berikutnya dari instrument_sets dan items
+      const [allSets] = await conn.query('SELECT code FROM instrument_sets WHERE code LIKE "SET-%"');
+      const [allItems] = await conn.query('SELECT code FROM items WHERE code LIKE "SET-%"');
+      const existingCodeSet = new Set([
+        ...allSets.map((r) => String(r.code).toUpperCase()),
+        ...allItems.map((r) => String(r.code).toUpperCase()),
+      ]);
+
+      let seq = allSets.length + 1;
+      let candidate = `SET-${String(seq).padStart(3, '0')}`;
+      while (existingCodeSet.has(candidate)) {
+        seq++;
+        candidate = `SET-${String(seq).padStart(3, '0')}`;
+      }
+      code = candidate;
+    } else {
+      // Jika user mengisi kode sendiri, periksa apakah sudah ada di instrument_sets
+      const [[dupSet]] = await conn.query('SELECT id FROM instrument_sets WHERE code = ?', [code]);
+      if (dupSet) {
+        let suffix = 1;
+        let candidate = `${code}-${suffix}`;
+        while (true) {
+          const [[inSets]] = await conn.query('SELECT id FROM instrument_sets WHERE code = ?', [candidate]);
+          if (!inSets) break;
+          suffix++;
+          candidate = `${code}-${suffix}`;
+        }
+        code = candidate;
+      }
+    }
+
     const [result] = await conn.query('INSERT INTO instrument_sets SET ?', [{
       code,
-      name: body.name.trim().toUpperCase(),
+      name: normalizedName,
       completeness_status: completeness,
       missing_notes: missingNotes,
       description,
@@ -2034,15 +2068,24 @@ router.post('/instrument-sets', auth, allow('admin', 'petugas'), wrap(async (req
     }
 
     // Sinkronisasi otomatis ke master items (agar langsung muncul di transaksi & punya masa steril)
-    const [[existingItem]] = await conn.query('SELECT id FROM items WHERE code = ? OR name = ?', [code, body.name.trim().toUpperCase()]);
-    if (!existingItem) {
-      await conn.query('INSERT INTO items (code, name, category, shelf_life_months, description) VALUES (?, ?, ?, ?, ?)', [
-        code,
-        body.name.trim().toUpperCase(),
-        'Set Instrumen',
-        6,
-        description || 'Set instrumen bedah',
-      ]);
+    const [[itemByCode]] = await conn.query('SELECT id, name FROM items WHERE code = ?', [code]);
+    const [[itemByName]] = await conn.query('SELECT id, code FROM items WHERE name = ?', [normalizedName]);
+
+    if (itemByCode) {
+      await conn.query(
+        'UPDATE items SET name = ?, category = "Set Instrumen", process_type = "Steril", unit_label = "Set", description = ? WHERE id = ?',
+        [normalizedName, description || 'Set instrumen bedah', itemByCode.id]
+      );
+    } else if (itemByName) {
+      await conn.query(
+        'UPDATE items SET code = ?, category = "Set Instrumen", process_type = "Steril", unit_label = "Set", description = ? WHERE id = ?',
+        [code, description || 'Set instrumen bedah', itemByName.id]
+      );
+    } else {
+      await conn.query(
+        'INSERT INTO items (code, name, process_type, category, unit_label, shelf_life_months, description, is_active) VALUES (?, ?, "Steril", "Set Instrumen", "Set", 6, ?, 1) ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description)',
+        [code, normalizedName, description || 'Set instrumen bedah']
+      );
     }
 
     return setId;
@@ -2057,14 +2100,31 @@ router.put('/instrument-sets/:id', auth, allow('admin', 'petugas'), wrap(async (
   const id = parseId(req.params.id);
   const body = req.body || {};
   if (!body.name || !body.name.trim()) throw new HttpError(422, 'Nama set instrumen wajib diisi');
+  const normalizedName = body.name.trim().toUpperCase();
 
   await withTx(async (conn) => {
     const [[existing]] = await conn.query('SELECT * FROM instrument_sets WHERE id = ? FOR UPDATE', [id]);
     if (!existing) throw new HttpError(404, 'Set instrumen tidak ditemukan');
 
+    let code = (body.code && body.code.trim().toUpperCase()) || existing.code;
+    if (code !== existing.code) {
+      const [[dup]] = await conn.query('SELECT id FROM instrument_sets WHERE code = ? AND id != ?', [code, id]);
+      if (dup) {
+        let suffix = 1;
+        let candidate = `${code}-${suffix}`;
+        while (true) {
+          const [[inSets]] = await conn.query('SELECT id FROM instrument_sets WHERE code = ? AND id != ?', [candidate, id]);
+          if (!inSets) break;
+          suffix++;
+          candidate = `${code}-${suffix}`;
+        }
+        code = candidate;
+      }
+    }
+
     const updateData = {
-      name: body.name.trim().toUpperCase(),
-      code: (body.code && body.code.trim()) || existing.code,
+      name: normalizedName,
+      code,
       completeness_status: body.completeness_status === 'Tidak Lengkap' ? 'Tidak Lengkap' : 'Lengkap',
       missing_notes: body.missing_notes !== undefined ? (body.missing_notes ? String(body.missing_notes).trim() : null) : existing.missing_notes,
       description: body.description !== undefined ? String(body.description).trim() : existing.description,
@@ -2087,6 +2147,17 @@ router.put('/instrument-sets/:id', auth, allow('admin', 'petugas'), wrap(async (
           }]);
         }
       }
+    }
+
+    // Sync to items
+    const [[itemByOldCode]] = await conn.query('SELECT id FROM items WHERE code = ?', [existing.code]);
+    if (itemByOldCode) {
+      await conn.query('UPDATE items SET code = ?, name = ?, description = ? WHERE id = ?', [
+        code,
+        normalizedName,
+        updateData.description || 'Set instrumen bedah',
+        itemByOldCode.id,
+      ]);
     }
   });
 
@@ -2484,6 +2555,75 @@ router.get('/dashboard', auth, wrap(async (req, res) => {
   const [recentQuarantines] = await pool.query("SELECT id, barcode, batch_no, reason, created_at FROM quarantines WHERE status = 'Karantina' ORDER BY id DESC LIMIT 5");
 
   res.json({ success: true, data: { pipeline, totals, expiring, lowBmhp, recentVerifications, recentQuarantines } });
+}));
+
+// Status Pemantauan Unit (untuk scan Barcode Loket oleh kamera HP petugas unit)
+router.get('/public/unit-status/:id', wrap(async (req, res) => {
+  const unitId = parseId(req.params.id);
+  const [[unit]] = await pool.query('SELECT id, code, name FROM units WHERE id = ? AND is_active = 1', [unitId]);
+  if (!unit) throw new HttpError(404, 'Unit tidak ditemukan atau nonaktif');
+
+  // 1. Alat kotor yang sedang dalam proses CSSD (Pencucian -> Verifikasi)
+  const [inProcess] = await pool.query(`
+    SELECT r.id, r.barcode, r.receipt_date, r.item_name, r.quantity, r.unit_label, r.stage, r.status, r.receiver_name
+    FROM dirty_receipts r
+    WHERE r.unit_id = ? AND r.status IN ('Diterima', 'Proses')
+    ORDER BY r.id DESC LIMIT 50
+  `, [unitId]);
+
+  // 2. Alat steril yang SUDAH SIAP DIAMBIL di CSSD
+  const [readySterile] = await pool.query(`
+    SELECT st.id, st.barcode, st.item_name, st.quantity, st.unit_label, st.expiry_date, st.status,
+           p.pack_date, p.material
+    FROM sterile_stock st
+    JOIN packagings p ON p.id = st.packaging_id
+    JOIN dirty_receipts r ON r.id = p.receipt_id
+    WHERE r.unit_id = ? AND st.status = 'Tersedia' AND st.expiry_date >= CURDATE()
+    ORDER BY st.expiry_date ASC LIMIT 50
+  `, [unitId]);
+
+  // 3. Alat DTT yang SUDAH SELESAI & SIAP DIAMBIL
+  const [readyDtt] = await pool.query(`
+    SELECT d.id, d.barcode, d.item_name, d.quantity, d.unit_label, d.receipt_datetime, d.process_stage, d.officer_cssd
+    FROM dtt_receipts d
+    WHERE d.unit_id = ? AND d.process_stage IN ('Selesai Steril/DTT', 'Siap Distribusi', 'Selesai')
+    AND d.id NOT IN (SELECT receipt_id FROM dtt_distributions WHERE unit_id = ?)
+    ORDER BY d.id DESC LIMIT 50
+  `, [unitId, unitId]);
+
+  // 4. Riwayat transaksi terakhir unit
+  const [recentReceipts] = await pool.query(`
+    SELECT 'Penerimaan Alat Kotor' AS jenis, barcode, receipt_date AS tanggal, item_name, quantity, unit_label, receiver_name AS petugas
+    FROM dirty_receipts WHERE unit_id = ? ORDER BY id DESC LIMIT 5
+  `, [unitId]);
+
+  const [recentDistributions] = await pool.query(`
+    SELECT 'Pengambilan Alat Steril' AS jenis, st.barcode, d.dist_date AS tanggal, st.item_name, d.quantity, st.unit_label, d.officer_unit AS petugas
+    FROM distributions d
+    JOIN sterile_stock st ON st.id = d.stock_id
+    WHERE d.unit_id = ? ORDER BY d.id DESC LIMIT 5
+  `, [unitId]);
+
+  const [recentDtt] = await pool.query(`
+    SELECT 'Pengambilan Alat DTT' AS jenis, dd.barcode, dd.dist_datetime AS tanggal, dd.item_name, dd.quantity, dd.unit_label, dd.officer_unit AS petugas
+    FROM dtt_distributions dd
+    WHERE dd.unit_id = ? ORDER BY dd.id DESC LIMIT 5
+  `, [unitId]);
+
+  const recentHistory = [...recentReceipts, ...recentDistributions, ...recentDtt]
+    .sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal))
+    .slice(0, 10);
+
+  res.json({
+    success: true,
+    data: {
+      unit,
+      inProcess,
+      readySterile,
+      readyDtt,
+      recentHistory,
+    },
+  });
 }));
 
 // ---------- Ketertelusuran ----------

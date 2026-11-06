@@ -25,6 +25,8 @@ export const ROUTES = {
   REPORTS: '/laporan',
   REPORT: (slug) => `/laporan/${slug}`,
   TRACE: '/ketertelusuran',
+  COUNTER_BARCODE: '/cetak-barcode-loket',
+  UNIT_TRACKING: '/pantau-unit',
 
   MASTER_UNITS: '/master/unit',
   MASTER_ITEMS: '/master/jenis-alat',
