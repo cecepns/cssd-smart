@@ -319,3 +319,4 @@ export function QrCodeSvg({ value, size = 180, className = '' }) {
     </svg>
   );
 }
+
