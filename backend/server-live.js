@@ -341,7 +341,7 @@ function registerCrud(raw) {
     res.send(toCsv(rows, columns));
   }));
 
-  router.get(`${base}/:id`, auth, allow(...roles.read), wrap(async (req, res) => {
+  router.get(`${base}/:id(\\d+)`, auth, allow(...roles.read), wrap(async (req, res) => {
     const row = await fetchOne(cfg, parseId(req.params.id));
     if (!row) throw new HttpError(404, 'Data tidak ditemukan');
     if (req.user.role === 'unit' && cfg.unitColumn && row.unit_id && row.unit_id !== req.user.unit_id) {
@@ -373,7 +373,7 @@ function registerCrud(raw) {
   }
 
   if (!cfg.noUpdate) {
-    router.put(`${base}/:id`, auth, allow(...roles.write), wrap(async (req, res) => {
+    router.put(`${base}/:id(\\d+)`, auth, allow(...roles.write), wrap(async (req, res) => {
       const id = parseId(req.params.id);
       const data = validate(updatable, req.body, { partial: true });
       const ctx = { body: req.body || {}, user: req.user };
@@ -393,7 +393,7 @@ function registerCrud(raw) {
   }
 
   if (!cfg.noDelete) {
-    router.delete(`${base}/:id`, auth, allow(...roles.remove), wrap(async (req, res) => {
+    router.delete(`${base}/:id(\\d+)`, auth, allow(...roles.remove), wrap(async (req, res) => {
       const id = parseId(req.params.id);
       if (req.user.role === 'unit') {
         throw new HttpError(403, 'Unit luar tidak memiliki izin untuk menghapus data');
@@ -1295,6 +1295,24 @@ registerCrud({
   },
 });
 
+// ---------- DTT (RIUS) Alat Siap Distribusi ----------
+router.get('/dtt-receipts/ready', auth, wrap(async (req, res) => {
+  let where = "WHERE t.process_stage IN ('Siap Distribusi', 'Penyimpanan DTT', 'Pencucian DTT', 'Diterima')";
+  const params = [];
+  if (req.user.role === 'unit' && req.user.unit_id) {
+    where += " AND t.unit_id = ?";
+    params.push(req.user.unit_id);
+  }
+  const [rows] = await pool.query(`
+    SELECT t.*, u.name AS unit_name 
+    FROM dtt_receipts t 
+    JOIN units u ON u.id = t.unit_id 
+    ${where} 
+    ORDER BY t.id DESC LIMIT 100
+  `, params);
+  res.json({ success: true, data: rows });
+}));
+
 // ---------- DTT (RIUS) Transaksi 1: Penerimaan Alat Kotor DTT/RIUS (Unit -> CSSD) ----------
 registerCrud({
   path: 'dtt-receipts',
@@ -1409,23 +1427,6 @@ registerCrud({
     await conn.query("UPDATE dtt_receipts SET process_stage = 'Siap Distribusi' WHERE id = ?", [existing.dtt_receipt_id]);
   },
 });
-
-router.get('/dtt-receipts/ready', auth, wrap(async (req, res) => {
-  let where = "WHERE t.process_stage IN ('Siap Distribusi', 'Penyimpanan DTT', 'Pencucian DTT', 'Diterima')";
-  const params = [];
-  if (req.user.role === 'unit' && req.user.unit_id) {
-    where += " AND t.unit_id = ?";
-    params.push(req.user.unit_id);
-  }
-  const [rows] = await pool.query(`
-    SELECT t.*, u.name AS unit_name 
-    FROM dtt_receipts t 
-    JOIN units u ON u.id = t.unit_id 
-    ${where} 
-    ORDER BY t.id DESC LIMIT 100
-  `, params);
-  res.json({ success: true, data: rows });
-}));
 
 // ---------- BMHP ----------
 registerCrud({
