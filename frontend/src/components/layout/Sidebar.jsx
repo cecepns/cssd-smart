@@ -26,16 +26,14 @@ export default function Sidebar({ collapsed, mobileOpen, onClose, onLogout }) {
       <div
         onClick={onClose}
         aria-hidden="true"
-        className={`no-print fixed inset-0 top-16 z-30 bg-slate-900/40 backdrop-blur-[1px] transition-opacity duration-300 lg:hidden ${
-          mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
+        className={`no-print fixed inset-0 top-16 z-30 bg-slate-900/40 backdrop-blur-[1px] transition-opacity duration-300 lg:hidden ${mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
       />
 
       <aside
         aria-label="Menu utama"
-        className={`no-print fixed bottom-0 left-0 top-16 z-30 flex w-72 flex-col border-r border-slate-200 bg-white transition-[transform,width] duration-300 ease-in-out ${
-          mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
-        } lg:translate-x-0 lg:shadow-none ${collapsed ? 'lg:w-[72px]' : 'lg:w-72'}`}
+        className={`no-print fixed bottom-0 left-0 top-16 z-30 flex w-72 flex-col border-r border-slate-200 bg-white transition-[transform,width] duration-300 ease-in-out ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+          } lg:translate-x-0 lg:shadow-none ${collapsed ? 'lg:w-[72px]' : 'lg:w-72'}`}
       >
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 scrollbar-thin">
           {NAV_SECTIONS.map((section, index) => {
@@ -64,9 +62,8 @@ export default function Sidebar({ collapsed, mobileOpen, onClose, onLogout }) {
                           to={item.to}
                           title={item.label}
                           aria-current={active ? 'page' : undefined}
-                          className={`group flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition ${
-                            active ? 'bg-brand-50 text-brand-800' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                          } ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}
+                          className={`group flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition ${active ? 'bg-brand-50 text-brand-800' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                            } ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}
                         >
                           <item.icon size={19} className={`shrink-0 ${active ? 'text-brand-700' : 'text-slate-400 group-hover:text-slate-600'}`} />
                           <span className={`truncate ${hideOnCollapse}`}>{item.label}</span>
@@ -82,7 +79,7 @@ export default function Sidebar({ collapsed, mobileOpen, onClose, onLogout }) {
         </nav>
 
         <div className="border-t border-slate-200 p-3 space-y-1">
-          {!installed && (
+          {/* {!installed && (
             <button
               type="button"
               onClick={install}
@@ -94,14 +91,13 @@ export default function Sidebar({ collapsed, mobileOpen, onClose, onLogout }) {
               <Download size={18} className="shrink-0 text-amber-700" />
               <span className={hideOnCollapse}>Install Aplikasi</span>
             </button>
-          )}
+          )} */}
           <button
             type="button"
             onClick={onLogout}
             title="Keluar"
-            className={`flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 ${
-              collapsed ? 'lg:justify-center lg:px-0' : ''
-            }`}
+            className={`flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 ${collapsed ? 'lg:justify-center lg:px-0' : ''
+              }`}
           >
             <LogOut size={19} className="shrink-0" />
             <span className={hideOnCollapse}>Keluar</span>
