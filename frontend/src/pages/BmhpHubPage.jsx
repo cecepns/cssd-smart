@@ -24,6 +24,7 @@ import { ROUTES } from '@/config/routes';
 import { TONES } from '@/utils/constants';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { formatDate, formatNumber } from '@/utils/format';
+import { useAuth } from '@/context/AuthContext';
 import useFetch from '@/hooks/useFetch';
 
 const ACTIONS = [
@@ -54,10 +55,13 @@ const ACTIONS = [
     to: ROUTES.BMHP_REPORT,
     icon: ClipboardList,
     tone: 'purple',
+    adminOnly: true,
   },
 ];
 
 export default function BmhpHubPage() {
+  const { isAdmin } = useAuth();
+  const visibleActions = ACTIONS.filter((action) => !action.adminOnly || isAdmin);
   const { data: summary } = useFetch(API_ENDPOINTS.BMHP_ITEMS.SUMMARY);
   const { data: lowItems } = useFetch(API_ENDPOINTS.BMHP_ITEMS.LIST, {
     is_low: 1,
@@ -224,9 +228,9 @@ export default function BmhpHubPage() {
         </Link>
       </div>
 
-      {/* 4 Main Action Cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {ACTIONS.map((action) => {
+      {/* Main Action Cards */}
+      <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${isAdmin ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
+        {visibleActions.map((action) => {
           const tone = TONES[action.tone];
           return (
             <Link

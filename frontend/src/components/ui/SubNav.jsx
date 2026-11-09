@@ -1,10 +1,15 @@
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 
 /** Tab navigasi antar halaman terkait (mis. Master Data, Stok BMHP). */
 export default function SubNav({ items }) {
+  const { user, isAdmin } = useAuth();
+  const isUnit = user?.role === 'unit';
+  const visibleItems = items.filter((item) => (!item.adminOnly || isAdmin) && (!isUnit || !item.cssdOnly));
+
   return (
     <nav className="no-print mb-4 flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin" aria-label="Sub menu">
-      {items.map((item) => (
+      {visibleItems.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}

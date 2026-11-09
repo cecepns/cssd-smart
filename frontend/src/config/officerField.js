@@ -33,7 +33,7 @@ export const officerSelectField = ({
   help,
   default: defaultValue,
   placeholder,
-  optionsEndpoint: API_ENDPOINTS.OFFICERS.LIST,
+  optionsEndpoint: API_ENDPOINTS.LOOKUPS.OFFICERS,
   optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
   optionValue: (r) => r.name,
   optionLabel: (r) => `${r.name}${r.role ? ` — ${r.role}` : ''}${r.nip ? ` (${r.nip})` : ''}`,

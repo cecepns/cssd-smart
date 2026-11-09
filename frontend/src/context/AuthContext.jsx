@@ -19,7 +19,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const handleLogout = () => setUser(null);
+    const handleLogout = () => {
+      sessionStorage.removeItem('cssd_smart_report_unlocked');
+      setUser(null);
+    };
     window.addEventListener('auth:logout', handleLogout);
     return () => window.removeEventListener('auth:logout', handleLogout);
   }, []);
@@ -33,6 +36,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem('cssd_smart_report_unlocked');
     setUser(null);
   }, []);
 

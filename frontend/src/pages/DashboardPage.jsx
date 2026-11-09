@@ -33,7 +33,7 @@ import { formatDate, formatDateTime, formatNumber } from '@/utils/format';
 import officerPhoto from '../../assets/foto-1.jpeg';
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const isUnit = user?.role === 'unit';
   const { data, loading, error, reload } = useFetch(API_ENDPOINTS.DASHBOARD);
@@ -274,7 +274,7 @@ export default function DashboardPage() {
             title="Karantina / Gagal Verifikasi"
             icon={AlertOctagon}
             tone="bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-xs"
-            to={ROUTES.REPORT('karantina')}
+            to={isAdmin ? ROUTES.REPORT('karantina') : undefined}
             emptyText="Tidak ada paket di karantina"
             rows={(data.recentQuarantines || []).map((q) => ({
               key: q.id,
@@ -287,7 +287,7 @@ export default function DashboardPage() {
             title="Segera Kedaluwarsa (≤ 30 hari)"
             icon={CalendarX}
             tone="bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-xs"
-            to={ROUTES.REPORT('stok-steril')}
+            to={isAdmin ? ROUTES.REPORT('stok-steril') : undefined}
             emptyText="Tidak ada paket yang segera kedaluwarsa"
             rows={(data.expiring || []).map((s) => ({
               key: s.id,
@@ -335,7 +335,7 @@ export default function DashboardPage() {
             title="Verifikasi Mutu Sterilisasi Terbaru"
             icon={ShieldCheck}
             tone="bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-xs"
-            to={ROUTES.REPORT('verifikasi')}
+            to={isAdmin ? ROUTES.REPORT('verifikasi') : ROUTES.VERIFICATIONS}
             emptyText="Belum ada verifikasi"
             rows={(data.recentVerifications || []).map((v) => ({
               key: v.id,

@@ -47,14 +47,15 @@ const PageLoader = () => (
   </div>
 );
 
-/** Route terlindungi: wajib login, opsional khusus admin. */
-function Protected({ adminOnly = false }) {
+/** Route terlindungi: wajib login, opsional khusus admin atau petugas CSSD/admin. */
+function Protected({ adminOnly = false, cssdOnly = false }) {
   const { user, loading, isAdmin } = useAuth();
   const location = useLocation();
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to={ROUTES.LOGIN} replace state={{ from: location }} />;
   if (adminOnly && !isAdmin) return <Navigate to={ROUTES.HOME} replace />;
+  if (cssdOnly && user.role === 'unit') return <Navigate to={ROUTES.HOME} replace />;
   return <Outlet />;
 }
 
@@ -74,31 +75,33 @@ export default function App() {
 
             <Route path={ROUTES.RECEIPTS} element={resource(receiptsConfig)} />
             <Route path={ROUTES.INSTRUMENT_SETS} element={<InstrumentSetsPage />} />
-            <Route path={ROUTES.WASHINGS} element={resource(washingsConfig)} />
-            <Route path={ROUTES.DRYINGS} element={resource(dryingsConfig)} />
-            <Route path={ROUTES.PACKAGINGS} element={resource(packagingsConfig)} />
-            <Route path={ROUTES.STERILIZATIONS} element={resource(sterilizationsConfig)} />
-            <Route path={ROUTES.VERIFICATIONS} element={resource(verificationsConfig)} />
             <Route path={ROUTES.DIST_TOOLS} element={resource(distToolsConfig)} />
             <Route path={ROUTES.DIST_GAUZE} element={resource(distGauzeConfig)} />
             <Route path={ROUTES.DTT_RECEIPTS} element={resource(dttReceiptsConfig)} />
             <Route path={ROUTES.DTT_DISTRIBUTIONS} element={resource(dttDistributionsConfig)} />
-            <Route path={ROUTES.DTT_CONTROL} element={resource(dttControlConfig)} />
-
-            <Route path={ROUTES.BMHP} element={<BmhpHubPage />} />
-            <Route path={ROUTES.BMHP_IN} element={resource(bmhpInConfig)} />
-            <Route path={ROUTES.BMHP_OUT} element={resource(bmhpOutConfig)} />
-            <Route path={ROUTES.BMHP_STOCK} element={resource(bmhpItemsConfig)} />
-            <Route path={ROUTES.BMHP_REPORT} element={resource(bmhpMutationConfig)} />
-
-            <Route path={ROUTES.REPORTS} element={<ReportsHubPage />} />
-            <Route path={`${ROUTES.REPORTS}/:slug`} element={<ReportPage />} />
             <Route path={ROUTES.TRACE} element={<TraceabilityPage />} />
-            <Route path={ROUTES.COUNTER_BARCODE} element={<CounterBarcodePage />} />
             <Route path={ROUTES.GUIDE} element={<GuidePage />} />
             <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
 
+            <Route element={<Protected cssdOnly />}>
+              <Route path={ROUTES.WASHINGS} element={resource(washingsConfig)} />
+              <Route path={ROUTES.DRYINGS} element={resource(dryingsConfig)} />
+              <Route path={ROUTES.PACKAGINGS} element={resource(packagingsConfig)} />
+              <Route path={ROUTES.STERILIZATIONS} element={resource(sterilizationsConfig)} />
+              <Route path={ROUTES.VERIFICATIONS} element={resource(verificationsConfig)} />
+              <Route path={ROUTES.DTT_CONTROL} element={resource(dttControlConfig)} />
+
+              <Route path={ROUTES.BMHP} element={<BmhpHubPage />} />
+              <Route path={ROUTES.BMHP_IN} element={resource(bmhpInConfig)} />
+              <Route path={ROUTES.BMHP_OUT} element={resource(bmhpOutConfig)} />
+              <Route path={ROUTES.BMHP_STOCK} element={resource(bmhpItemsConfig)} />
+            </Route>
+
             <Route element={<Protected adminOnly />}>
+              <Route path={ROUTES.BMHP_REPORT} element={resource(bmhpMutationConfig)} />
+              <Route path={ROUTES.REPORTS} element={<ReportsHubPage />} />
+              <Route path={`${ROUTES.REPORTS}/:slug`} element={<ReportPage />} />
+              <Route path={ROUTES.COUNTER_BARCODE} element={<CounterBarcodePage />} />
               <Route path={ROUTES.MASTER_UNITS} element={resource(unitsConfig)} />
               <Route path={ROUTES.MASTER_ITEM_UNITS} element={resource(itemUnitsConfig)} />
               <Route path={ROUTES.MASTER_ITEMS_STERIL} element={resource(itemsSterilConfig)} />

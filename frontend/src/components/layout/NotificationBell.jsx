@@ -3,12 +3,14 @@ import { Link, useLocation } from 'react-router-dom';
 import { AlertOctagon, AlertTriangle, Archive, Bell, CalendarX, Clock, PackageX, ShieldCheck } from 'lucide-react';
 import useFetch from '@/hooks/useFetch';
 import useClickOutside from '@/hooks/useClickOutside';
+import { useAuth } from '@/context/AuthContext';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { ROUTES } from '@/config/routes';
 
 /** Lonceng notifikasi: karantina, BMHP habis/menipis/kedaluwarsa, alat steril kedaluwarsa, batch verifikasi. */
 export default function NotificationBell() {
   const { pathname } = useLocation();
+  const { isAdmin } = useAuth();
   const { data } = useFetch(API_ENDPOINTS.DASHBOARD, undefined, { refreshKey: pathname });
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -18,8 +20,8 @@ export default function NotificationBell() {
   const alerts = [
     { count: totals.bmhp_empty, label: 'BMHP stok HABIS (0)', to: `${ROUTES.BMHP_STOCK}?stock_status=empty`, icon: PackageX, tone: 'text-rose-600 bg-rose-50' },
     { count: totals.bmhp_expired, label: 'BMHP telah kedaluwarsa', to: `${ROUTES.BMHP_STOCK}?expiry_status=expired`, icon: CalendarX, tone: 'text-rose-600 bg-rose-50' },
-    { count: totals.quarantine, label: 'paket di Karantina / Gagal', to: ROUTES.REPORT('karantina'), icon: AlertOctagon, tone: 'text-rose-600 bg-rose-50' },
-    { count: totals.expired, label: 'paket steril kedaluwarsa', to: ROUTES.REPORT('stok-steril'), icon: CalendarX, tone: 'text-rose-600 bg-rose-50' },
+    { count: totals.quarantine, label: 'paket di Karantina / Gagal', to: isAdmin ? ROUTES.REPORT('karantina') : ROUTES.VERIFICATIONS, icon: AlertOctagon, tone: 'text-rose-600 bg-rose-50' },
+    { count: totals.expired, label: 'paket steril kedaluwarsa', to: isAdmin ? ROUTES.REPORT('stok-steril') : null, icon: CalendarX, tone: 'text-rose-600 bg-rose-50' },
     { count: totals.bmhp_low, label: 'BMHP stok menipis (≤ min)', to: `${ROUTES.BMHP_STOCK}?stock_status=low`, icon: Archive, tone: 'text-amber-600 bg-amber-50' },
     { count: totals.bmhp_expiring_soon, label: 'BMHP mendekati kedaluwarsa (≤30 hr)', to: `${ROUTES.BMHP_STOCK}?expiry_status=expiring`, icon: Clock, tone: 'text-amber-600 bg-amber-50' },
     { count: totals.waiting_verification, label: 'batch menunggu verifikasi', to: ROUTES.VERIFICATIONS, icon: ShieldCheck, tone: 'text-sky-600 bg-sky-50' },
@@ -65,18 +67,29 @@ export default function NotificationBell() {
             <p className="px-4 py-6 text-center text-sm text-slate-500">Semua aman, tidak ada peringatan aktif.</p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {alerts.map((alert) => (
-                <li key={alert.label}>
-                  <Link to={alert.to} onClick={() => setOpen(false)} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 transition-colors">
+              {alerts.map((alert) => {
+                const body = (
+                  <>
                     <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${alert.tone}`}>
                       <alert.icon size={17} />
                     </span>
                     <span className="text-slate-700">
                       <b className="text-slate-900">{alert.count}</b> {alert.label}
                     </span>
-                  </Link>
-                </li>
-              ))}
+                  </>
+                );
+                return (
+                  <li key={alert.label}>
+                    {alert.to ? (
+                      <Link to={alert.to} onClick={() => setOpen(false)} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 transition-colors">
+                        {body}
+                      </Link>
+                    ) : (
+                      <div className="flex items-center gap-3 px-4 py-3 text-sm">{body}</div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

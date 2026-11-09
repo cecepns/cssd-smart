@@ -65,11 +65,12 @@ export const receiptsConfig = {
       fieldDate('receipt_date'),
       {
         type: 'remote-select', name: 'unit_id', label: 'Unit asal', required: true, placeholder: 'Pilih unit...',
-        optionsEndpoint: API_ENDPOINTS.UNITS.LIST, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+        optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+        default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
       },
       {
         type: 'remote-select', name: 'item_id', label: 'Pilih jenis alat / set instrumen', placeholder: 'Pilih alat atau set instrumen...',
-        optionsEndpoint: API_ENDPOINTS.ITEMS.LIST, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+        optionsEndpoint: API_ENDPOINTS.LOOKUPS.ITEMS, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
         optionLabel: (r) => `${r.name} (${r.category})`,
         onChange: (_, { option, setValues }) => option && setValues({
           item_name: option.name,
@@ -232,7 +233,7 @@ export const packagingsConfig = {
         type: 'remote-select',
         required: true,
         placeholder: 'Pilih bahan kemasan...',
-        optionsEndpoint: API_ENDPOINTS.PACKAGING_MATERIALS.LIST,
+        optionsEndpoint: API_ENDPOINTS.LOOKUPS.PACKAGING_MATERIALS,
         optionsParams: { is_active: 1, sort_by: 'name', order: 'asc', limit: 100 },
         optionValue: (r) => r.name,
         optionLabel: (r) => r.code ? `${r.name} (${r.code})` : r.name,
@@ -279,7 +280,7 @@ export const sterilizationsConfig = {
     fields: [
       {
         type: 'remote-select', name: 'machine_id', label: 'Mesin', required: true, placeholder: 'Pilih mesin...',
-        optionsEndpoint: API_ENDPOINTS.MACHINES.LIST, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+        optionsEndpoint: API_ENDPOINTS.LOOKUPS.MACHINES, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
         optionLabel: (r) => `${r.name} (${r.code})${r.type ? ` • ${r.type}` : ''}`,
         onChange: (_, { option, setValues }) => {
           if (!option) return;

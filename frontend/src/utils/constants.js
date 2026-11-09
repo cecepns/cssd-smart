@@ -75,11 +75,11 @@ export const TONES = {
 /** Alur proses CSSD 8 tahap sesuai referensi live workflow. */
 export const FLOW_STAGES = [
   { no: 1, label: 'Penerimaan Alat Kotor', sub: 'Barcode Unit → CSSD', barcode: true, tone: 'red', to: '/alat-kotor' },
-  { no: 2, label: 'Dekontaminasi Alat Kotor', sub: 'Pencucian & DTT', tone: 'pink', to: '/pencucian' },
-  { no: 3, label: 'Pengemasan Alat', sub: 'Pemeriksaan & Packing', tone: 'amber', to: '/pengemasan' },
-  { no: 4, label: 'Proses Sterilisasi', sub: 'Autoclave / Plasma', tone: 'blue', to: '/sterilisasi' },
-  { no: 5, label: 'Verifikasi Sterilisasi', sub: 'Uji Indikator & Batch', tone: 'green', to: '/verifikasi' },
-  { no: 6, label: 'Penyimpanan Alat Steril', sub: 'Stok Siap Pakai', tone: 'cyan', to: '/laporan?jenis=stok-steril' },
+  { no: 2, label: 'Dekontaminasi Alat Kotor', sub: 'Pencucian & DTT', tone: 'pink', to: '/pencucian', cssdOnly: true },
+  { no: 3, label: 'Pengemasan Alat', sub: 'Pemeriksaan & Packing', tone: 'amber', to: '/pengemasan', cssdOnly: true },
+  { no: 4, label: 'Proses Sterilisasi', sub: 'Autoclave / Plasma', tone: 'blue', to: '/sterilisasi', cssdOnly: true },
+  { no: 5, label: 'Verifikasi Sterilisasi', sub: 'Uji Indikator & Batch', tone: 'green', to: '/verifikasi', cssdOnly: true },
+  { no: 6, label: 'Penyimpanan Alat Steril', sub: 'Stok Siap Pakai', tone: 'cyan', to: '/laporan/stok-steril', adminOnly: true },
   { no: 7, label: 'Pengambilan Alat Steril', sub: 'Barcode CSSD → Unit', barcode: true, tone: 'green', to: '/distribusi-alat' },
   { no: 8, label: 'Distribusi Kasa Steril', sub: 'Barcode CSSD → Unit', barcode: true, tone: 'green', to: '/distribusi-kasa' },
 ];

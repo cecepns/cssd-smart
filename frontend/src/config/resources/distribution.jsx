@@ -166,8 +166,9 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
         label: 'Unit tujuan / pengambil',
         required: true,
         placeholder: 'Pilih unit...',
-        optionsEndpoint: API_ENDPOINTS.UNITS.LIST,
+        optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS,
         optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+        default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
       },
       { name: 'quantity', label: 'Jumlah', type: 'number', required: true, min: 1, default: 1 },
       officerSelectField({

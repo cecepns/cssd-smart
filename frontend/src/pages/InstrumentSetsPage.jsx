@@ -38,7 +38,8 @@ import { createData, getErrorMessage, removeData, updateData } from '@/utils/req
 import { formatDate } from '@/utils/format';
 
 export default function InstrumentSetsPage() {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const isUnit = user?.role === 'unit';
 
   // Active Main Tab: 'SETS', 'MOVEMENTS', 'DISCREPANCIES'
   const [activeTab, setActiveTab] = useState('SETS');
@@ -64,7 +65,7 @@ export default function InstrumentSetsPage() {
     movementParams
   );
 
-  // Tab 3 Data: Discrepancies Log (Hilang, Rusak, Kurang)
+  // Tab 3 Data: Discrepancies Log (Hilang, Rusak, Kurang) — hanya untuk Admin & Petugas CSSD
   const [discrepancyPage, setDiscrepancyPage] = useState(1);
   const [discrepancyLimit, setDiscrepancyLimit] = useState(10);
   const [discrepancyStatus, setDiscrepancyStatus] = useState('ALL');
@@ -79,7 +80,7 @@ export default function InstrumentSetsPage() {
   }), [discrepancyPage, discrepancyLimit, discrepancyStatus, discrepancyType, discrepancySearch]);
 
   const { data: discrepanciesResponse, loading: discrepanciesLoading, error: discrepanciesError, reload: reloadDiscrepancies } = useFetch(
-    activeTab === 'DISCREPANCIES' ? API_ENDPOINTS.INSTRUMENT_SETS.DISCREPANCIES : null,
+    !isUnit && activeTab === 'DISCREPANCIES' ? API_ENDPOINTS.INSTRUMENT_SETS.DISCREPANCIES : null,
     discrepancyParams
   );
 
@@ -110,7 +111,7 @@ export default function InstrumentSetsPage() {
   const handleRefreshAll = () => {
     reloadSets();
     if (activeTab === 'MOVEMENTS') reloadMovements();
-    if (activeTab === 'DISCREPANCIES') reloadDiscrepancies();
+    if (!isUnit && activeTab === 'DISCREPANCIES') reloadDiscrepancies();
   };
 
   // Top KPI Statistics Ringkasan
@@ -276,25 +277,29 @@ export default function InstrumentSetsPage() {
               <RefreshCw size={15} className={setsLoading ? 'animate-spin' : ''} />
               <span className="hidden sm:inline">Refresh Data</span>
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => handleOpenReportDiscrepancy(null)}
-              className="text-amber-700 hover:bg-amber-50 border-amber-200 sm:h-10 sm:px-4 sm:text-sm"
-            >
-              <AlertTriangle size={15} />
-              <span className="hidden sm:inline">Lapor Hilang/Rusak</span>
-              <span className="sm:hidden">Lapor</span>
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleOpenCreate}
-              className="sm:h-10 sm:px-4 sm:text-sm"
-            >
-              <Plus size={16} />
-              <span className="hidden sm:inline">Tambah Set Baru</span>
-              <span className="sm:hidden">Tambah Set</span>
-            </Button>
+            {!isUnit && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleOpenReportDiscrepancy(null)}
+                className="text-amber-700 hover:bg-amber-50 border-amber-200 sm:h-10 sm:px-4 sm:text-sm"
+              >
+                <AlertTriangle size={15} />
+                <span className="hidden sm:inline">Lapor Hilang/Rusak</span>
+                <span className="sm:hidden">Lapor</span>
+              </Button>
+            )}
+            {isAdmin && (
+              <Button
+                size="sm"
+                onClick={handleOpenCreate}
+                className="sm:h-10 sm:px-4 sm:text-sm"
+              >
+                <Plus size={16} />
+                <span className="hidden sm:inline">Tambah Set Baru</span>
+                <span className="sm:hidden">Tambah Set</span>
+              </Button>
+            )}
           </div>
         }
       />
@@ -423,35 +428,37 @@ export default function InstrumentSetsPage() {
             <span className="sm:hidden">Pergerakan Set</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('DISCREPANCIES')}
-            className={`inline-flex items-center gap-2 px-3 sm:px-4 py-3 text-xs sm:text-sm font-bold transition-all border-b-2 whitespace-nowrap shrink-0 rounded-t-xl select-none ${
-              activeTab === 'DISCREPANCIES'
-                ? 'border-brand-700 text-brand-700 bg-brand-50/50'
-                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-            }`}
-          >
-            <AlertTriangle
-              size={16}
-              className={`shrink-0 ${
-                activeTab === 'DISCREPANCIES' ? 'text-amber-600' : stats.incompleteCount > 0 ? 'text-amber-600' : ''
+          {!isUnit && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('DISCREPANCIES')}
+              className={`inline-flex items-center gap-2 px-3 sm:px-4 py-3 text-xs sm:text-sm font-bold transition-all border-b-2 whitespace-nowrap shrink-0 rounded-t-xl select-none ${
+                activeTab === 'DISCREPANCIES'
+                  ? 'border-brand-700 text-brand-700 bg-brand-50/50'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
               }`}
-            />
-            <span className="hidden sm:inline">Riwayat Hilang / Rusak / Kurang</span>
-            <span className="sm:hidden">Hilang / Rusak / Kurang</span>
-            {stats.incompleteCount > 0 && (
-              <span
-                className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-black shrink-0 ${
-                  activeTab === 'DISCREPANCIES'
-                    ? 'bg-amber-100 text-amber-800'
-                    : 'bg-amber-100 text-amber-800'
+            >
+              <AlertTriangle
+                size={16}
+                className={`shrink-0 ${
+                  activeTab === 'DISCREPANCIES' ? 'text-amber-600' : stats.incompleteCount > 0 ? 'text-amber-600' : ''
                 }`}
-              >
-                {stats.incompleteCount}
-              </span>
-            )}
-          </button>
+              />
+              <span className="hidden sm:inline">Riwayat Hilang / Rusak / Kurang</span>
+              <span className="sm:hidden">Hilang / Rusak / Kurang</span>
+              {stats.incompleteCount > 0 && (
+                <span
+                  className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-black shrink-0 ${
+                    activeTab === 'DISCREPANCIES'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {stats.incompleteCount}
+                </span>
+              )}
+            </button>
+          )}
         </nav>
       </div>
 
@@ -526,7 +533,9 @@ export default function InstrumentSetsPage() {
               description={
                 search || filterStock !== 'ALL' || filterComplete !== 'ALL'
                   ? 'Tidak ada set instrumen yang cocok dengan kriteria pencarian / filter Anda.'
-                  : 'Belum ada set instrumen yang terdaftar. Tambahkan jenis set instrumen pertama Anda.'
+                  : isAdmin
+                  ? 'Belum ada set instrumen yang terdaftar. Tambahkan jenis set instrumen pertama Anda.'
+                  : 'Belum ada set instrumen yang terdaftar.'
               }
               action={
                 search || filterStock !== 'ALL' || filterComplete !== 'ALL' ? (
@@ -540,11 +549,11 @@ export default function InstrumentSetsPage() {
                   >
                     Reset Filter
                   </Button>
-                ) : (
+                ) : isAdmin ? (
                   <Button onClick={handleOpenCreate}>
                     <Plus size={16} /> Tambah Set Sekarang
                   </Button>
-                )
+                ) : null
               }
             />
           ) : (
@@ -553,12 +562,12 @@ export default function InstrumentSetsPage() {
                 <InstrumentSetCard
                   key={item.id}
                   set={item}
-                  canEdit={true}
+                  canEdit={isAdmin}
                   canDelete={isAdmin}
-                  onEdit={handleOpenEdit}
-                  onDelete={handleOpenDelete}
-                  onToggleCompleteness={handleOpenToggleCompleteness}
-                  onReportDiscrepancy={handleOpenReportDiscrepancy}
+                  onEdit={isAdmin ? handleOpenEdit : undefined}
+                  onDelete={isAdmin ? handleOpenDelete : undefined}
+                  onToggleCompleteness={!isUnit ? handleOpenToggleCompleteness : undefined}
+                  onReportDiscrepancy={!isUnit ? handleOpenReportDiscrepancy : undefined}
                 />
               ))}
             </div>
@@ -707,7 +716,7 @@ export default function InstrumentSetsPage() {
       )}
 
       {/* TAB 3: RIWAYAT INSTRUMEN HILANG, RUSAK, ATAU KURANG */}
-      {activeTab === 'DISCREPANCIES' && (
+      {!isUnit && activeTab === 'DISCREPANCIES' && (
         <div className="space-y-4">
           {/* Header Info & Filter */}
           <div className="flex flex-col gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3 sm:p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -898,69 +907,75 @@ export default function InstrumentSetsPage() {
         </div>
       )}
 
-      {/* Modal Tambah / Edit Set */}
-      <InstrumentSetModal
-        open={setModalOpen}
-        mode={setModalMode}
-        initialData={selectedSet}
-        onClose={() => setSetModalOpen(false)}
-        onSubmit={handleSaveSet}
-      />
+      {/* Modal Tambah / Edit Set (Hanya Admin / Kepala Instalasi) */}
+      {isAdmin && (
+        <InstrumentSetModal
+          open={setModalOpen}
+          mode={setModalMode}
+          initialData={selectedSet}
+          onClose={() => setSetModalOpen(false)}
+          onSubmit={handleSaveSet}
+        />
+      )}
 
-      {/* Modal Cepat Status Kelengkapan */}
-      <CompletenessModal
-        open={completenessModalOpen}
-        set={targetCompletenessSet}
-        onClose={() => setCompletenessModalOpen(false)}
-        onSubmit={handleSaveCompleteness}
-      />
+      {/* Modal Cepat Status Kelengkapan & Lapor Hilang/Rusak (Admin & Petugas CSSD) */}
+      {!isUnit && (
+        <>
+          <CompletenessModal
+            open={completenessModalOpen}
+            set={targetCompletenessSet}
+            onClose={() => setCompletenessModalOpen(false)}
+            onSubmit={handleSaveCompleteness}
+          />
 
-      {/* Modal Catat Hilang / Rusak / Kurang */}
-      <DiscrepancyModal
-        open={discrepancyModalOpen}
-        sets={sets}
-        selectedSet={targetDiscrepancySet}
-        onClose={() => setDiscrepancyModalOpen(false)}
-        onSubmit={handleSaveDiscrepancy}
-      />
+          <DiscrepancyModal
+            open={discrepancyModalOpen}
+            sets={sets}
+            selectedSet={targetDiscrepancySet}
+            onClose={() => setDiscrepancyModalOpen(false)}
+            onSubmit={handleSaveDiscrepancy}
+          />
 
-      {/* Modal Selesaikan Insiden */}
-      <DiscrepancyResolveModal
-        open={resolveModalOpen}
-        discrepancy={targetResolveItem}
-        onClose={() => setResolveModalOpen(false)}
-        onSubmit={handleSaveResolve}
-      />
+          <DiscrepancyResolveModal
+            open={resolveModalOpen}
+            discrepancy={targetResolveItem}
+            onClose={() => setResolveModalOpen(false)}
+            onSubmit={handleSaveResolve}
+          />
+        </>
+      )}
 
-      {/* Modal Konfirmasi Hapus */}
-      <Modal
-        open={deleteConfirmOpen}
-        onClose={() => setDeleteConfirmOpen(false)}
-        size="sm"
-        title="Hapus Set Instrumen?"
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => setDeleteConfirmOpen(false)}
-              disabled={deleting}
-            >
-              Batal
-            </Button>
-            <Button
-              variant="danger"
-              onClick={handleConfirmDelete}
-              loading={deleting}
-            >
-              Hapus
-            </Button>
-          </>
-        }
-      >
-        <p className="text-sm text-slate-600">
-          Apakah Anda yakin ingin menghapus <strong>{setToDelete?.name}</strong> beserta seluruh rincian instrumen di dalamnya?
-        </p>
-      </Modal>
+      {/* Modal Konfirmasi Hapus (Hanya Admin / Kepala Instalasi) */}
+      {isAdmin && (
+        <Modal
+          open={deleteConfirmOpen}
+          onClose={() => setDeleteConfirmOpen(false)}
+          size="sm"
+          title="Hapus Set Instrumen?"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setDeleteConfirmOpen(false)}
+                disabled={deleting}
+              >
+                Batal
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleConfirmDelete}
+                loading={deleting}
+              >
+                Hapus
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-slate-600">
+            Apakah Anda yakin ingin menghapus <strong>{setToDelete?.name}</strong> beserta seluruh rincian instrumen di dalamnya?
+          </p>
+        </Modal>
+      )}
     </div>
   );
 }

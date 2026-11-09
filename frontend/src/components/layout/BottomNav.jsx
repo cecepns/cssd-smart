@@ -1,15 +1,26 @@
 import { NavLink } from 'react-router-dom';
 import { BOTTOM_NAV } from '@/config/navigation';
+import { useAuth } from '@/context/AuthContext';
+
+const GRID_COLS = {
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
+};
 
 /** Navigasi bawah mobile dengan tema Navy Blue dan Champagne Gold sesuai gambar referensi. */
 export default function BottomNav() {
+  const { user, isAdmin } = useAuth();
+  const isUnit = user?.role === 'unit';
+  const items = BOTTOM_NAV.filter((item) => (!item.adminOnly || isAdmin) && (!isUnit || item.allowUnit));
+
   return (
     <nav
       aria-label="Navigasi cepat"
       className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-sky-400/30 bg-gradient-to-r from-[#001D5A] via-[#00338E] to-[#00226B] pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden shadow-2xl"
     >
-      <ul className="grid grid-cols-5 divide-x divide-white/10">
-        {BOTTOM_NAV.map((item) => (
+      <ul className={`grid ${GRID_COLS[items.length] || 'grid-cols-4'} divide-x divide-white/10`}>
+        {items.map((item) => (
           <li key={item.to}>
             <NavLink
               to={item.to}

@@ -34,7 +34,7 @@ export const NAV_SECTIONS = [
     title: 'Transaksi Barcode Steril',
     items: [
       { label: 'Alat Kotor Masuk', to: ROUTES.RECEIPTS, icon: ScanLine, allowUnit: true },
-      { label: 'Monitoring Set Instrumen', to: ROUTES.INSTRUMENT_SETS, icon: Layers },
+      { label: 'Monitoring Set Instrumen', to: ROUTES.INSTRUMENT_SETS, icon: Layers, allowUnit: true },
       { label: 'Distribusi Alat Steril', to: ROUTES.DIST_TOOLS, icon: Truck, allowUnit: true },
       { label: 'Distribusi Kasa Steril', to: ROUTES.DIST_GAUZE, icon: Boxes, allowUnit: true },
     ],
@@ -61,10 +61,10 @@ export const NAV_SECTIONS = [
   {
     title: 'Laporan',
     items: [
-      { label: 'Pusat Laporan Terpadu', to: ROUTES.REPORTS, icon: FileText },
-      { label: 'Laporan Alat Kotor', to: ROUTES.REPORT('alat-kotor'), icon: FileText },
-      { label: 'Laporan Distribusi Kasa', to: ROUTES.REPORT('distribusi-kasa'), icon: Boxes },
-      { label: 'Laporan DTT (RIUS)', to: ROUTES.REPORT('dtt-rius'), icon: Sparkles },
+      { label: 'Pusat Laporan Terpadu', to: ROUTES.REPORTS, icon: FileText, adminOnly: true },
+      { label: 'Laporan Alat Kotor', to: ROUTES.REPORT('alat-kotor'), icon: FileText, adminOnly: true },
+      { label: 'Laporan Distribusi Kasa', to: ROUTES.REPORT('distribusi-kasa'), icon: Boxes, adminOnly: true },
+      { label: 'Laporan DTT (RIUS)', to: ROUTES.REPORT('dtt-rius'), icon: Sparkles, adminOnly: true },
       { label: 'Laporan Ketertelusuran', to: ROUTES.TRACE, icon: History, allowUnit: true },
       { label: 'Pantau Status Alat Unit', to: ROUTES.UNIT_TRACKING, icon: ScanLine, allowUnit: true },
     ],
@@ -92,18 +92,18 @@ export const MENU_CARDS = [
   { title: 'Buku Kontrol Reuse DTT', desc: 'Buku kontrol riwayat pemakaian ulang dan batas siklus alat medis', to: ROUTES.DTT_CONTROL, icon: BookOpen, tone: 'purple' },
   { title: 'Indikator Sterilisasi', desc: 'Bowie-Dick, indikator kimia, biologi, dan verifikasi batch', to: ROUTES.VERIFICATIONS, icon: ShieldCheck, tone: 'purple' },
   { title: 'Stok BMHP Barcode', desc: 'Barang masuk, keluar, kedaluwarsa dan mutasi stok BMHP', to: ROUTES.BMHP, icon: Archive, tone: 'amber' },
-  { title: 'Pusat Laporan', desc: 'Rekap otomatis seluruh transaksi dan unduh PDF/Excel', to: ROUTES.REPORTS, icon: ClipboardList, tone: 'blue' },
+  { title: 'Pusat Laporan', desc: 'Rekap otomatis seluruh transaksi dan unduh PDF/Excel', to: ROUTES.REPORTS, icon: ClipboardList, tone: 'blue', adminOnly: true },
   { title: 'Generate & Cetak Barcode Loket', desc: 'Cetak 6 barcode transaksi dan barcode monitoring khusus unit untuk ditempel di loket CSSD', to: ROUTES.COUNTER_BARCODE, icon: QrCode, tone: 'amber', adminOnly: true },
-  { title: 'Monitoring Set Instrumen', desc: 'Monitoring kelengkapan instrumen dan riwayat alat rusak/hilang', to: ROUTES.INSTRUMENT_SETS, icon: Layers, tone: 'green' },
+  { title: 'Monitoring Set Instrumen', desc: 'Monitoring kelengkapan instrumen dan riwayat alat rusak/hilang', to: ROUTES.INSTRUMENT_SETS, icon: Layers, tone: 'green', allowUnit: true },
   { title: 'Ketertelusuran', desc: 'Lacak riwayat perjalanan alat lengkap dari barcode / batch', to: ROUTES.TRACE, icon: History, tone: 'purple', allowUnit: true },
   { title: 'Master Data & Satuan', desc: 'Pengelolaan unit, master satuan, jenis alat medis, dan mesin', to: ROUTES.MASTER_UNITS, icon: Building2, tone: 'red', adminOnly: true },
 ];
 
 /** Navigasi bawah pada layar mobile. */
 export const BOTTOM_NAV = [
-  { label: 'Beranda', to: ROUTES.HOME, icon: Home, end: true },
-  { label: 'Riwayat', to: ROUTES.TRACE, icon: History },
-  { label: 'Panduan', to: ROUTES.GUIDE, icon: ClipboardList },
-  { label: 'Unduhan', to: ROUTES.REPORTS, icon: FileText },
-  { label: 'Pengaturan', to: ROUTES.SETTINGS, icon: Settings },
+  { label: 'Beranda', to: ROUTES.HOME, icon: Home, end: true, allowUnit: true },
+  { label: 'Riwayat', to: ROUTES.TRACE, icon: History, allowUnit: true },
+  { label: 'Panduan', to: ROUTES.GUIDE, icon: ClipboardList, allowUnit: true },
+  { label: 'Unduhan', to: ROUTES.REPORTS, icon: FileText, adminOnly: true },
+  { label: 'Pengaturan', to: ROUTES.SETTINGS, icon: Settings, allowUnit: true },
 ];

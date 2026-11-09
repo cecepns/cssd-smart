@@ -36,6 +36,15 @@ export const API_ENDPOINTS = {
   PACKAGING_MATERIALS: crud('/packaging-materials'),
   ITEM_UNITS: crud('/item-units'),
 
+  // Lookup operasional read-only (dipakai form transaksi tanpa akses Master Data)
+  LOOKUPS: {
+    UNITS: '/lookups/units',
+    ITEMS: '/lookups/items',
+    OFFICERS: '/lookups/officers',
+    MACHINES: '/lookups/machines',
+    PACKAGING_MATERIALS: '/lookups/packaging-materials',
+  },
+
   // DTT (RIUS) - Penggunaan Ulang Alat Medis
   DTT_RECEIPTS: {
     ...crud('/dtt-receipts'),

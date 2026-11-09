@@ -16,6 +16,7 @@ import {
   Users,
 } from 'lucide-react';
 import { API_ENDPOINTS } from '@/utils/endpoints';
+import { useAuth } from '@/context/AuthContext';
 import { getList } from '@/utils/request';
 import { formatDate } from '@/utils/format';
 import BarcodeInput from '@/components/form/BarcodeInput';
@@ -29,6 +30,8 @@ import Button from '@/components/ui/Button';
  * 3. Menampilkan rincian isi set secara otomatis (isi instrumen lengkap per set).
  */
 export default function SterileSetSelector({ values, setValue, setValues, gauze = false }) {
+  const { user } = useAuth();
+  const isUnit = user?.role === 'unit';
   const [mode, setMode] = useState('SELECT'); // 'SELECT' | 'SCAN'
   const [readyList, setReadyList] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -39,10 +42,11 @@ export default function SterileSetSelector({ values, setValue, setValues, gauze 
   const [scanCode, setScanCode] = useState('');
   const [searchingCode, setSearchingCode] = useState(false);
 
-  // Ambil daftar unit untuk filter
+  // Ambil daftar unit untuk filter (hanya untuk petugas CSSD / admin)
   useEffect(() => {
+    if (isUnit) return;
     let active = true;
-    getList(API_ENDPOINTS.UNITS.LIST, { is_active: 1, limit: 100, sort_by: 'name', order: 'asc' })
+    getList(API_ENDPOINTS.LOOKUPS.UNITS, { is_active: 1, limit: 100, sort_by: 'name', order: 'asc' })
       .then((res) => {
         if (active && res.data) setUnits(res.data);
       })
@@ -50,7 +54,7 @@ export default function SterileSetSelector({ values, setValue, setValues, gauze 
     return () => {
       active = false;
     };
-  }, []);
+  }, [isUnit]);
 
   // Ambil daftar stok steril yang siap diambil
   const fetchReadyStock = async () => {
@@ -313,19 +317,21 @@ export default function SterileSetSelector({ values, setValue, setValues, gauze 
       {mode === 'SELECT' && (
         <div className="space-y-2.5">
           {/* Bar Filter Unit & Cari */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <select
-              value={unitFilter}
-              onChange={(e) => setUnitFilter(e.target.value)}
-              className="input-base text-xs font-medium py-1.5"
-            >
-              <option value="">Semua Unit Asal Penyerah</option>
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
+          <div className={`grid grid-cols-1 gap-2 ${isUnit ? '' : 'sm:grid-cols-2'}`}>
+            {!isUnit && (
+              <select
+                value={unitFilter}
+                onChange={(e) => setUnitFilter(e.target.value)}
+                className="input-base text-xs font-medium py-1.5"
+              >
+                <option value="">Semua Unit Asal Penyerah</option>
+                {units.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />

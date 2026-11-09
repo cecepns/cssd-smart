@@ -114,7 +114,7 @@ export default function InstrumentSetCard({
 
             {items.length === 0 ? (
               <p className="py-4 text-center text-xs text-slate-600">
-                Belum ada rincian instrumen. Klik edit untuk menambahkan.
+                Belum ada rincian instrumen.{canEdit ? ' Klik edit untuk menambahkan.' : ''}
               </p>
             ) : (
               <div className="divide-y divide-slate-100 max-h-56 overflow-y-auto pr-1">
@@ -144,36 +144,52 @@ export default function InstrumentSetCard({
       {/* Footer Kartu: Status Kelengkapan & Aksi */}
       <div className="mt-5 border-t border-slate-100 pt-3.5 space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {/* Badge Status Kelengkapan (bisa diklik untuk ubah cepat) */}
-          <button
-            type="button"
-            onClick={() => onToggleCompleteness?.(set)}
-            title="Klik untuk mengubah status kelengkapan"
-            className="group inline-flex items-center gap-1.5 transition-transform active:scale-95"
-          >
-            {isComplete ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 group-hover:bg-emerald-100 transition-colors">
-                <CheckCircle2 size={13} /> Lengkap
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 group-hover:bg-amber-100 transition-colors">
-                <AlertCircle size={13} /> Tidak Lengkap
-              </span>
-            )}
-          </button>
+          {/* Badge Status Kelengkapan (bisa diklik untuk ubah cepat oleh Petugas/Admin) */}
+          {onToggleCompleteness ? (
+            <button
+              type="button"
+              onClick={() => onToggleCompleteness(set)}
+              title="Klik untuk mengubah status kelengkapan"
+              className="group inline-flex items-center gap-1.5 transition-transform active:scale-95"
+            >
+              {isComplete ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 group-hover:bg-emerald-100 transition-colors">
+                  <CheckCircle2 size={13} /> Lengkap
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 group-hover:bg-amber-100 transition-colors">
+                  <AlertCircle size={13} /> Tidak Lengkap
+                </span>
+              )}
+            </button>
+          ) : (
+            <div className="inline-flex items-center gap-1.5">
+              {isComplete ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  <CheckCircle2 size={13} /> Lengkap
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                  <AlertCircle size={13} /> Tidak Lengkap
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Action buttons (Lapor Hilang/Rusak, Edit & Hapus) */}
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => onReportDiscrepancy?.(set)}
-              title="Catat instrumen hilang, rusak, atau kurang pada set ini"
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 transition-colors border border-amber-200"
-            >
-              <AlertTriangle size={12} className="shrink-0" />
-              <span className="hidden sm:inline">Lapor Kurang/Rusak</span>
-              <span className="sm:hidden">Lapor</span>
-            </button>
+            {onReportDiscrepancy && (
+              <button
+                type="button"
+                onClick={() => onReportDiscrepancy(set)}
+                title="Catat instrumen hilang, rusak, atau kurang pada set ini"
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 transition-colors border border-amber-200"
+              >
+                <AlertTriangle size={12} className="shrink-0" />
+                <span className="hidden sm:inline">Lapor Kurang/Rusak</span>
+                <span className="sm:hidden">Lapor</span>
+              </button>
+            )}
 
             {canEdit && (
               <button

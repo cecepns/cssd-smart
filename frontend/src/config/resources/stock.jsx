@@ -73,7 +73,7 @@ export const BMHP_TABS = [
   { label: 'Barang Masuk', to: ROUTES.BMHP_IN, icon: ArrowDownToLine },
   { label: 'Pengambilan', to: ROUTES.BMHP_OUT, icon: ArrowUpFromLine },
   { label: 'Stok BMHP', to: ROUTES.BMHP_STOCK, icon: Archive },
-  { label: 'Laporan', to: ROUTES.BMHP_REPORT, icon: ClipboardList },
+  { label: 'Laporan', to: ROUTES.BMHP_REPORT, icon: ClipboardList, adminOnly: true },
 ];
 
 export const BMHP_CATEGORIES = [
@@ -414,7 +414,7 @@ export const bmhpOutConfig = {
       { name: 'quantity', label: 'Jumlah diambil', type: 'number', required: true, min: 1, default: 1 },
       {
         type: 'remote-select', name: 'unit_id', label: 'Unit pemakai', placeholder: 'Pilih unit (opsional)...',
-        optionsEndpoint: API_ENDPOINTS.UNITS.LIST, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+        optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
       },
       officerField,
       dateField,

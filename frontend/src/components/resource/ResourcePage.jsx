@@ -27,7 +27,8 @@ const CLOSED = { open: false, mode: 'create', row: null };
  * Lihat folder src/config/resources untuk contoh konfigurasi.
  */
 export default function ResourcePage({ config }) {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const isUnit = user?.role === 'unit';
   const list = useList(config.endpoint.LIST, {
     fixedParams: config.fixedParams,
     defaultSort: config.defaultSort,
@@ -41,7 +42,7 @@ export default function ResourcePage({ config }) {
   const canCreate = writable && !config.noCreate;
   const canEdit = writable && Boolean(config.canEdit);
   const canEditRow = (row) => canEdit && (config.canEditRow ? config.canEditRow(row) : true);
-  const canDelete = (row) => writable && (config.adminOnlyDelete ? isAdmin : true) && Boolean(config.canDelete) && (config.canDeleteRow ? config.canDeleteRow(row) : true);
+  const canDelete = (row) => !isUnit && writable && (config.adminOnlyDelete ? isAdmin : true) && Boolean(config.canDelete) && (config.canDeleteRow ? config.canDeleteRow(row) : true);
 
   const closeModal = useCallback(() => setModal(CLOSED), []);
 
@@ -89,7 +90,7 @@ export default function ResourcePage({ config }) {
 
   const hasFilters = Boolean(list.searchInput) || Object.values(list.filters).some(Boolean);
   const showActions = Boolean(
-    config.label || config.traceField || canEdit || (config.canDelete && writable && (config.adminOnlyDelete ? isAdmin : true))
+    config.label || config.traceField || canEdit || (!isUnit && config.canDelete && writable && (config.adminOnlyDelete ? isAdmin : true))
   );
 
   const renderActions = showActions
@@ -150,7 +151,7 @@ export default function ResourcePage({ config }) {
                   Cetak
                 </Button>
               )}
-              {config.exportable !== false && (
+              {config.exportable !== false && isAdmin && (
                 <Button variant="secondary" icon={Download} loading={exporting} onClick={handleExport}>
                   Unduh CSV
                 </Button>
