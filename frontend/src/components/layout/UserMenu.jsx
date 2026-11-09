@@ -11,6 +11,13 @@ export default function UserMenu({ onLogout }) {
   const ref = useRef(null);
   useClickOutside(ref, () => setOpen(false), open);
 
+  const displayLabel =
+    user?.role === 'admin'
+      ? 'Admin'
+      : user?.role === 'unit'
+      ? user?.unit_name || user?.name?.split(' ')[0] || 'Unit'
+      : user?.name?.split(' ')[0] || 'Petugas';
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -18,13 +25,13 @@ export default function UserMenu({ onLogout }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label="Menu pengguna"
-        className="flex h-10 items-center gap-2 rounded-xl bg-white pl-1.5 pr-2 text-slate-700 shadow-sm transition hover:bg-slate-100 sm:pr-3"
+        className="flex h-10 items-center gap-2 rounded-full bg-white pl-1.5 pr-2.5 text-[#002266] shadow-md transition hover:bg-sky-50 sm:pr-3.5"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-sky-100 text-[#0044AA]">
           <User size={16} />
         </span>
-        <span className="hidden text-sm font-bold capitalize sm:block">{user?.role === 'admin' ? 'Admin' : user?.name?.split(' ')[0]}</span>
-        <ChevronDown size={15} className={`hidden text-slate-400 transition sm:block ${open ? 'rotate-180' : ''}`} />
+        <span className="hidden max-w-[130px] truncate text-sm font-bold capitalize sm:block">{displayLabel}</span>
+        <ChevronDown size={15} className={`hidden text-slate-500 transition sm:block ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (

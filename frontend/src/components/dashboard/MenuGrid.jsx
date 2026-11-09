@@ -24,15 +24,15 @@ export default function MenuGrid() {
   return (
     <section aria-labelledby="menu-utama">
       <div className="mb-3.5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#003399] to-[#0077E6] text-white shadow-[0_4px_12px_rgba(0,85,196,0.3)]">
             <LayoutGrid size={18} />
           </span>
           <div>
-            <h2 id="menu-utama" className="text-lg font-extrabold text-slate-900">
+            <h2 id="menu-utama" className="text-lg font-extrabold text-[#002266]">
               Menu Utama {isUnit ? `(${user?.unit_name || 'Unit Luar'})` : ''}
             </h2>
-            <p className="text-xs text-slate-500">Pilih modul operasional atau transaksi yang ingin dijalankan</p>
+            <p className="text-xs font-medium text-slate-600">Pilih modul operasional atau transaksi yang ingin dijalankan</p>
           </div>
         </div>
         <SearchInput className="w-full sm:w-72" value={query} onChange={setQuery} placeholder="Cari menu..." />
@@ -50,20 +50,20 @@ export default function MenuGrid() {
               <Link
                 key={card.title}
                 to={card.to}
-                className={`group flex items-center gap-3.5 rounded-2xl border bg-white p-3.5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${tone.soft}`}
+                className={`group flex items-center gap-3.5 rounded-2xl border p-3.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${tone.soft}`}
               >
-                <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-xs transition group-hover:scale-105 ${tone.solid}`}>
+                <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white transition group-hover:scale-105 ${tone.solid}`}>
                   <card.icon size={22} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className={`block truncate text-sm font-extrabold text-slate-900 transition group-hover:${tone.text}`}>
+                  <span className={`block truncate text-sm font-extrabold text-slate-900 transition ${tone.hoverText}`}>
                     {card.title}
                   </span>
-                  <span className="mt-0.5 block text-xs leading-snug text-slate-500 line-clamp-2">
+                  <span className="mt-0.5 block text-xs leading-snug text-slate-600 line-clamp-2">
                     {card.desc}
                   </span>
                 </span>
-                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white shadow-xs transition group-hover:translate-x-1 ${tone.solid}`}>
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition group-hover:translate-x-1 ${tone.solid}`}>
                   <ChevronRight size={16} strokeWidth={2.5} />
                 </span>
               </Link>

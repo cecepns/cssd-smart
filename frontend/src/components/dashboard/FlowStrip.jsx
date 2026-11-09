@@ -24,16 +24,16 @@ export default function FlowStrip({ data }) {
     <div className="space-y-2.5">
       {/* Header bar Live Workflow */}
       <div className="flex items-center justify-between px-1">
-        <div className="inline-flex items-center gap-2 rounded-full bg-[#0A192F] px-4 py-1.5 text-xs font-bold text-white shadow-xs">
-          <span className="h-2 w-2 rounded-full bg-[#E5C07B]" />
+        <div className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#002D85] via-[#0055C4] to-[#0077E6] px-4 py-1.5 text-xs font-extrabold text-white shadow-[0_4px_14px_rgba(0,85,196,0.28)]">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#FFD028] shadow-[0_0_8px_rgba(255,208,40,0.8)]" />
           <span>Alur Proses CSSD (Live Workflow)</span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-600">
+        <div className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white/95 px-3 py-1 text-xs font-extrabold text-emerald-600 shadow-xs">
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
           </span>
-          <span>((•)) Live</span>
+          <span>Live</span>
         </div>
       </div>
 
@@ -47,10 +47,10 @@ export default function FlowStrip({ data }) {
               <li key={stage.no} className="flex items-center gap-1.5">
                 <Link
                   to={stage.to}
-                  className={`flex h-full w-40 flex-col rounded-2xl border p-3 transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${tone.soft}`}
+                  className={`flex h-full w-40 flex-col rounded-2xl border p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${tone.soft}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-extrabold text-white shadow-xs ${tone.solid}`}>
+                    <span className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-extrabold text-white ${tone.solid}`}>
                       {stage.no}
                     </span>
                     {stage.barcode && (
@@ -60,14 +60,14 @@ export default function FlowStrip({ data }) {
                     )}
                   </div>
                   <p className="mt-2 text-sm font-bold leading-snug text-slate-900">{stage.label}</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{stage.sub}</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-slate-600">{stage.sub}</p>
                   {count && (
                     <p className={`mt-auto pt-2 text-[11px] ${tone.text}`}>
                       <b className="text-sm font-extrabold">{formatNumber(count.value)}</b> {count.text}
                     </p>
                   )}
                 </Link>
-                {index < FLOW_STAGES.length - 1 && <ArrowRight size={16} className="shrink-0 text-slate-300" />}
+                {index < FLOW_STAGES.length - 1 && <ArrowRight size={17} className="shrink-0 text-sky-400" />}
               </li>
             );
           })}

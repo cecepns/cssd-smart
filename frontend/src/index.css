@@ -7,19 +7,19 @@
     -webkit-tap-highlight-color: transparent;
   }
   body {
-    @apply bg-slate-50 text-slate-800 antialiased;
+    @apply bg-[#E4F2FF] text-slate-800 antialiased;
   }
 }
 
 @layer components {
   .input-base {
-    @apply block h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 transition placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500;
+    @apply block h-10 w-full rounded-lg border border-sky-200 bg-white px-3 text-sm text-slate-800 transition placeholder:text-slate-400 focus:border-[#0055C4] focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500;
   }
   .input-error {
     @apply border-rose-400 focus:border-rose-500 focus:ring-rose-200;
   }
   .card {
-    @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+    @apply rounded-2xl border border-sky-200/80 bg-white/95 shadow-[0_6px_24px_-6px_rgba(0,75,180,0.09)];
   }
   .scrollbar-thin::-webkit-scrollbar {
     height: 6px;

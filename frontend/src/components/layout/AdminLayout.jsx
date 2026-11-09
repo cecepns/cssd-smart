@@ -44,7 +44,14 @@ export default function AdminLayout() {
   }, [logout]);
 
   return (
-    <div className="min-h-screen">
+    <div className="relative min-h-screen bg-gradient-to-br from-[#D6ECFF] via-[#EFF7FF] to-[#CBE5FF]">
+      {/* Lapisan cahaya latar agar tampilan cerah, segar, dan hidup */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+        <div className="absolute -left-24 top-12 h-96 w-96 rounded-full bg-sky-300/25 blur-3xl" />
+        <div className="absolute right-0 top-1/4 h-[28rem] w-[28rem] rounded-full bg-cyan-200/30 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-blue-200/25 blur-3xl" />
+      </div>
+
       <Topbar
         collapsed={collapsed}
         mobileOpen={mobileOpen}
@@ -54,7 +61,7 @@ export default function AdminLayout() {
       />
       <Sidebar collapsed={collapsed} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} onLogout={handleLogout} />
 
-      <main className={`pt-16 transition-[padding] duration-300 ease-in-out ${collapsed ? 'lg:pl-[72px]' : 'lg:pl-72'}`}>
+      <main className={`relative pt-16 transition-[padding] duration-300 ease-in-out ${collapsed ? 'lg:pl-[72px]' : 'lg:pl-72'}`}>
         <div className="mx-auto w-full max-w-[1500px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
           <Outlet />
         </div>

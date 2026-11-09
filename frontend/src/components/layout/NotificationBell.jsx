@@ -41,11 +41,11 @@ export default function NotificationBell() {
         onClick={() => setOpen((v) => !v)}
         aria-label="Notifikasi"
         aria-expanded={open}
-        className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm transition hover:bg-slate-100"
+        className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#002266] shadow-md transition hover:bg-sky-50"
       >
         <Bell size={19} />
         {badge > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[11px] font-bold text-white ring-2 ring-brand-800 animate-pulse">
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[11px] font-bold text-white ring-2 ring-[#002D85] animate-pulse">
             {badge > 99 ? '99+' : badge}
           </span>
         )}

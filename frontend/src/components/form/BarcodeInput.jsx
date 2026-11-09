@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScanLine, Camera, CameraOff } from 'lucide-react';
+import { ScanLine, QrCode, Camera, CameraOff } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import useBarcodeScanner from '@/hooks/useBarcodeScanner';
 
@@ -27,7 +27,7 @@ function CameraScanner({ open, onClose, onDetect }) {
  * Input barcode: ketik manual, scanner USB/Bluetooth (akhiri dengan Enter), atau kamera HP.
  * onCommit dipanggil saat Enter ditekan / barcode terdeteksi.
  */
-export default function BarcodeInput({ value, onChange, onCommit, placeholder, disabled, hasError }) {
+export default function BarcodeInput({ value, onChange, onCommit, placeholder, disabled, hasError, hero = false }) {
   const [cameraOpen, setCameraOpen] = useState(false);
 
   const handleDetect = (code) => {
@@ -40,7 +40,11 @@ export default function BarcodeInput({ value, onChange, onCommit, placeholder, d
     <>
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <ScanLine size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          {hero ? (
+            <QrCode size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#00338D]" />
+          ) : (
+            <ScanLine size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          )}
           <input
             type="text"
             value={value}
@@ -55,7 +59,13 @@ export default function BarcodeInput({ value, onChange, onCommit, placeholder, d
               }
             }}
             onBlur={() => value && onCommit?.(value)}
-            className={`input-base pl-9 font-mono ${hasError ? 'input-error' : ''}`}
+            className={
+              hero
+                ? `block h-11 w-full rounded-xl border border-sky-300 bg-white pl-10 pr-3 font-mono text-sm text-slate-800 shadow-inner transition placeholder:font-sans placeholder:text-slate-400 focus:border-[#0055C4] focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-slate-100 ${
+                    hasError ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : ''
+                  }`
+                : `input-base pl-9 font-mono ${hasError ? 'input-error' : ''}`
+            }
           />
         </div>
         <button
@@ -64,9 +74,13 @@ export default function BarcodeInput({ value, onChange, onCommit, placeholder, d
           onClick={() => setCameraOpen(true)}
           title="Scan dengan kamera"
           aria-label="Scan dengan kamera"
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          className={
+            hero
+              ? 'inline-flex h-11 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#38BDF8] to-[#0284C7] text-white shadow-[0_4px_12px_rgba(2,132,199,0.35)] transition hover:brightness-110 disabled:opacity-50'
+              : 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50'
+          }
         >
-          <Camera size={18} />
+          <Camera size={hero ? 20 : 18} />
         </button>
       </div>
       <CameraScanner open={cameraOpen} onClose={() => setCameraOpen(false)} onDetect={handleDetect} />

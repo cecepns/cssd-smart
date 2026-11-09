@@ -5,15 +5,15 @@ import { CheckCircle2 } from 'lucide-react';
 export default function InfoPanel({ title, icon: Icon, tone = 'text-slate-600 bg-slate-100', rows, emptyText, to, linkLabel = 'Lihat semua' }) {
   return (
     <section className="card flex flex-col overflow-hidden">
-      <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+      <header className="flex items-center justify-between gap-3 border-b border-sky-100 bg-gradient-to-r from-sky-50/75 to-white px-4 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tone}`}>
             <Icon size={16} />
           </span>
-          <h3 className="truncate text-sm font-extrabold text-slate-900">{title}</h3>
+          <h3 className="truncate text-sm font-extrabold text-[#002266]">{title}</h3>
         </div>
         {to && (
-          <Link to={to} className="shrink-0 text-xs font-bold text-brand-700 hover:underline">
+          <Link to={to} className="shrink-0 text-xs font-bold text-[#0055C4] hover:underline">
             {linkLabel}
           </Link>
         )}

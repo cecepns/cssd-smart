@@ -6,7 +6,7 @@ export default function BottomNav() {
   return (
     <nav
       aria-label="Navigasi cepat"
-      className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-[#D4AF37]/40 bg-[#0A192F] pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden shadow-2xl"
+      className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-sky-400/30 bg-gradient-to-r from-[#001D5A] via-[#00338E] to-[#00226B] pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden shadow-2xl"
     >
       <ul className="grid grid-cols-5 divide-x divide-white/10">
         {BOTTOM_NAV.map((item) => (
@@ -16,7 +16,7 @@ export default function BottomNav() {
               end={item.end}
               className={({ isActive }) =>
                 `flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-bold transition-all ${
-                  isActive ? 'text-[#E5C07B]' : 'text-slate-300 hover:text-white'
+                  isActive ? 'text-[#FFD028]' : 'text-sky-100/80 hover:text-white'
                 }`
               }
             >
@@ -24,7 +24,7 @@ export default function BottomNav() {
                 <>
                   <span
                     className={`flex h-7 w-11 items-center justify-center rounded-full transition-all ${
-                      isActive ? 'bg-[#E5C07B] text-[#0A192F] shadow-sm' : ''
+                      isActive ? 'bg-gradient-to-r from-[#FFE36E] to-[#FFD028] text-[#001D5A] shadow-sm' : ''
                     }`}
                   >
                     <item.icon size={19} />
