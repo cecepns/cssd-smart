@@ -246,10 +246,14 @@ export default function LoginPage() {
                 di CSSD{' '}
                 <span className="italic text-[#F5A600]">SMART</span>
               </h2>
-              <p className="mt-2 text-xs font-extrabold uppercase tracking-[0.14em] text-[#00338E]">
-                RSUD SERPONG UTARA
-              </p>
-              <p className="mt-1 text-xs font-bold text-[#1E3A5F] sm:text-sm">
+              <div className="mx-auto mt-2.5 flex max-w-xs items-center justify-center gap-2.5">
+                <span className="h-[2px] flex-1 rounded-full bg-gradient-to-r from-transparent to-[#F5B000]" />
+                <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#001F5F] sm:text-xs">
+                  RSUD SERPONG UTARA
+                </p>
+                <span className="h-[2px] flex-1 rounded-full bg-gradient-to-l from-transparent to-[#F5B000]" />
+              </div>
+              <p className="mt-1.5 text-xs font-bold text-[#1E3A5F] sm:text-sm">
                 Silakan masuk untuk mengakses sistem
               </p>
             </div>
