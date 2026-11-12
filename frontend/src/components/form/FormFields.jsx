@@ -8,32 +8,53 @@ import ImageInput from '@/components/form/ImageInput';
 const defaultLabel = (row) => row.name;
 const defaultValue = (row) => row.id;
 
-/** Select dengan opsi dari API (maks 100 data terbaru). */
-function RemoteSelect({ field, value, onChange, disabled, hasError }) {
-  const { data, loading, error } = useFetch(field.optionsEndpoint, { limit: 100, sort_by: 'id', order: 'desc', ...(field.optionsParams || {}) });
-  const rows = data || [];
+/** Select dengan opsi dari API (maks 100 data terbaru). Mendukung optionsParams dinamis & enabledWhen. */
+function RemoteSelect({ field, value, values, onChange, disabled, hasError }) {
+  const isEnabled = field.enabledWhen ? Boolean(field.enabledWhen(values)) : true;
+  const resolvedParams = typeof field.optionsParams === 'function' ? field.optionsParams(values) : (field.optionsParams || {});
+  const { data, loading, error } = useFetch(
+    field.optionsEndpoint,
+    { limit: 100, sort_by: 'id', order: 'desc', ...resolvedParams },
+    { enabled: isEnabled }
+  );
+  const rows = isEnabled ? (data || []) : [];
   const getLabel = field.optionLabel || defaultLabel;
   const getValue = field.optionValue || defaultValue;
   const autoFilledRef = useRef(false);
+  const paramsKey = JSON.stringify(resolvedParams);
 
   useEffect(() => {
-    if (field.autoFillOnMatch && !autoFilledRef.current && value && rows.length) {
+    autoFilledRef.current = false;
+  }, [paramsKey]);
+
+  useEffect(() => {
+    if (field.autoFillOnMatch && isEnabled && !autoFilledRef.current && value && rows.length) {
       const match = rows.find((r) => String(getValue(r)) === String(value));
       if (match) {
         autoFilledRef.current = true;
         onChange(value, match);
       }
     }
-  }, [field.autoFillOnMatch, getValue, onChange, rows, value]);
+  }, [field.autoFillOnMatch, isEnabled, getValue, onChange, rows, value]);
+
+  const emptyLabel = !isEnabled
+    ? (field.disabledPlaceholder || 'Pilih unit terlebih dahulu...')
+    : loading
+      ? 'Memuat...'
+      : error
+        ? 'Gagal memuat opsi'
+        : rows.length === 0 && field.emptyText
+          ? field.emptyText
+          : (field.placeholder || 'Pilih...');
 
   return (
     <select
       value={value ?? ''}
-      disabled={disabled || loading}
+      disabled={disabled || !isEnabled || loading}
       onChange={(e) => onChange(e.target.value, rows.find((r) => String(getValue(r)) === e.target.value))}
       className={`input-base ${hasError ? 'input-error' : ''}`}
     >
-      <option value="">{loading ? 'Memuat...' : error ? 'Gagal memuat opsi' : field.placeholder || 'Pilih...'}</option>
+      <option value="">{emptyLabel}</option>
       {rows.map((row) => (
         <option key={getValue(row)} value={getValue(row)}>
           {getLabel(row)}
@@ -44,8 +65,9 @@ function RemoteSelect({ field, value, onChange, disabled, hasError }) {
 }
 
 /** Daftar checkbox dengan opsi dari API (mis. pilih paket yang akan disterilkan). */
-function RemoteMultiCheck({ field, value = [], onChange, disabled }) {
-  const { data, loading, error } = useFetch(field.optionsEndpoint, { limit: 100, sort_by: 'id', order: 'asc', ...(field.optionsParams || {}) });
+function RemoteMultiCheck({ field, value = [], values, onChange, disabled }) {
+  const resolvedParams = typeof field.optionsParams === 'function' ? field.optionsParams(values) : (field.optionsParams || {});
+  const { data, loading, error } = useFetch(field.optionsEndpoint, { limit: 100, sort_by: 'id', order: 'asc', ...resolvedParams });
   const rows = data || [];
   const getLabel = field.optionLabel || defaultLabel;
   const getValue = field.optionValue || defaultValue;
@@ -113,9 +135,9 @@ function FieldInput({ field, value, error, values, setValue, setValues, disabled
         </select>
       );
     case 'remote-select':
-      return <RemoteSelect field={field} value={value} disabled={disabled} hasError={hasError} onChange={handleChange} />;
+      return <RemoteSelect field={field} value={value} values={values} disabled={disabled} hasError={hasError} onChange={handleChange} />;
     case 'multicheck':
-      return <RemoteMultiCheck field={field} value={value} disabled={disabled} onChange={handleChange} />;
+      return <RemoteMultiCheck field={field} value={value} values={values} disabled={disabled} onChange={handleChange} />;
     case 'checkbox':
       return (
         <label className="flex h-10 cursor-pointer items-center gap-2.5 text-sm text-slate-700">

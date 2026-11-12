@@ -11,6 +11,7 @@ import Button, { IconButton } from '@/components/ui/Button';
 import FormModal from '@/components/form/FormModal';
 import BarcodeLabel from '@/components/form/BarcodeLabel';
 import { useAuth } from '@/context/AuthContext';
+import useFetch from '@/hooks/useFetch';
 import useList from '@/hooks/useList';
 import { confirmToast } from '@/utils/confirm';
 import { formatClock, todayISO } from '@/utils/format';
@@ -18,6 +19,28 @@ import { createData, downloadFile, getErrorMessage, removeData, updateData } fro
 import { ROUTES } from '@/config/routes';
 
 const CLOSED = { open: false, mode: 'create', row: null };
+
+function RemoteFilterSelect({ filter, value, onChange }) {
+  const { data } = useFetch(filter.optionsEndpoint, { limit: 100, sort_by: 'name', order: 'asc', ...(filter.optionsParams || {}) });
+  const rows = data || [];
+  const getValue = filter.optionValue || ((r) => r.id);
+  const getLabel = filter.optionLabel || ((r) => r.name);
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={filter.label}
+      className="input-base w-auto min-w-[9rem] max-w-full"
+    >
+      <option value="">Semua {filter.label}</option>
+      {rows.map((row) => (
+        <option key={getValue(row)} value={getValue(row)}>
+          {getLabel(row)}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 /**
  * Halaman data generik berbasis konfigurasi: search (debounce), filter, sorting,
@@ -115,25 +138,34 @@ export default function ResourcePage({ config }) {
       )
     : null;
 
-  const filterSelects = (config.filters || []).map((filter) => (
-    <select
-      key={filter.name}
-      value={list.filters[filter.name] ?? ''}
-      onChange={(e) => list.changeFilter(filter.name, e.target.value)}
-      aria-label={filter.label}
-      className="input-base w-auto min-w-[9rem] max-w-full"
-    >
-      <option value="">Semua {filter.label}</option>
-      {filter.options.map((opt) => {
-        const item = typeof opt === 'string' ? { value: opt, label: opt } : opt;
-        return (
-          <option key={item.value} value={item.value}>
-            {item.label}
-          </option>
-        );
-      })}
-    </select>
-  ));
+  const filterSelects = (config.filters || []).map((filter) =>
+    filter.optionsEndpoint ? (
+      <RemoteFilterSelect
+        key={filter.name}
+        filter={filter}
+        value={list.filters[filter.name] ?? ''}
+        onChange={(val) => list.changeFilter(filter.name, val)}
+      />
+    ) : (
+      <select
+        key={filter.name}
+        value={list.filters[filter.name] ?? ''}
+        onChange={(e) => list.changeFilter(filter.name, e.target.value)}
+        aria-label={filter.label}
+        className="input-base w-auto min-w-[9rem] max-w-full"
+      >
+        <option value="">Semua {filter.label}</option>
+        {(filter.options || []).map((opt) => {
+          const item = typeof opt === 'string' ? { value: opt, label: opt } : opt;
+          return (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          );
+        })}
+      </select>
+    )
+  );
 
   return (
     <div>
@@ -200,6 +232,27 @@ export default function ResourcePage({ config }) {
                   value={list.filters.date_to ?? ''}
                   min={list.filters.date_from || undefined}
                   onChange={(e) => list.changeFilter('date_to', e.target.value)}
+                  className="input-base w-auto"
+                />
+              </div>
+            )}
+            {config.timeFilter && (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="time"
+                  aria-label="Dari jam"
+                  title="Dari jam proses"
+                  value={list.filters.time_from ?? ''}
+                  onChange={(e) => list.changeFilter('time_from', e.target.value)}
+                  className="input-base w-auto"
+                />
+                <span className="text-xs text-slate-400">s/d</span>
+                <input
+                  type="time"
+                  aria-label="Sampai jam"
+                  title="Sampai jam proses"
+                  value={list.filters.time_to ?? ''}
+                  onChange={(e) => list.changeFilter('time_to', e.target.value)}
                   className="input-base w-auto"
                 />
               </div>

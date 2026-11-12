@@ -2,7 +2,7 @@ import { Droplets, Flame, Package, ScanLine, ShieldCheck, Wind } from 'lucide-re
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { INDICATOR_OPTIONS, PACKAGE_TYPES, STAGE_LABELS, UNIT_LABELS, WASH_METHODS } from '@/utils/constants';
 import { todayISO, formatDate } from '@/utils/format';
-import { badge, bold, date, mono, qty, yesNo } from '@/config/cells.jsx';
+import { badge, bold, date, durationBadge, mono, qty, timeWindow, yesNo } from '@/config/cells.jsx';
 import { officerSelectField } from '@/config/officerField';
 
 const fieldDate = (name = 'date', label = 'Tanggal') => ({ name, label, type: 'date', required: true, default: todayISO });
@@ -37,13 +37,17 @@ export const receiptsConfig = {
   createLabel: 'Terima Alat Kotor',
   defaultSort: 'id',
   dateFilter: true,
+  timeFilter: true,
   filters: [
+    { name: 'unit_id', label: 'Unit Asal', optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS },
     { name: 'status', label: 'Status', options: ['Diterima', 'Proses', 'Selesai', 'Karantina'] },
     { name: 'stage', label: 'Tahap', options: Object.entries(STAGE_LABELS).map(([value, label]) => ({ value, label })) },
   ],
   columns: [
     { key: 'barcode', label: 'Barcode', sortable: true, render: mono('barcode') },
     { key: 'receipt_date', label: 'Tanggal', sortable: true, render: date('receipt_date') },
+    { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
+    { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     { key: 'unit_name', label: 'Unit Asal', sortable: true },
     { key: 'item_name', label: 'Jenis Alat', sortable: true, render: bold('item_name') },
     { key: 'quantity', label: 'Jumlah', sortable: true, render: qty() },
@@ -60,22 +64,49 @@ export const receiptsConfig = {
   form: {
     size: 'lg',
     createTitle: 'Terima Alat Kotor',
-    subtitle: 'Barcode dibuat otomatis (format AK-DDMMYY-001) setelah disimpan.',
+    subtitle: 'Barcode dibuat otomatis (format AK-DDMMYY-001) dan jam mulai/selesai dicatat otomatis. Pilih Unit Asal terlebih dahulu agar daftar alat sesuai unit.',
     fields: [
       fieldDate('receipt_date'),
       {
         type: 'remote-select', name: 'unit_id', label: 'Unit asal', required: true, placeholder: 'Pilih unit...',
         optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
         default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
+        onChange: (next, { values, setValues }) => {
+          if (String(next || '') !== String(values?.unit_id || '')) {
+            setValues({ item_id: '', item_name: '' });
+          }
+        },
       },
       {
-        type: 'remote-select', name: 'item_id', label: 'Pilih jenis alat / set instrumen', placeholder: 'Pilih alat atau set instrumen...',
-        optionsEndpoint: API_ENDPOINTS.LOOKUPS.ITEMS, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
-        optionLabel: (r) => `${r.name} (${r.category})`,
-        onChange: (_, { option, setValues }) => option && setValues({
-          item_name: option.name,
-          unit_label: option.category === 'Set Instrumen' ? 'set' : option.category === 'Alat Satuan' ? 'pcs' : 'paket',
+        type: 'remote-select',
+        name: 'item_id',
+        label: 'Pilih jenis alat / set instrumen (sesuai unit)',
+        placeholder: 'Pilih alat atau set instrumen unit...',
+        disabledPlaceholder: 'Pilih Unit Asal terlebih dahulu...',
+        emptyText: 'Belum ada alat terdaftar untuk unit ini di Master Alat',
+        enabledWhen: (vals) => Boolean(vals?.unit_id),
+        optionsEndpoint: API_ENDPOINTS.LOOKUPS.ITEMS,
+        optionsParams: (vals) => ({
+          is_active: 1,
+          sort_by: 'name',
+          order: 'asc',
+          process_type: 'Steril',
+          require_unit: 1,
+          unit_id: vals?.unit_id || '',
         }),
+        optionLabel: (r) => `${r.name} (${r.category})`,
+        onChange: (_, { option, setValues }) => {
+          if (!option) return;
+          const lower = String(option.unit_label || '').toLowerCase();
+          const unitLabel = UNIT_LABELS.includes(lower)
+            ? lower
+            : option.category === 'Set Instrumen'
+              ? 'set'
+              : option.category === 'Alat Satuan'
+                ? 'pcs'
+                : 'paket';
+          setValues({ item_name: option.name, unit_label: unitLabel });
+        },
       },
       { name: 'item_name', label: 'Nama alat / set', required: true, maxLength: 150, placeholder: 'mis. SET LAPAROTOMI' },
       { name: 'quantity', label: 'Jumlah', type: 'number', required: true, min: 1, default: 1 },
@@ -105,9 +136,15 @@ export const washingsConfig = {
   searchPlaceholder: 'Cari barcode, alat, petugas...',
   createLabel: 'Catat Pencucian',
   dateFilter: true,
-  filters: [{ name: 'method', label: 'Metode', options: WASH_METHODS }],
+  timeFilter: true,
+  filters: [
+    { name: 'unit_id', label: 'Unit Asal', optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS },
+    { name: 'method', label: 'Metode', options: WASH_METHODS },
+  ],
   columns: [
     { key: 'wash_date', label: 'Tanggal', sortable: true, render: date('wash_date') },
+    { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
+    { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     { key: 'receipt_barcode', label: 'Barcode Alat Kotor', sortable: true, render: mono('receipt_barcode') },
     { key: 'item_name', label: 'Jenis Alat', sortable: true, render: bold('item_name') },
     { key: 'unit_name', label: 'Unit Asal' },
@@ -145,11 +182,18 @@ export const dryingsConfig = {
   searchPlaceholder: 'Cari barcode, alat, petugas...',
   createLabel: 'Catat Pemeriksaan',
   dateFilter: true,
-  filters: [{ name: 'function_ok', label: 'Fungsi', options: [{ value: '1', label: 'Fungsi baik' }, { value: '0', label: 'Fungsi tidak baik' }] }],
+  timeFilter: true,
+  filters: [
+    { name: 'unit_id', label: 'Unit Asal', optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS },
+    { name: 'function_ok', label: 'Fungsi', options: [{ value: '1', label: 'Fungsi baik' }, { value: '0', label: 'Fungsi tidak baik' }] },
+  ],
   columns: [
     { key: 'dry_date', label: 'Tanggal', sortable: true, render: date('dry_date') },
+    { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
+    { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     { key: 'receipt_barcode', label: 'Barcode Alat Kotor', sortable: true, render: mono('receipt_barcode') },
     { key: 'item_name', label: 'Jenis Alat', sortable: true, render: bold('item_name') },
+    { key: 'unit_name', label: 'Unit Asal' },
     { key: 'is_dry', label: 'Kering', render: yesNo('is_dry', 'Ya', 'Tidak') },
     { key: 'no_rust', label: 'Bebas Karat/Noda', render: yesNo('no_rust', 'Ya', 'Tidak') },
     { key: 'function_ok', label: 'Fungsi Baik', render: yesNo('function_ok', 'Ya', 'Tidak') },
@@ -187,14 +231,19 @@ export const packagingsConfig = {
   searchPlaceholder: 'Cari label, alat, bahan, petugas...',
   createLabel: 'Catat Pengemasan',
   dateFilter: true,
+  timeFilter: true,
   filters: [
+    { name: 'unit_id', label: 'Unit Asal', optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS },
     { name: 'package_type', label: 'Jenis', options: PACKAGE_TYPES },
     { name: 'status', label: 'Status', options: ['Dikemas', 'Disterilkan', 'Lulus', 'Karantina', 'Terdistribusi'] },
   ],
   columns: [
     { key: 'barcode', label: 'Label Barcode', sortable: true, render: mono('barcode') },
     { key: 'pack_date', label: 'Tanggal', sortable: true, render: date('pack_date') },
+    { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
+    { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     { key: 'item_name', label: 'Jenis Alat', sortable: true, render: bold('item_name') },
+    { key: 'unit_name', label: 'Unit Asal' },
     { key: 'package_type', label: 'Jenis Kemasan', sortable: true },
     { key: 'material', label: 'Bahan' },
     { key: 'quantity', label: 'Jumlah', sortable: true, render: qty() },
@@ -258,10 +307,13 @@ export const sterilizationsConfig = {
   searchPlaceholder: 'Cari batch, siklus, mesin, petugas...',
   createLabel: 'Catat Sterilisasi',
   dateFilter: true,
+  timeFilter: true,
   filters: [{ name: 'status', label: 'Status', options: ['Menunggu Verifikasi', 'Lulus', 'Gagal'] }],
   columns: [
     { key: 'batch_no', label: 'No. Batch', sortable: true, render: mono('batch_no') },
     { key: 'steril_date', label: 'Tanggal', sortable: true, render: date('steril_date') },
+    { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
+    { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     { key: 'machine_name', label: 'Mesin', sortable: true },
     { key: 'cycle_no', label: 'Siklus', sortable: true },
     { key: 'temperature', label: 'Suhu', render: (r) => `${r.temperature} °C` },
@@ -338,10 +390,13 @@ export const verificationsConfig = {
   searchPlaceholder: 'Cari batch, siklus, petugas...',
   createLabel: 'Verifikasi Batch',
   dateFilter: true,
+  timeFilter: true,
   filters: [{ name: 'result', label: 'Hasil', options: ['LULUS', 'GAGAL'] }],
   columns: [
     { key: 'batch_no', label: 'No. Batch', sortable: true, render: mono('batch_no') },
     { key: 'verify_date', label: 'Tanggal', sortable: true, render: date('verify_date') },
+    { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
+    { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     { key: 'machine_name', label: 'Mesin' },
     { key: 'condition_packaging', label: 'Kemasan', render: badge('condition_packaging') },
     { key: 'chem_internal', label: 'Kimia Internal', render: badge('chem_internal') },

@@ -95,9 +95,16 @@ export default function DashboardPage() {
                   </span>
                 </h1>
                 <div className="mt-2.5 flex justify-center">
-                  <span className="inline-flex items-center rounded-full bg-gradient-to-r from-[#FFE36E] via-[#FFD233] to-[#FFCA28] px-5 py-1.5 text-xs font-extrabold tracking-wide text-[#001A4D] shadow-[0_4px_14px_rgba(255,208,40,0.45)] sm:text-sm">
+                  <span className="inline-flex items-center rounded-full bg-gradient-to-r from-[#FFE36E] via-[#FFD233] to-[#FFCA28] px-6 py-1.5 text-sm font-extrabold tracking-wide text-[#001A4D] shadow-[0_4px_14px_rgba(255,208,40,0.45)] sm:text-[15px]">
                     Sterile Management System
                   </span>
+                </div>
+                <div className="mx-auto mt-2 flex max-w-xs items-center justify-center gap-2.5">
+                  <span className="h-[2px] flex-1 rounded-full bg-gradient-to-r from-transparent to-[#F5B000]" />
+                  <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#001F5F] sm:text-xs">
+                    RSUD SERPONG UTARA
+                  </p>
+                  <span className="h-[2px] flex-1 rounded-full bg-gradient-to-l from-transparent to-[#F5B000]" />
                 </div>
               </div>
 

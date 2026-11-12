@@ -85,6 +85,94 @@ class HttpError extends Error {
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 const todayStr = () => new Intl.DateTimeFormat('sv-SE', { timeZone: TZ }).format(new Date());
+const nowDateTimeStr = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const map = {};
+  parts.forEach((p) => { map[p.type] = p.value; });
+  const hh = map.hour === '24' ? '00' : map.hour;
+  return `${map.year}-${map.month}-${map.day} ${hh}:${map.minute}:${map.second}`;
+};
+const parseTzMs = (dtStr) => {
+  if (!dtStr) return NaN;
+  const s = String(dtStr).trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(s)) {
+    return Date.parse(`${s.replace(' ', 'T')}${s.length === 16 ? ':00' : ''}+07:00`);
+  }
+  return Date.parse(s);
+};
+const diffSeconds = (fromDt, toDt) => {
+  const a = parseTzMs(fromDt);
+  const b = parseTzMs(toDt);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.max(0, Math.round((b - a) / 1000));
+};
+const formatDurationSec = (sec) => {
+  if (sec === null || sec === undefined || Number.isNaN(Number(sec))) return '-';
+  const total = Math.max(0, Math.round(Number(sec)));
+  if (total < 60) return `${total} dtk`;
+  if (total < 3600) {
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return s > 0 ? `${m} mnt ${s} dtk` : `${m} mnt`;
+  }
+  if (total < 86400) {
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    return m > 0 ? `${h} jam ${m} mnt` : `${h} jam`;
+  }
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  return h > 0 ? `${d} hr ${h} jam` : `${d} hr`;
+};
+function resolveActionTimestamps(body) {
+  const completedDate = new Date();
+  let startedDate = completedDate;
+  const rawStart = body?.started_at || body?._started_at;
+  if (rawStart) {
+    const rawStr = String(rawStart).trim();
+    const ms = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(rawStr) ? parseTzMs(rawStr) : Date.parse(rawStr);
+    if (!Number.isNaN(ms)) {
+      const diffMs = completedDate.getTime() - ms;
+      if (diffMs >= 0 && diffMs <= 12 * 3600 * 1000) {
+        startedDate = new Date(ms);
+      }
+    }
+  }
+  return {
+    started_at: nowDateTimeStr(startedDate),
+    completed_at: nowDateTimeStr(completedDate),
+  };
+}
+function enrichTimingRow(row) {
+  if (!row || typeof row !== 'object') return row;
+  if (row.started_at !== undefined || row.completed_at !== undefined) {
+    row.started_time = row.started_at ? String(row.started_at).slice(11, 19) : '-';
+    row.completed_time = row.completed_at ? String(row.completed_at).slice(11, 19) : (row.storage_active ? 'Masih Disimpan' : '-');
+  }
+  if (row.storage_active && row.started_at && !row.completed_at) {
+    row.process_seconds = diffSeconds(row.started_at, nowDateTimeStr());
+  } else if (row.process_seconds === undefined && row.started_at && row.completed_at) {
+    row.process_seconds = diffSeconds(row.started_at, row.completed_at);
+  }
+  if (row.process_seconds !== undefined && row.process_seconds !== null) {
+    row.process_duration = formatDurationSec(row.process_seconds);
+  }
+  if (row.wait_seconds !== undefined && row.wait_seconds !== null) {
+    row.wait_duration = formatDurationSec(row.wait_seconds);
+  } else if ('wait_seconds' in row) {
+    row.wait_duration = '-';
+  }
+  return row;
+}
 const pad = (n, size = 3) => String(n).padStart(size, '0');
 const ddmmyy = (d) => `${d.slice(8, 10)}${d.slice(5, 7)}${d.slice(2, 4)}`;
 
@@ -281,6 +369,19 @@ async function runList(cfg, query, { all = false, user = null } = {}) {
     }
   }
 
+  if (cfg.timeColumn) {
+    if (/^\d{2}:\d{2}(:\d{2})?$/.test(query.time_from || '')) {
+      const tf = query.time_from.length === 5 ? `${query.time_from}:00` : query.time_from;
+      where.push(`${cfg.timeColumn} >= ?`);
+      params.push(tf);
+    }
+    if (/^\d{2}:\d{2}(:\d{2})?$/.test(query.time_to || '')) {
+      const tt = query.time_to.length === 5 ? `${query.time_to}:59` : query.time_to;
+      where.push(`${cfg.timeColumn} <= ?`);
+      params.push(tt);
+    }
+  }
+
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const sortColumn = cfg.sort[query.sort_by] || cfg.sort[cfg.defaultSort];
   const order = String(query.order).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
@@ -290,7 +391,7 @@ async function runList(cfg, query, { all = false, user = null } = {}) {
     `SELECT ${cfg.select} FROM ${cfg.from} ${whereSql} ORDER BY ${sortColumn} ${order}, ${cfg.pk} DESC LIMIT ? OFFSET ?`,
     [...params, limit, all ? 0 : (page - 1) * limit]
   );
-  return { rows, total, page, limit };
+  return { rows: rows.map(enrichTimingRow), total, page, limit };
 }
 
 function toCsv(rows, columns) {
@@ -307,7 +408,7 @@ function toCsv(rows, columns) {
 
 async function fetchOne(cfg, id, conn = pool) {
   const [rows] = await conn.query(`SELECT ${cfg.select} FROM ${cfg.from} WHERE ${cfg.pk} = ? LIMIT 1`, [id]);
-  return rows[0] || null;
+  return rows[0] ? enrichTimingRow(rows[0]) : null;
 }
 
 /* ============================================================
@@ -527,15 +628,16 @@ registerCrud({
 registerCrud({
   path: 'items',
   table: 'items',
-  from: 'items t',
-  select: 't.*',
-  search: ['t.code', 't.name', 't.description', 't.unit_label', 't.process_type'],
-  sort: { id: 't.id', code: 't.code', name: 't.name', process_type: 't.process_type', category: 't.category', unit_label: 't.unit_label', created_at: 't.created_at' },
+  from: 'items t LEFT JOIN units u ON u.id = t.unit_id',
+  select: 't.*, u.name AS unit_name, u.code AS unit_code',
+  search: ['t.code', 't.name', 't.description', 't.unit_label', 't.process_type', 'u.name', 'u.code'],
+  sort: { id: 't.id', code: 't.code', name: 't.name', unit_name: 'u.name', process_type: 't.process_type', category: 't.category', unit_label: 't.unit_label', created_at: 't.created_at' },
   defaultSort: 'id',
-  filters: { process_type: 't.process_type', category: 't.category', is_active: 't.is_active' },
-  exportColumns: [['code', 'Kode'], ['name', 'Nama'], ['process_type', 'Kategori Proses'], ['category', 'Kategori Kemasan'], ['unit_label', 'Satuan Standar'], ['shelf_life_months', 'Masa Steril (bulan)'], ['is_active', 'Aktif']],
+  filters: { unit_id: 't.unit_id', process_type: 't.process_type', category: 't.category', is_active: 't.is_active' },
+  exportColumns: [['code', 'Kode'], ['name', 'Nama'], ['unit_name', 'Unit Asal'], ['process_type', 'Kategori Proses'], ['category', 'Kategori Kemasan'], ['unit_label', 'Satuan Standar'], ['shelf_life_months', 'Masa Steril (bulan)'], ['is_active', 'Aktif']],
   roles: MASTER_ROLES,
   fields: [
+    field('unit_id', 'int', { required: true, min: 1, label: 'Unit asal' }),
     field('code', 'string', { required: true, label: 'Kode', max: 30 }),
     field('name', 'string', { required: true, label: 'Nama alat', max: 150 }),
     field('process_type', 'enum', { values: ['Steril', 'DTT'], default: 'Steril', label: 'Kategori Proses' }),
@@ -651,15 +753,32 @@ router.get('/lookups/units', auth, wrap(async (req, res) => {
 
 router.get('/lookups/items', auth, wrap(async (req, res) => {
   const order = String(req.query.order).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
-  const sortCol = req.query.sort_by === 'id' ? 'id' : 'name';
-  const where = ['is_active = 1'];
+  const sortCol = req.query.sort_by === 'id' ? 't.id' : 't.name';
+  const where = ['t.is_active = 1'];
   const params = [];
   if (req.query.process_type && ['Steril', 'DTT'].includes(req.query.process_type)) {
-    where.push('process_type = ?');
+    where.push('t.process_type = ?');
     params.push(req.query.process_type);
   }
+  if (req.user.role === 'unit') {
+    if (!req.user.unit_id) return res.json({ success: true, data: [] });
+    where.push('t.unit_id = ?');
+    params.push(req.user.unit_id);
+  } else if (req.query.unit_id !== undefined && req.query.unit_id !== '') {
+    const uid = Number(req.query.unit_id);
+    if (!Number.isInteger(uid) || uid < 1) return res.json({ success: true, data: [] });
+    where.push('t.unit_id = ?');
+    params.push(uid);
+  } else if (req.query.require_unit === '1') {
+    return res.json({ success: true, data: [] });
+  }
   const [rows] = await pool.query(
-    `SELECT id, code, name, process_type, category, unit_label FROM items WHERE ${where.join(' AND ')} ORDER BY ${sortCol} ${order} LIMIT 100`,
+    `SELECT t.id, t.unit_id, u.name AS unit_name, t.code, t.name, t.process_type, t.category, t.unit_label
+     FROM items t
+     LEFT JOIN units u ON u.id = t.unit_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY ${sortCol} ${order}
+     LIMIT 100`,
     params
   );
   res.json({ success: true, data: rows });
@@ -700,14 +819,22 @@ registerCrud({
   path: 'dirty-receipts',
   table: 'dirty_receipts',
   from: 'dirty_receipts t LEFT JOIN units u ON u.id = t.unit_id',
-  select: 't.*, u.name AS unit_name, u.code AS unit_code',
+  select: `t.*, u.name AS unit_name, u.code AS unit_code,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0) AS process_seconds,
+    0 AS wait_seconds`,
   search: ['t.barcode', 't.item_name', 'u.name', 't.sender_name', 't.receiver_name'],
-  sort: { id: 't.id', barcode: 't.barcode', receipt_date: 't.receipt_date', item_name: 't.item_name', quantity: 't.quantity', unit_name: 'u.name', status: 't.status', stage: 't.stage' },
+  sort: { id: 't.id', barcode: 't.barcode', receipt_date: 't.receipt_date', started_at: 't.started_at', item_name: 't.item_name', quantity: 't.quantity', unit_name: 'u.name', status: 't.status', stage: 't.stage' },
   defaultSort: 'id',
   unitColumn: 't.unit_id',
   filters: { unit_id: 't.unit_id', status: 't.status', stage: 't.stage', barcode: 't.barcode' },
   dateColumn: 't.receipt_date',
-  exportColumns: [['barcode', 'Barcode'], ['receipt_date', 'Tanggal'], ['unit_name', 'Unit Asal'], ['item_name', 'Jenis Alat'], ['quantity', 'Jumlah'], ['unit_label', 'Satuan'], ['sender_name', 'Petugas Penyerah'], ['receiver_name', 'Petugas Penerima'], ['stage', 'Tahap'], ['status', 'Status']],
+  timeColumn: 'TIME(COALESCE(t.started_at, t.created_at))',
+  exportColumns: [
+    ['barcode', 'Barcode'], ['receipt_date', 'Tanggal'], ['started_time', 'Jam Mulai'], ['completed_time', 'Jam Selesai'],
+    ['process_duration', 'Lama Proses'], ['wait_duration', 'Waktu Tunggu'], ['unit_name', 'Unit Asal'], ['item_name', 'Jenis Alat'],
+    ['quantity', 'Jumlah'], ['unit_label', 'Satuan'], ['sender_name', 'Petugas Penyerah'], ['receiver_name', 'Petugas Penerima'],
+    ['stage', 'Tahap'], ['status', 'Status'],
+  ],
   roles: { read: ['admin', 'petugas', 'unit'], write: ['admin', 'petugas', 'unit'], remove: ['admin', 'petugas'] },
   fields: [
     field('barcode', 'string', { label: 'Barcode', max: 50, createOnly: true }),
@@ -724,6 +851,9 @@ registerCrud({
     field('notes', 'string', { label: 'Catatan', max: 500 }),
   ],
   async beforeCreate(conn, data, ctx) {
+    const ts = resolveActionTimestamps(ctx.body);
+    data.started_at = ts.started_at;
+    data.completed_at = ts.completed_at;
     data.barcode = data.barcode || (await makeCode(conn, 'AK', data.receipt_date));
     data.stage = 1;
     data.status = 'Diterima';
@@ -749,13 +879,21 @@ registerCrud({
   path: 'washings',
   table: 'washings',
   from: 'washings t JOIN dirty_receipts r ON r.id = t.receipt_id LEFT JOIN units u ON u.id = r.unit_id',
-  select: 't.*, r.barcode AS receipt_barcode, r.item_name, u.name AS unit_name',
-  search: ['r.barcode', 'r.item_name', 't.officer', 't.liquid'],
-  sort: { id: 't.id', wash_date: 't.wash_date', receipt_barcode: 'r.barcode', item_name: 'r.item_name', method: 't.method', officer: 't.officer' },
+  select: `t.*, r.barcode AS receipt_barcode, r.item_name, r.unit_id, u.name AS unit_name,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0) AS process_seconds,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(r.completed_at, r.created_at), COALESCE(t.started_at, t.created_at)), 0) AS wait_seconds`,
+  search: ['r.barcode', 'r.item_name', 'u.name', 't.officer', 't.liquid'],
+  sort: { id: 't.id', wash_date: 't.wash_date', started_at: 't.started_at', receipt_barcode: 'r.barcode', item_name: 'r.item_name', unit_name: 'u.name', method: 't.method', officer: 't.officer' },
   defaultSort: 'id',
-  filters: { method: 't.method', receipt_id: 't.receipt_id' },
+  filters: { method: 't.method', receipt_id: 't.receipt_id', unit_id: 'r.unit_id' },
   dateColumn: 't.wash_date',
-  exportColumns: [['wash_date', 'Tanggal'], ['receipt_barcode', 'Barcode Alat Kotor'], ['item_name', 'Jenis Alat'], ['unit_name', 'Unit Asal'], ['method', 'Metode'], ['liquid', 'Cairan'], ['duration_min', 'Waktu (menit)'], ['officer', 'Petugas']],
+  timeColumn: 'TIME(COALESCE(t.started_at, t.created_at))',
+  exportColumns: [
+    ['wash_date', 'Tanggal'], ['started_time', 'Jam Mulai'], ['completed_time', 'Jam Selesai'],
+    ['process_duration', 'Lama Proses'], ['wait_duration', 'Waktu Tunggu'], ['receipt_barcode', 'Barcode Alat Kotor'],
+    ['item_name', 'Jenis Alat'], ['unit_name', 'Unit Asal'], ['method', 'Metode'], ['liquid', 'Cairan'],
+    ['duration_min', 'Durasi Mesin (menit)'], ['officer', 'Petugas'],
+  ],
   roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
   fields: [
     field('receipt_id', 'int', { required: true, min: 1, label: 'Alat kotor', createOnly: true }),
@@ -766,9 +904,12 @@ registerCrud({
     field('wash_date', 'date', { default: todayStr, label: 'Tanggal' }),
     field('notes', 'string', { label: 'Catatan', max: 500 }),
   ],
-  async beforeCreate(conn, data) {
+  async beforeCreate(conn, data, ctx) {
     const receipt = await getReceipt(conn, data.receipt_id);
     if (receipt.stage > 3 || receipt.status === 'Selesai') throw new HttpError(409, 'Alat sudah melewati tahap pencucian');
+    const ts = resolveActionTimestamps(ctx.body);
+    data.started_at = ts.started_at;
+    data.completed_at = ts.completed_at;
   },
   async afterCreate(conn, id, data) {
     await conn.query("UPDATE dirty_receipts SET stage = GREATEST(stage, 2), status = 'Proses' WHERE id = ?", [data.receipt_id]);
@@ -789,13 +930,22 @@ registerCrud({
   path: 'dryings',
   table: 'dryings',
   from: 'dryings t JOIN dirty_receipts r ON r.id = t.receipt_id LEFT JOIN units u ON u.id = r.unit_id',
-  select: 't.*, r.barcode AS receipt_barcode, r.item_name, u.name AS unit_name',
-  search: ['r.barcode', 'r.item_name', 't.officer'],
-  sort: { id: 't.id', dry_date: 't.dry_date', receipt_barcode: 'r.barcode', item_name: 'r.item_name', officer: 't.officer' },
+  select: `t.*, r.barcode AS receipt_barcode, r.item_name, r.unit_id, u.name AS unit_name,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0) AS process_seconds,
+    (SELECT GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(w.completed_at, w.created_at), COALESCE(t.started_at, t.created_at)), 0)
+     FROM washings w WHERE w.receipt_id = t.receipt_id ORDER BY w.id DESC LIMIT 1) AS wait_seconds`,
+  search: ['r.barcode', 'r.item_name', 'u.name', 't.officer'],
+  sort: { id: 't.id', dry_date: 't.dry_date', started_at: 't.started_at', receipt_barcode: 'r.barcode', item_name: 'r.item_name', unit_name: 'u.name', officer: 't.officer' },
   defaultSort: 'id',
-  filters: { receipt_id: 't.receipt_id', is_dry: 't.is_dry', no_rust: 't.no_rust', function_ok: 't.function_ok' },
+  filters: { receipt_id: 't.receipt_id', unit_id: 'r.unit_id', is_dry: 't.is_dry', no_rust: 't.no_rust', function_ok: 't.function_ok' },
   dateColumn: 't.dry_date',
-  exportColumns: [['dry_date', 'Tanggal'], ['receipt_barcode', 'Barcode Alat Kotor'], ['item_name', 'Jenis Alat'], ['is_dry', 'Kering Sempurna'], ['no_rust', 'Tidak Berkarat'], ['function_ok', 'Fungsi Baik'], ['officer', 'Petugas']],
+  timeColumn: 'TIME(COALESCE(t.started_at, t.created_at))',
+  exportColumns: [
+    ['dry_date', 'Tanggal'], ['started_time', 'Jam Mulai'], ['completed_time', 'Jam Selesai'],
+    ['process_duration', 'Lama Proses'], ['wait_duration', 'Waktu Tunggu'], ['receipt_barcode', 'Barcode Alat Kotor'],
+    ['item_name', 'Jenis Alat'], ['unit_name', 'Unit Asal'], ['is_dry', 'Kering Sempurna'],
+    ['no_rust', 'Tidak Berkarat'], ['function_ok', 'Fungsi Baik'], ['officer', 'Petugas'],
+  ],
   roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
   fields: [
     field('receipt_id', 'int', { required: true, min: 1, label: 'Alat kotor', createOnly: true }),
@@ -806,10 +956,13 @@ registerCrud({
     field('dry_date', 'date', { default: todayStr, label: 'Tanggal' }),
     field('notes', 'string', { label: 'Catatan', max: 500 }),
   ],
-  async beforeCreate(conn, data) {
+  async beforeCreate(conn, data, ctx) {
     const receipt = await getReceipt(conn, data.receipt_id);
     if (receipt.stage < 2) throw new HttpError(409, 'Alat belum melalui tahap pencucian');
     if (receipt.stage > 3 || receipt.status === 'Selesai') throw new HttpError(409, 'Alat sudah melewati tahap pengeringan');
+    const ts = resolveActionTimestamps(ctx.body);
+    data.started_at = ts.started_at;
+    data.completed_at = ts.completed_at;
   },
   async afterCreate(conn, id, data) {
     const passed = data.is_dry && data.no_rust && data.function_ok;
@@ -833,13 +986,23 @@ registerCrud({
   path: 'packagings',
   table: 'packagings',
   from: 'packagings t JOIN dirty_receipts r ON r.id = t.receipt_id LEFT JOIN units u ON u.id = r.unit_id',
-  select: 't.*, r.barcode AS receipt_barcode, r.item_name, u.name AS unit_name',
-  search: ['t.barcode', 'r.barcode', 'r.item_name', 't.material', 't.officer'],
-  sort: { id: 't.id', pack_date: 't.pack_date', barcode: 't.barcode', item_name: 'r.item_name', package_type: 't.package_type', quantity: 't.quantity', status: 't.status' },
+  select: `t.*, r.barcode AS receipt_barcode, r.item_name, r.unit_id, u.name AS unit_name,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0) AS process_seconds,
+    (SELECT GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(d.completed_at, d.created_at), COALESCE(t.started_at, t.created_at)), 0)
+     FROM dryings d WHERE d.receipt_id = t.receipt_id AND d.is_dry = 1 AND d.no_rust = 1 AND d.function_ok = 1 ORDER BY d.id DESC LIMIT 1) AS wait_seconds`,
+  search: ['t.barcode', 'r.barcode', 'r.item_name', 'u.name', 't.material', 't.officer'],
+  sort: { id: 't.id', pack_date: 't.pack_date', started_at: 't.started_at', barcode: 't.barcode', item_name: 'r.item_name', unit_name: 'u.name', package_type: 't.package_type', quantity: 't.quantity', status: 't.status' },
   defaultSort: 'id',
-  filters: { package_type: 't.package_type', status: 't.status', receipt_id: 't.receipt_id', barcode: 't.barcode' },
+  filters: { package_type: 't.package_type', status: 't.status', receipt_id: 't.receipt_id', unit_id: 'r.unit_id', barcode: 't.barcode' },
   dateColumn: 't.pack_date',
-  exportColumns: [['pack_date', 'Tanggal'], ['barcode', 'Label Barcode'], ['receipt_barcode', 'Barcode Alat Kotor'], ['item_name', 'Jenis Alat'], ['package_type', 'Jenis Kemasan'], ['material', 'Bahan Kemasan'], ['quantity', 'Jumlah'], ['unit_label', 'Satuan'], ['officer', 'Petugas'], ['status', 'Status']],
+  timeColumn: 'TIME(COALESCE(t.started_at, t.created_at))',
+  exportColumns: [
+    ['pack_date', 'Tanggal'], ['started_time', 'Jam Mulai'], ['completed_time', 'Jam Selesai'],
+    ['process_duration', 'Lama Proses'], ['wait_duration', 'Waktu Tunggu'], ['barcode', 'Label Barcode'],
+    ['receipt_barcode', 'Barcode Alat Kotor'], ['unit_name', 'Unit Asal'], ['item_name', 'Jenis Alat'],
+    ['package_type', 'Jenis Kemasan'], ['material', 'Bahan Kemasan'], ['quantity', 'Jumlah'],
+    ['unit_label', 'Satuan'], ['officer', 'Petugas'], ['status', 'Status'],
+  ],
   roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
   fields: [
     field('receipt_id', 'int', { required: true, min: 1, label: 'Alat kotor', createOnly: true }),
@@ -851,12 +1014,15 @@ registerCrud({
     field('officer', 'string', { required: true, label: 'Petugas', max: 100 }),
     field('pack_date', 'date', { default: todayStr, label: 'Tanggal' }),
   ],
-  async beforeCreate(conn, data) {
+  async beforeCreate(conn, data, ctx) {
     const receipt = await getReceipt(conn, data.receipt_id);
     if (receipt.stage < 3) throw new HttpError(409, 'Alat belum selesai tahap pengeringan & pemeriksaan');
     if (receipt.stage > 5 || receipt.status === 'Selesai') throw new HttpError(409, 'Alat sudah selesai diproses');
     const [ok] = await conn.query('SELECT id FROM dryings WHERE receipt_id = ? AND is_dry = 1 AND no_rust = 1 AND function_ok = 1 LIMIT 1', [receipt.id]);
     if (!ok.length) throw new HttpError(409, 'Pemeriksaan pengeringan belum lolos');
+    const ts = resolveActionTimestamps(ctx.body);
+    data.started_at = ts.started_at;
+    data.completed_at = ts.completed_at;
     data.barcode = data.barcode || (await makeCode(conn, PREFIX_BY_TYPE[data.package_type], data.pack_date));
     data.status = 'Dikemas';
   },
@@ -881,13 +1047,23 @@ registerCrud({
   path: 'sterilizations',
   table: 'sterilizations',
   from: 'sterilizations t JOIN machines m ON m.id = t.machine_id',
-  select: 't.*, m.name AS machine_name, m.code AS machine_code, (SELECT COUNT(*) FROM sterilization_items si WHERE si.sterilization_id = t.id) AS total_packages',
+  select: `t.*, m.name AS machine_name, m.code AS machine_code,
+    (SELECT COUNT(*) FROM sterilization_items si WHERE si.sterilization_id = t.id) AS total_packages,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0) AS process_seconds,
+    (SELECT GREATEST(TIMESTAMPDIFF(SECOND, MAX(COALESCE(p.completed_at, p.created_at)), COALESCE(t.started_at, t.created_at)), 0)
+     FROM sterilization_items si JOIN packagings p ON p.id = si.packaging_id WHERE si.sterilization_id = t.id) AS wait_seconds`,
   search: ['t.batch_no', 't.cycle_no', 'm.name', 't.officer'],
-  sort: { id: 't.id', steril_date: 't.steril_date', batch_no: 't.batch_no', cycle_no: 't.cycle_no', machine_name: 'm.name', status: 't.status' },
+  sort: { id: 't.id', steril_date: 't.steril_date', started_at: 't.started_at', batch_no: 't.batch_no', cycle_no: 't.cycle_no', machine_name: 'm.name', status: 't.status' },
   defaultSort: 'id',
   filters: { machine_id: 't.machine_id', status: 't.status' },
   dateColumn: 't.steril_date',
-  exportColumns: [['steril_date', 'Tanggal'], ['machine_name', 'Mesin'], ['cycle_no', 'No. Siklus'], ['batch_no', 'No. Batch'], ['temperature', 'Suhu (C)'], ['duration_min', 'Waktu (menit)'], ['total_packages', 'Jumlah Paket'], ['officer', 'Petugas'], ['status', 'Status']],
+  timeColumn: 'TIME(COALESCE(t.started_at, t.created_at))',
+  exportColumns: [
+    ['steril_date', 'Tanggal'], ['started_time', 'Jam Mulai'], ['completed_time', 'Jam Selesai'],
+    ['process_duration', 'Lama Proses'], ['wait_duration', 'Waktu Tunggu'], ['machine_name', 'Mesin'],
+    ['cycle_no', 'No. Siklus'], ['batch_no', 'No. Batch'], ['temperature', 'Suhu (C)'],
+    ['duration_min', 'Durasi Siklus (menit)'], ['total_packages', 'Jumlah Paket'], ['officer', 'Petugas'], ['status', 'Status'],
+  ],
   roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
   fields: [
     field('machine_id', 'int', { required: true, min: 1, label: 'Mesin' }),
@@ -910,6 +1086,9 @@ registerCrud({
     const [packages] = await conn.query("SELECT id FROM packagings WHERE id IN (?) AND status = 'Dikemas' FOR UPDATE", [ids]);
     if (packages.length !== ids.length) throw new HttpError(409, 'Sebagian paket tidak tersedia atau sudah disterilkan', { package_ids: 'Paket tidak valid' });
 
+    const ts = resolveActionTimestamps(ctx.body);
+    data.started_at = ts.started_at;
+    data.completed_at = ts.completed_at;
     const cycle = data.cycle_no || pad(await nextCounter(conn, `CYCLE-${machine.code}`));
     data.cycle_no = cycle;
     data.batch_no = data.batch_no || `${machine.code}-${ddmmyy(data.steril_date)}-${cycle}`;
@@ -946,13 +1125,22 @@ registerCrud({
   path: 'verifications',
   table: 'verifications',
   from: 'verifications t JOIN sterilizations s ON s.id = t.sterilization_id JOIN machines m ON m.id = s.machine_id',
-  select: 't.*, s.batch_no, s.cycle_no, m.name AS machine_name',
+  select: `t.*, s.batch_no, s.cycle_no, m.name AS machine_name,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0) AS process_seconds,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(s.completed_at, s.created_at), COALESCE(t.started_at, t.created_at)), 0) AS wait_seconds`,
   search: ['s.batch_no', 's.cycle_no', 't.officer', 'm.name'],
-  sort: { id: 't.id', verify_date: 't.verify_date', batch_no: 's.batch_no', result: 't.result', officer: 't.officer' },
+  sort: { id: 't.id', verify_date: 't.verify_date', started_at: 't.started_at', batch_no: 's.batch_no', result: 't.result', officer: 't.officer' },
   defaultSort: 'id',
   filters: { result: 't.result', sterilization_id: 't.sterilization_id' },
   dateColumn: 't.verify_date',
-  exportColumns: [['verify_date', 'Tanggal'], ['batch_no', 'No. Batch'], ['machine_name', 'Mesin'], ['condition_packaging', 'Kondisi Kemasan'], ['chem_internal', 'Indikator Kimia Internal'], ['chem_external', 'Indikator Kimia Eksternal'], ['bio_indicator', 'Indikator Biologi'], ['bowie_dick', 'Bowie-Dick Test'], ['result', 'Hasil'], ['fail_reason', 'Alasan Gagal'], ['officer', 'Petugas']],
+  timeColumn: 'TIME(COALESCE(t.started_at, t.created_at))',
+  exportColumns: [
+    ['verify_date', 'Tanggal'], ['started_time', 'Jam Mulai'], ['completed_time', 'Jam Selesai'],
+    ['process_duration', 'Lama Proses'], ['wait_duration', 'Waktu Tunggu'], ['batch_no', 'No. Batch'],
+    ['machine_name', 'Mesin'], ['condition_packaging', 'Kondisi Kemasan'], ['chem_internal', 'Indikator Kimia Internal'],
+    ['chem_external', 'Indikator Kimia Eksternal'], ['bio_indicator', 'Indikator Biologi'], ['bowie_dick', 'Bowie-Dick Test'],
+    ['result', 'Hasil'], ['fail_reason', 'Alasan Gagal'], ['officer', 'Petugas'],
+  ],
   roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
   createdMessage: 'Verifikasi tersimpan, status alat diperbarui otomatis',
   fields: [
@@ -972,6 +1160,10 @@ registerCrud({
     if (!steril) throw new HttpError(404, 'Batch sterilisasi tidak ditemukan', { sterilization_id: 'Batch tidak ditemukan' });
     if (steril.status !== 'Menunggu Verifikasi') throw new HttpError(409, 'Batch ini sudah diverifikasi', { sterilization_id: 'Batch sudah diverifikasi' });
     ctx.sterilization = steril;
+
+    const ts = resolveActionTimestamps(ctx.body);
+    data.started_at = ts.started_at;
+    data.completed_at = ts.completed_at;
 
     const reasons = [];
     if (data.condition_packaging === 'Rusak') reasons.push('Kondisi kemasan rusak');
@@ -994,6 +1186,7 @@ registerCrud({
     const receiptIds = [...new Set(packages.map((p) => p.receipt_id))];
 
     if (data.result === 'LULUS') {
+      const storageStartedAt = nowDateTimeStr();
       for (const pkg of packages) {
         let months = DEFAULT_SHELF_LIFE_MONTHS;
         if (pkg.item_id) {
@@ -1011,6 +1204,8 @@ registerCrud({
           quantity: pkg.quantity,
           unit_label: pkg.unit_label,
           status: 'Tersedia',
+          started_at: storageStartedAt,
+          completed_at: null,
         }]);
       }
       await conn.query("UPDATE packagings SET status = 'Lulus' WHERE id IN (?)", [packages.map((p) => p.id)]);
@@ -1073,6 +1268,7 @@ registerCrud({
 
         if (nextResult === 'LULUS') {
           await conn.query('DELETE FROM quarantines WHERE verification_id = ?', [id]);
+          const storageStartedAt = nowDateTimeStr();
           for (const pkg of packages) {
             let months = DEFAULT_SHELF_LIFE_MONTHS;
             if (pkg.item_id) {
@@ -1090,6 +1286,8 @@ registerCrud({
               quantity: pkg.quantity,
               unit_label: pkg.unit_label,
               status: 'Tersedia',
+              started_at: storageStartedAt,
+              completed_at: null,
             }]);
           }
           await conn.query("UPDATE packagings SET status = 'Lulus' WHERE id IN (?)", [packages.map((p) => p.id)]);
@@ -1261,6 +1459,15 @@ registerCrud({
   select: `t.*,
     ${STOCK_STATUS_SQL} AS display_status,
     DATEDIFF(t.expiry_date, CURDATE()) AS days_left,
+    (CASE WHEN t.completed_at IS NULL AND t.status = 'Tersedia' THEN 1 ELSE 0 END) AS storage_active,
+    (CASE WHEN t.completed_at IS NULL AND t.status = 'Tersedia' THEN NULL
+          ELSE GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)
+     END) AS process_seconds,
+    (SELECT GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(v.completed_at, v.created_at), COALESCE(t.started_at, t.created_at)), 0)
+     FROM verifications v
+     JOIN sterilization_items si ON si.sterilization_id = v.sterilization_id
+     WHERE si.packaging_id = t.packaging_id
+     ORDER BY v.id DESC LIMIT 1) AS wait_seconds,
     p.receipt_id,
     r.barcode AS receipt_barcode,
     r.unit_id AS origin_unit_id,
@@ -1273,11 +1480,17 @@ registerCrud({
     (SELECT COALESCE(SUM(si.quantity), 0) FROM instrument_set_items si WHERE si.set_id = s.id) AS total_instruments,
     s.missing_notes`,
   search: ['t.barcode', 't.item_name', 't.batch_no', 'r.barcode', 'u.name', 's.code'],
-  sort: { id: 't.id', barcode: 't.barcode', item_name: 't.item_name', category: 't.category', batch_no: 't.batch_no', sterile_date: 't.sterile_date', expiry_date: 't.expiry_date', quantity: 't.quantity' },
+  sort: { id: 't.id', barcode: 't.barcode', item_name: 't.item_name', category: 't.category', batch_no: 't.batch_no', sterile_date: 't.sterile_date', started_at: 't.started_at', expiry_date: 't.expiry_date', quantity: 't.quantity' },
   defaultSort: 'id',
   filters: { category: 't.category', status: STOCK_STATUS_SQL, barcode: 't.barcode', batch_no: 't.batch_no', origin_unit_id: 'r.unit_id' },
   dateColumn: 't.sterile_date',
-  exportColumns: [['item_name', 'Nama Alat'], ['category', 'Kategori'], ['barcode', 'Barcode'], ['batch_no', 'Batch'], ['sterile_date', 'Tgl Steril'], ['expiry_date', 'Tgl Kedaluwarsa'], ['quantity', 'Jumlah'], ['unit_label', 'Satuan'], ['display_status', 'Status']],
+  timeColumn: 'TIME(COALESCE(t.started_at, t.created_at))',
+  exportColumns: [
+    ['item_name', 'Nama Alat'], ['category', 'Kategori'], ['origin_unit_name', 'Unit Asal'], ['barcode', 'Barcode'],
+    ['batch_no', 'Batch'], ['sterile_date', 'Tgl Steril'], ['started_time', 'Jam Masuk Simpan'], ['completed_time', 'Jam Diambil'],
+    ['process_duration', 'Lama Simpan'], ['wait_duration', 'Waktu Tunggu'], ['expiry_date', 'Tgl Kedaluwarsa'],
+    ['quantity', 'Jumlah'], ['unit_label', 'Satuan'], ['display_status', 'Status'],
+  ],
 });
 
 // ---------- Karantina / Gagal ----------
@@ -1316,14 +1529,22 @@ registerCrud({
   path: 'distributions',
   table: 'distributions',
   from: 'distributions t JOIN sterile_stock s ON s.id = t.stock_id JOIN units u ON u.id = t.unit_id',
-  select: 't.*, s.item_name, s.category, s.batch_no, s.unit_label, u.name AS unit_name',
+  select: `t.*, s.item_name, s.category, s.batch_no, s.unit_label, u.name AS unit_name,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0) AS process_seconds,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(s.started_at, s.created_at), COALESCE(t.started_at, t.created_at)), 0) AS wait_seconds`,
   search: ['t.barcode', 's.item_name', 't.gauze_type', 'u.name', 't.officer', 't.receiver_name'],
-  sort: { id: 't.id', dist_date: 't.dist_date', barcode: 't.barcode', item_name: 's.item_name', unit_name: 'u.name', quantity: 't.quantity' },
+  sort: { id: 't.id', dist_date: 't.dist_date', started_at: 't.started_at', barcode: 't.barcode', item_name: 's.item_name', unit_name: 'u.name', quantity: 't.quantity' },
   defaultSort: 'id',
   unitColumn: 't.unit_id',
   filters: { type: 't.type', unit_id: 't.unit_id', gauze_type: 't.gauze_type', barcode: 't.barcode' },
   dateColumn: 't.dist_date',
-  exportColumns: [['dist_date', 'Tanggal'], ['type', 'Jenis'], ['barcode', 'Barcode'], ['item_name', 'Nama'], ['gauze_type', 'Jenis Kasa'], ['batch_no', 'Batch'], ['unit_name', 'Unit Tujuan'], ['quantity', 'Jumlah'], ['officer', 'Petugas CSSD'], ['receiver_name', 'Penerima Unit']],
+  timeColumn: 'TIME(COALESCE(t.started_at, t.created_at))',
+  exportColumns: [
+    ['dist_date', 'Tanggal'], ['started_time', 'Jam Mulai'], ['completed_time', 'Jam Selesai'],
+    ['process_duration', 'Lama Proses'], ['wait_duration', 'Waktu Tunggu'], ['type', 'Jenis'],
+    ['barcode', 'Barcode'], ['item_name', 'Nama'], ['gauze_type', 'Jenis Kasa'], ['batch_no', 'Batch'],
+    ['unit_name', 'Unit Tujuan'], ['quantity', 'Jumlah'], ['officer', 'Petugas CSSD'], ['receiver_name', 'Penerima Unit'],
+  ],
   roles: { read: ['admin', 'petugas', 'unit'], write: ['admin', 'petugas', 'unit'], remove: ['admin', 'petugas'] },
   fields: [
     field('type', 'enum', { values: ['ALAT', 'KASA'], required: true, label: 'Jenis distribusi' }),
@@ -1339,9 +1560,10 @@ registerCrud({
     field('notes', 'string', { label: 'Catatan', max: 500 }),
   ],
   async beforeDelete(conn, existing) {
+    const [[otherDists]] = await conn.query('SELECT COUNT(*) AS cnt FROM distributions WHERE stock_id = ? AND id != ?', [existing.stock_id, existing.id]);
     // Kembalikan jumlah stok yang sudah didistribusikan ke sterile_stock
     await conn.query(
-      "UPDATE sterile_stock SET quantity = quantity + ?, status = 'Tersedia' WHERE id = ?",
+      `UPDATE sterile_stock SET quantity = quantity + ?, status = 'Tersedia'${otherDists.cnt === 0 ? ', completed_at = NULL' : ''} WHERE id = ?`,
       [existing.quantity, existing.stock_id]
     );
     // Jika packaging berstatus 'Terdistribusi', kembalikan ke 'Lulus'
@@ -1400,6 +1622,9 @@ registerCrud({
     if (data.type === 'ALAT' && isGauze) throw new HttpError(422, 'Barcode ini adalah kasa steril, gunakan menu Distribusi Kasa Steril', { barcode: 'Ini kasa steril' });
     if (data.quantity > stock.quantity) throw new HttpError(422, `Jumlah melebihi stok tersedia (${stock.quantity})`, { quantity: `Maksimal ${stock.quantity}` });
 
+    const ts = resolveActionTimestamps(ctx.body);
+    data.started_at = ts.started_at;
+    data.completed_at = ts.completed_at;
     // Gunakan barcode resmi paket steril dan isi otomatis unit tujuan jika belum diisi
     data.barcode = stock.barcode;
     if (!data.unit_id && stock.origin_unit_id) {
@@ -1410,8 +1635,8 @@ registerCrud({
   },
   async afterCreate(conn, id, data, ctx) {
     await conn.query(
-      "UPDATE sterile_stock SET quantity = quantity - ?, status = IF(quantity <= 0, 'Terdistribusi', status) WHERE id = ?",
-      [data.quantity, ctx.stock.id]
+      "UPDATE sterile_stock SET quantity = quantity - ?, status = IF(quantity <= 0, 'Terdistribusi', status), completed_at = COALESCE(completed_at, ?) WHERE id = ?",
+      [data.quantity, data.started_at, ctx.stock.id]
     );
     if (ctx.stock.quantity - data.quantity <= 0) {
       await conn.query("UPDATE packagings SET status = 'Terdistribusi' WHERE id = ?", [ctx.stock.packaging_id]);
@@ -1419,7 +1644,7 @@ registerCrud({
   },
 });
 
-// ---------- DTT (RIUS) Alat Siap Distribusi ----------
+// ---------- DTT (Reuse) Alat Siap Distribusi ----------
 router.get('/dtt-receipts/ready', auth, wrap(async (req, res) => {
   let where = "WHERE t.process_stage IN ('Siap Distribusi', 'Penyimpanan DTT', 'Pencucian DTT', 'Diterima')";
   const params = [];
@@ -1438,21 +1663,28 @@ router.get('/dtt-receipts/ready', auth, wrap(async (req, res) => {
   res.json({ success: true, data: rows });
 }));
 
-// ---------- DTT (RIUS) Transaksi 1: Penerimaan Alat Kotor DTT/RIUS (Unit -> CSSD) ----------
+// ---------- DTT (Reuse) Transaksi 1: Penerimaan Alat Kotor DTT/Reuse (Unit -> CSSD) ----------
 registerCrud({
   path: 'dtt-receipts',
   table: 'dtt_receipts',
   from: 'dtt_receipts t JOIN units u ON u.id = t.unit_id',
-  select: 't.*, u.name AS unit_name, u.code AS unit_code',
+  select: `t.*, u.name AS unit_name, u.code AS unit_code,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.receipt_datetime, t.created_at), COALESCE(t.completed_at, t.receipt_datetime, t.created_at)), 0) AS process_seconds,
+    0 AS wait_seconds`,
   search: ['t.barcode', 't.item_name', 't.item_code', 'u.name', 't.sender_name', 't.receiver_name'],
-  sort: { id: 't.id', barcode: 't.barcode', receipt_datetime: 't.receipt_datetime', item_name: 't.item_name', unit_name: 'u.name', reuse_count: 't.reuse_count', tool_condition: 't.tool_condition', process_stage: 't.process_stage' },
+  sort: { id: 't.id', barcode: 't.barcode', receipt_datetime: 't.receipt_datetime', started_at: 't.started_at', item_name: 't.item_name', unit_name: 'u.name', reuse_count: 't.reuse_count', tool_condition: 't.tool_condition', process_stage: 't.process_stage' },
   defaultSort: 'id',
   unitColumn: 't.unit_id',
   filters: { unit_id: 't.unit_id', tool_condition: 't.tool_condition', process_stage: 't.process_stage', verification_result: 't.verification_result', barcode: 't.barcode' },
   dateColumn: 'DATE(t.receipt_datetime)',
+  timeColumn: 'TIME(COALESCE(t.started_at, t.receipt_datetime, t.created_at))',
   exportColumns: [
     ['barcode', 'Barcode DTT'],
     ['receipt_datetime', 'Waktu Penerimaan'],
+    ['started_time', 'Jam Mulai'],
+    ['completed_time', 'Jam Selesai'],
+    ['process_duration', 'Lama Proses'],
+    ['wait_duration', 'Waktu Tunggu'],
     ['unit_name', 'Unit Pengirim'],
     ['item_code', 'Kode Alat'],
     ['item_name', 'Nama Alat Medis'],
@@ -1469,10 +1701,10 @@ registerCrud({
   roles: { read: ['admin', 'petugas', 'unit'], write: ['admin', 'petugas', 'unit'], remove: ['admin', 'petugas'] },
   fields: [
     field('barcode', 'string', { label: 'Barcode', max: 50, createOnly: true }),
-    field('receipt_datetime', 'datetime', { default: () => new Date().toISOString().slice(0, 19).replace('T', ' '), label: 'Waktu Penerimaan' }),
+    field('receipt_datetime', 'datetime', { default: () => nowDateTimeStr(), label: 'Waktu Penerimaan' }),
     field('unit_id', 'int', { required: true, min: 1, label: 'Unit pengirim' }),
     field('item_code', 'string', { label: 'Kode alat', max: 50 }),
-    field('item_name', 'string', { required: true, label: 'Nama alat DTT / RIUS', max: 150 }),
+    field('item_name', 'string', { required: true, label: 'Nama alat DTT / Reuse', max: 150 }),
     field('quantity', 'int', { required: true, min: 1, label: 'Jumlah' }),
     field('unit_label', 'string', { default: 'pcs', max: 30, label: 'Satuan' }),
     field('reuse_count', 'int', { required: true, min: 1, default: 1, label: 'Penggunaan Ke-' }),
@@ -1493,26 +1725,37 @@ registerCrud({
     if (ctx.user.role === 'unit' && ctx.user.unit_id) {
       data.unit_id = ctx.user.unit_id;
     }
+    const ts = resolveActionTimestamps(ctx.body);
+    data.started_at = ts.started_at;
+    data.completed_at = ts.completed_at;
+    if (!data.receipt_datetime) data.receipt_datetime = ts.completed_at;
     const today = (data.receipt_datetime || todayStr()).slice(0, 10);
     data.barcode = data.barcode || (await makeCode(conn, 'RD', today));
   },
 });
 
-// ---------- DTT (RIUS) Transaksi 2: Distribusi Alat Hasil DTT (CSSD -> Unit) ----------
+// ---------- DTT (Reuse) Transaksi 2: Distribusi Alat Hasil DTT (CSSD -> Unit) ----------
 registerCrud({
   path: 'dtt-distributions',
   table: 'dtt_distributions',
   from: 'dtt_distributions t JOIN units u ON u.id = t.unit_id JOIN dtt_receipts r ON r.id = t.dtt_receipt_id',
-  select: 't.*, u.name AS unit_name, r.barcode AS receipt_barcode',
+  select: `t.*, u.name AS unit_name, r.barcode AS receipt_barcode,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.dist_datetime, t.created_at), COALESCE(t.completed_at, t.dist_datetime, t.created_at)), 0) AS process_seconds,
+    GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(r.completed_at, r.receipt_datetime, r.created_at), COALESCE(t.started_at, t.dist_datetime, t.created_at)), 0) AS wait_seconds`,
   search: ['t.barcode', 't.item_name', 'u.name', 't.officer', 't.receiver_name', 'r.barcode'],
-  sort: { id: 't.id', dist_datetime: 't.dist_datetime', barcode: 't.barcode', item_name: 't.item_name', unit_name: 'u.name' },
+  sort: { id: 't.id', dist_datetime: 't.dist_datetime', started_at: 't.started_at', barcode: 't.barcode', item_name: 't.item_name', unit_name: 'u.name' },
   defaultSort: 'id',
   unitColumn: 't.unit_id',
   filters: { unit_id: 't.unit_id', tool_condition: 't.tool_condition', barcode: 't.barcode' },
   dateColumn: 'DATE(t.dist_datetime)',
+  timeColumn: 'TIME(COALESCE(t.started_at, t.dist_datetime, t.created_at))',
   exportColumns: [
     ['barcode', 'Barcode Distribusi'],
     ['dist_datetime', 'Waktu Distribusi'],
+    ['started_time', 'Jam Mulai'],
+    ['completed_time', 'Jam Selesai'],
+    ['process_duration', 'Lama Proses'],
+    ['wait_duration', 'Waktu Tunggu'],
     ['receipt_barcode', 'Barcode Penerimaan'],
     ['item_name', 'Nama Alat'],
     ['quantity', 'Jumlah'],
@@ -1527,7 +1770,7 @@ registerCrud({
   fields: [
     field('barcode', 'string', { label: 'Barcode', max: 50, createOnly: true }),
     field('dtt_receipt_id', 'int', { required: true, min: 1, label: 'Alat DTT' }),
-    field('dist_datetime', 'datetime', { default: () => new Date().toISOString().slice(0, 19).replace('T', ' '), label: 'Waktu Distribusi' }),
+    field('dist_datetime', 'datetime', { default: () => nowDateTimeStr(), label: 'Waktu Distribusi' }),
     field('unit_id', 'int', { required: true, min: 1, label: 'Unit penerima' }),
     field('item_name', 'string', { required: true, label: 'Nama alat', max: 150 }),
     field('quantity', 'int', { required: true, min: 1, label: 'Jumlah' }),
@@ -1550,6 +1793,10 @@ registerCrud({
     if (ctx.user.role === 'unit' && Number(dttReceipt.unit_id) !== Number(ctx.user.unit_id)) {
       throw new HttpError(403, 'Anda tidak memiliki akses ke alat DTT unit lain');
     }
+    const ts = resolveActionTimestamps(ctx.body);
+    data.started_at = ts.started_at;
+    data.completed_at = ts.completed_at;
+    if (!data.dist_datetime) data.dist_datetime = ts.completed_at;
     const today = (data.dist_datetime || todayStr()).slice(0, 10);
     data.barcode = data.barcode || (await makeCode(conn, 'DDTT', today));
     await conn.query("UPDATE dtt_receipts SET process_stage = 'Selesai' WHERE id = ?", [data.dtt_receipt_id]);
@@ -2563,7 +2810,7 @@ router.get('/reports/monthly-summary', auth, allow('admin'), wrap(async (req, re
     GROUP BY s.machine_id, m.name
   `, [month, year]);
 
-  // 2. Rekap DTT (RIUS) Bulanan
+  // 2. Rekap DTT (Reuse) Bulanan
   const [[dttSummary]] = await pool.query(`
     SELECT
       COUNT(*) AS total_receipts,
@@ -2627,6 +2874,132 @@ router.get('/reports/monthly-summary', auth, allow('admin'), wrap(async (req, re
       (SELECT COUNT(*) FROM quarantines WHERE MONTH(created_at) = ? AND YEAR(created_at) = ?) AS quarantines_count
   `, [month, year, month, year, month, year, month, year, month, year, month, year, month, year, month, year, month, year, month, year, month, year]);
 
+  // 5. Rekap Waktu Proses & Waktu Tunggu per Tahapan CSSD Bulanan
+  const calcStageTiming = async (stageName, sql) => {
+    const [[row]] = await pool.query(sql, [month, year]);
+    const avgProc = row?.avg_process_seconds !== null && row?.avg_process_seconds !== undefined ? Math.round(Number(row.avg_process_seconds)) : null;
+    const avgWait = row?.avg_wait_seconds !== null && row?.avg_wait_seconds !== undefined ? Math.round(Number(row.avg_wait_seconds)) : null;
+    const totalProc = row?.total_process_seconds !== null && row?.total_process_seconds !== undefined ? Math.round(Number(row.total_process_seconds)) : 0;
+    const totalWait = row?.total_wait_seconds !== null && row?.total_wait_seconds !== undefined ? Math.round(Number(row.total_wait_seconds)) : 0;
+    return {
+      stage: stageName,
+      total_records: Number(row?.cnt || 0),
+      avg_process_seconds: avgProc,
+      avg_process_duration: formatDurationSec(avgProc),
+      total_process_seconds: totalProc,
+      total_process_duration: formatDurationSec(totalProc),
+      avg_wait_seconds: avgWait,
+      avg_wait_duration: formatDurationSec(avgWait),
+      total_wait_seconds: totalWait,
+      total_wait_duration: formatDurationSec(totalWait),
+    };
+  };
+
+  const timings = await Promise.all([
+    calcStageTiming('Alat Kotor Masuk', `
+      SELECT COUNT(*) AS cnt,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS avg_process_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS total_process_seconds,
+        0 AS avg_wait_seconds,
+        0 AS total_wait_seconds
+      FROM dirty_receipts t
+      WHERE MONTH(t.receipt_date) = ? AND YEAR(t.receipt_date) = ?
+    `),
+    calcStageTiming('Pencucian', `
+      SELECT COUNT(*) AS cnt,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS avg_process_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS total_process_seconds,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(r.completed_at, r.created_at), COALESCE(t.started_at, t.created_at)), 0)) AS avg_wait_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(r.completed_at, r.created_at), COALESCE(t.started_at, t.created_at)), 0)) AS total_wait_seconds
+      FROM washings t
+      JOIN dirty_receipts r ON r.id = t.receipt_id
+      WHERE MONTH(t.wash_date) = ? AND YEAR(t.wash_date) = ?
+    `),
+    calcStageTiming('Pengeringan & Pemeriksaan', `
+      SELECT COUNT(*) AS cnt,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS avg_process_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS total_process_seconds,
+        AVG((SELECT GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(w.completed_at, w.created_at), COALESCE(t.started_at, t.created_at)), 0)
+             FROM washings w WHERE w.receipt_id = t.receipt_id ORDER BY w.id DESC LIMIT 1)) AS avg_wait_seconds,
+        SUM((SELECT GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(w.completed_at, w.created_at), COALESCE(t.started_at, t.created_at)), 0)
+             FROM washings w WHERE w.receipt_id = t.receipt_id ORDER BY w.id DESC LIMIT 1)) AS total_wait_seconds
+      FROM dryings t
+      WHERE MONTH(t.dry_date) = ? AND YEAR(t.dry_date) = ?
+    `),
+    calcStageTiming('Pengemasan', `
+      SELECT COUNT(*) AS cnt,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS avg_process_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS total_process_seconds,
+        AVG((SELECT GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(d.completed_at, d.created_at), COALESCE(t.started_at, t.created_at)), 0)
+             FROM dryings d WHERE d.receipt_id = t.receipt_id AND d.is_dry = 1 AND d.no_rust = 1 AND d.function_ok = 1 ORDER BY d.id DESC LIMIT 1)) AS avg_wait_seconds,
+        SUM((SELECT GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(d.completed_at, d.created_at), COALESCE(t.started_at, t.created_at)), 0)
+             FROM dryings d WHERE d.receipt_id = t.receipt_id AND d.is_dry = 1 AND d.no_rust = 1 AND d.function_ok = 1 ORDER BY d.id DESC LIMIT 1)) AS total_wait_seconds
+      FROM packagings t
+      WHERE MONTH(t.pack_date) = ? AND YEAR(t.pack_date) = ?
+    `),
+    calcStageTiming('Sterilisasi', `
+      SELECT COUNT(*) AS cnt,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS avg_process_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS total_process_seconds,
+        AVG((SELECT GREATEST(TIMESTAMPDIFF(SECOND, MAX(COALESCE(p.completed_at, p.created_at)), COALESCE(t.started_at, t.created_at)), 0)
+             FROM sterilization_items si JOIN packagings p ON p.id = si.packaging_id WHERE si.sterilization_id = t.id)) AS avg_wait_seconds,
+        SUM((SELECT GREATEST(TIMESTAMPDIFF(SECOND, MAX(COALESCE(p.completed_at, p.created_at)), COALESCE(t.started_at, t.created_at)), 0)
+             FROM sterilization_items si JOIN packagings p ON p.id = si.packaging_id WHERE si.sterilization_id = t.id)) AS total_wait_seconds
+      FROM sterilizations t
+      WHERE MONTH(t.steril_date) = ? AND YEAR(t.steril_date) = ?
+    `),
+    calcStageTiming('Verifikasi', `
+      SELECT COUNT(*) AS cnt,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS avg_process_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS total_process_seconds,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(s.completed_at, s.created_at), COALESCE(t.started_at, t.created_at)), 0)) AS avg_wait_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(s.completed_at, s.created_at), COALESCE(t.started_at, t.created_at)), 0)) AS total_wait_seconds
+      FROM verifications t
+      JOIN sterilizations s ON s.id = t.sterilization_id
+      WHERE MONTH(t.verify_date) = ? AND YEAR(t.verify_date) = ?
+    `),
+    calcStageTiming('Penyimpanan Alat Steril', `
+      SELECT COUNT(*) AS cnt,
+        AVG(CASE WHEN t.completed_at IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), t.completed_at), 0) ELSE NULL END) AS avg_process_seconds,
+        SUM(CASE WHEN t.completed_at IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), t.completed_at), 0) ELSE 0 END) AS total_process_seconds,
+        AVG((SELECT GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(v.completed_at, v.created_at), COALESCE(t.started_at, t.created_at)), 0)
+             FROM verifications v JOIN sterilization_items si ON si.sterilization_id = v.sterilization_id WHERE si.packaging_id = t.packaging_id ORDER BY v.id DESC LIMIT 1)) AS avg_wait_seconds,
+        SUM((SELECT GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(v.completed_at, v.created_at), COALESCE(t.started_at, t.created_at)), 0)
+             FROM verifications v JOIN sterilization_items si ON si.sterilization_id = v.sterilization_id WHERE si.packaging_id = t.packaging_id ORDER BY v.id DESC LIMIT 1)) AS total_wait_seconds
+      FROM sterile_stock t
+      WHERE MONTH(t.sterile_date) = ? AND YEAR(t.sterile_date) = ?
+    `),
+    calcStageTiming('Distribusi Alat / Kasa Steril', `
+      SELECT COUNT(*) AS cnt,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS avg_process_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0)) AS total_process_seconds,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(s.started_at, s.created_at), COALESCE(t.started_at, t.created_at)), 0)) AS avg_wait_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(s.started_at, s.created_at), COALESCE(t.started_at, t.created_at)), 0)) AS total_wait_seconds
+      FROM distributions t
+      JOIN sterile_stock s ON s.id = t.stock_id
+      WHERE MONTH(t.dist_date) = ? AND YEAR(t.dist_date) = ?
+    `),
+    calcStageTiming('Penerimaan Alat DTT (Reuse)', `
+      SELECT COUNT(*) AS cnt,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.receipt_datetime, t.created_at), COALESCE(t.completed_at, t.receipt_datetime, t.created_at)), 0)) AS avg_process_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.receipt_datetime, t.created_at), COALESCE(t.completed_at, t.receipt_datetime, t.created_at)), 0)) AS total_process_seconds,
+        0 AS avg_wait_seconds,
+        0 AS total_wait_seconds
+      FROM dtt_receipts t
+      WHERE MONTH(t.receipt_datetime) = ? AND YEAR(t.receipt_datetime) = ?
+    `),
+    calcStageTiming('Distribusi Alat DTT (Reuse)', `
+      SELECT COUNT(*) AS cnt,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.dist_datetime, t.created_at), COALESCE(t.completed_at, t.dist_datetime, t.created_at)), 0)) AS avg_process_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.dist_datetime, t.created_at), COALESCE(t.completed_at, t.dist_datetime, t.created_at)), 0)) AS total_process_seconds,
+        AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(r.completed_at, r.receipt_datetime, r.created_at), COALESCE(t.started_at, t.dist_datetime, t.created_at)), 0)) AS avg_wait_seconds,
+        SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(r.completed_at, r.receipt_datetime, r.created_at), COALESCE(t.started_at, t.dist_datetime, t.created_at)), 0)) AS total_wait_seconds
+      FROM dtt_distributions t
+      JOIN dtt_receipts r ON r.id = t.dtt_receipt_id
+      WHERE MONTH(t.dist_datetime) = ? AND YEAR(t.dist_datetime) = ?
+    `),
+  ]);
+
   res.json({
     success: true,
     data: {
@@ -2647,6 +3020,7 @@ router.get('/reports/monthly-summary', auth, allow('admin'), wrap(async (req, re
         by_unit: gauzeByUnit,
       },
       overall,
+      timings,
     },
   });
 }));
@@ -2879,6 +3253,51 @@ router.get('/public/unit-status/:id', wrap(async (req, res) => {
 }));
 
 // ---------- Ketertelusuran ----------
+function makeTimelineEvent({ order, stage, date, officer, detail, status = 'ok', startedAt, completedAt, waitFromAt, storageActive = false }) {
+  const sAt = startedAt || (date ? `${String(date).slice(0, 10)} 00:00:00` : null);
+  const cAt = storageActive ? null : (completedAt || sAt);
+  const procSec = storageActive && sAt
+    ? diffSeconds(sAt, nowDateTimeStr())
+    : (sAt && cAt ? diffSeconds(sAt, cAt) : null);
+  const waitSec = waitFromAt && sAt ? diffSeconds(waitFromAt, sAt) : 0;
+  return {
+    order,
+    stage,
+    date,
+    officer,
+    detail,
+    status,
+    started_at: sAt,
+    completed_at: cAt,
+    started_time: sAt ? String(sAt).slice(11, 19) : '-',
+    completed_time: storageActive ? 'Masih Disimpan' : (cAt ? String(cAt).slice(11, 19) : '-'),
+    storage_active: storageActive,
+    process_seconds: procSec,
+    process_duration: formatDurationSec(procSec),
+    wait_seconds: waitSec,
+    wait_duration: formatDurationSec(waitSec),
+  };
+}
+
+function summarizeTimeline(timeline) {
+  const sumProcess = timeline.reduce((acc, ev) => acc + (Number(ev.process_seconds) || 0), 0);
+  const sumWait = timeline.reduce((acc, ev) => acc + (Number(ev.wait_seconds) || 0), 0);
+  const starts = timeline.map((ev) => ev.started_at).filter(Boolean).sort();
+  const ends = timeline.map((ev) => ev.completed_at).filter(Boolean).sort();
+  const hasActiveStorage = timeline.some((ev) => ev.storage_active);
+  const firstStart = starts[0] || null;
+  const lastEnd = hasActiveStorage ? nowDateTimeStr() : (ends[ends.length - 1] || firstStart);
+  const totalElapsed = firstStart && lastEnd ? diffSeconds(firstStart, lastEnd) : (sumProcess + sumWait);
+  return {
+    total_process_seconds: sumProcess,
+    total_process_duration: formatDurationSec(sumProcess),
+    total_wait_seconds: sumWait,
+    total_wait_duration: formatDurationSec(sumWait),
+    total_elapsed_seconds: totalElapsed,
+    total_elapsed_duration: formatDurationSec(totalElapsed),
+  };
+}
+
 async function buildTrace(receiptId) {
   const [[receipt]] = await pool.query(
     'SELECT r.*, u.name AS unit_name FROM dirty_receipts r LEFT JOIN units u ON u.id = r.unit_id WHERE r.id = ?',
@@ -2889,8 +3308,10 @@ async function buildTrace(receiptId) {
   const [dryings] = await pool.query('SELECT * FROM dryings WHERE receipt_id = ? ORDER BY id', [receiptId]);
   const [packages] = await pool.query(
     `SELECT p.*, s.id AS sterilization_id, s.batch_no, s.cycle_no, s.steril_date, s.temperature, s.duration_min,
-            s.officer AS steril_officer, m.name AS machine_name,
-            v.result, v.verify_date, v.officer AS verify_officer, v.fail_reason
+            s.officer AS steril_officer, s.started_at AS steril_started_at, s.completed_at AS steril_completed_at,
+            s.created_at AS steril_created_at, m.name AS machine_name,
+            v.id AS verification_id, v.result, v.verify_date, v.officer AS verify_officer, v.fail_reason,
+            v.started_at AS verify_started_at, v.completed_at AS verify_completed_at, v.created_at AS verify_created_at
      FROM packagings p
      LEFT JOIN sterilization_items si ON si.packaging_id = p.id
      LEFT JOIN sterilizations s ON s.id = si.sterilization_id
@@ -2899,38 +3320,177 @@ async function buildTrace(receiptId) {
      WHERE p.receipt_id = ? ORDER BY p.id, s.id`,
     [receiptId]
   );
-  const [distributions] = await pool.query(
-    `SELECT d.*, u.name AS unit_name FROM distributions d
-     JOIN sterile_stock st ON st.id = d.stock_id
+  const [stocks] = await pool.query(
+    `SELECT st.*,
+       (SELECT COALESCE(v.completed_at, v.created_at)
+        FROM verifications v
+        JOIN sterilization_items si ON si.sterilization_id = v.sterilization_id
+        WHERE si.packaging_id = st.packaging_id
+        ORDER BY v.id DESC LIMIT 1) AS verify_completed_at
+     FROM sterile_stock st
      JOIN packagings p ON p.id = st.packaging_id
+     WHERE p.receipt_id = ? ORDER BY st.id`,
+    [receiptId]
+  );
+  const [distributions] = await pool.query(
+    `SELECT d.*, u.name AS unit_name, COALESCE(s.started_at, s.created_at) AS stock_started_at
+     FROM distributions d
+     JOIN sterile_stock s ON s.id = d.stock_id
+     JOIN packagings p ON p.id = s.packaging_id
      JOIN units u ON u.id = d.unit_id
      WHERE p.receipt_id = ? ORDER BY d.id`,
     [receiptId]
   );
 
-  const timeline = [{ order: 1, stage: 'Alat Kotor Masuk', date: receipt.receipt_date, officer: `${receipt.sender_name} → ${receipt.receiver_name}`, detail: `${receipt.item_name} (${receipt.quantity} ${receipt.unit_label}) dari ${receipt.unit_name}`, status: 'ok' }];
-  washings.forEach((w) => timeline.push({ order: 2, stage: 'Pencucian', date: w.wash_date, officer: w.officer, detail: `${w.method}${w.liquid ? `, ${w.liquid}` : ''}${w.duration_min ? `, ${w.duration_min} menit` : ''}`, status: 'ok' }));
-  dryings.forEach((d) => {
-    const passed = d.is_dry && d.no_rust && d.function_ok;
-    timeline.push({ order: 3, stage: 'Pengeringan & Pemeriksaan', date: d.dry_date, officer: d.officer, detail: passed ? 'Kering, tidak berkarat, fungsi baik' : 'Tidak lolos pemeriksaan, dicuci ulang', status: passed ? 'ok' : 'fail' });
+  const receiptStart = receipt.started_at || receipt.created_at;
+  const receiptEnd = receipt.completed_at || receipt.created_at;
+
+  const timeline = [
+    makeTimelineEvent({
+      order: 1,
+      stage: 'Alat Kotor Masuk',
+      date: receipt.receipt_date,
+      officer: `${receipt.sender_name} → ${receipt.receiver_name}`,
+      detail: `${receipt.item_name} (${receipt.quantity} ${receipt.unit_label}) dari ${receipt.unit_name || '-'}`,
+      status: 'ok',
+      startedAt: receiptStart,
+      completedAt: receiptEnd,
+      waitFromAt: null,
+    }),
+  ];
+
+  let lastWashEnd = receiptEnd;
+  washings.forEach((w) => {
+    const wStart = w.started_at || w.created_at;
+    const wEnd = w.completed_at || w.created_at;
+    timeline.push(makeTimelineEvent({
+      order: 2,
+      stage: 'Pencucian',
+      date: w.wash_date,
+      officer: w.officer,
+      detail: `${w.method}${w.liquid ? `, ${w.liquid}` : ''}${w.duration_min ? `, ${w.duration_min} menit` : ''}`,
+      status: 'ok',
+      startedAt: wStart,
+      completedAt: wEnd,
+      waitFromAt: receiptEnd,
+    }));
+    lastWashEnd = wEnd;
   });
+
+  let lastDryEnd = lastWashEnd;
+  dryings.forEach((d) => {
+    const passed = Boolean(d.is_dry && d.no_rust && d.function_ok);
+    const dStart = d.started_at || d.created_at;
+    const dEnd = d.completed_at || d.created_at;
+    timeline.push(makeTimelineEvent({
+      order: 3,
+      stage: 'Pengeringan & Pemeriksaan',
+      date: d.dry_date,
+      officer: d.officer,
+      detail: passed ? 'Kering, tidak berkarat, fungsi baik' : 'Tidak lolos pemeriksaan, dicuci ulang',
+      status: passed ? 'ok' : 'fail',
+      startedAt: dStart,
+      completedAt: dEnd,
+      waitFromAt: lastWashEnd,
+    }));
+    if (passed) lastDryEnd = dEnd;
+  });
+
   const seenPackages = new Set();
+  const seenSterils = new Set();
+  const seenVerifs = new Set();
   packages.forEach((p) => {
+    const pStart = p.started_at || p.created_at;
+    const pEnd = p.completed_at || p.created_at;
     if (!seenPackages.has(p.id)) {
       seenPackages.add(p.id);
-      timeline.push({ order: 4, stage: 'Pengemasan', date: p.pack_date, officer: p.officer, detail: `${p.barcode} — ${p.package_type}, ${p.material}, ${p.quantity} ${p.unit_label}`, status: 'ok' });
+      timeline.push(makeTimelineEvent({
+        order: 4,
+        stage: 'Pengemasan',
+        date: p.pack_date,
+        officer: p.officer,
+        detail: `${p.barcode} — ${p.package_type}, ${p.material}, ${p.quantity} ${p.unit_label}`,
+        status: 'ok',
+        startedAt: pStart,
+        completedAt: pEnd,
+        waitFromAt: lastDryEnd,
+      }));
     }
-    if (p.sterilization_id) {
-      timeline.push({ order: 5, stage: 'Sterilisasi', date: p.steril_date, officer: p.steril_officer, detail: `${p.barcode} — ${p.machine_name}, siklus ${p.cycle_no}, batch ${p.batch_no}, ${p.temperature}°C ${p.duration_min} menit`, status: 'ok' });
+    const sStart = p.steril_started_at || p.steril_created_at;
+    const sEnd = p.steril_completed_at || p.steril_created_at;
+    if (p.sterilization_id && !seenSterils.has(`${p.id}-${p.sterilization_id}`)) {
+      seenSterils.add(`${p.id}-${p.sterilization_id}`);
+      timeline.push(makeTimelineEvent({
+        order: 5,
+        stage: 'Sterilisasi',
+        date: p.steril_date,
+        officer: p.steril_officer,
+        detail: `${p.barcode} — ${p.machine_name}, siklus ${p.cycle_no}, batch ${p.batch_no}, ${p.temperature}°C ${p.duration_min} menit`,
+        status: 'ok',
+        startedAt: sStart,
+        completedAt: sEnd,
+        waitFromAt: pEnd,
+      }));
     }
-    if (p.result) {
-      timeline.push({ order: 6, stage: 'Verifikasi', date: p.verify_date, officer: p.verify_officer, detail: `${p.barcode} — ${p.result}${p.fail_reason ? `: ${p.fail_reason}` : ''}`, status: p.result === 'LULUS' ? 'ok' : 'fail' });
+    if (p.result && !seenVerifs.has(`${p.id}-${p.verification_id || p.sterilization_id}`)) {
+      seenVerifs.add(`${p.id}-${p.verification_id || p.sterilization_id}`);
+      const vStart = p.verify_started_at || p.verify_created_at;
+      const vEnd = p.verify_completed_at || p.verify_created_at;
+      timeline.push(makeTimelineEvent({
+        order: 6,
+        stage: 'Verifikasi',
+        date: p.verify_date,
+        officer: p.verify_officer,
+        detail: `${p.barcode} — ${p.result}${p.fail_reason ? `: ${p.fail_reason}` : ''}`,
+        status: p.result === 'LULUS' ? 'ok' : 'fail',
+        startedAt: vStart,
+        completedAt: vEnd,
+        waitFromAt: sEnd,
+      }));
     }
   });
-  distributions.forEach((d) => timeline.push({ order: 8, stage: d.type === 'KASA' ? 'Distribusi Kasa Steril' : 'Distribusi Alat Steril', date: d.dist_date, officer: d.officer, detail: `${d.barcode} — ${d.quantity} ke ${d.unit_name}`, status: 'ok' }));
 
-  timeline.sort((a, b) => (a.date === b.date ? a.order - b.order : a.date < b.date ? -1 : 1));
-  return { receipt, timeline };
+  stocks.forEach((st) => {
+    const stStart = st.started_at || st.created_at;
+    const isActive = !st.completed_at && st.status === 'Tersedia';
+    timeline.push(makeTimelineEvent({
+      order: 7,
+      stage: 'Penyimpanan Alat Steril',
+      date: st.sterile_date,
+      officer: 'Sistem CSSD',
+      detail: `${st.barcode} — Sisa stok: ${st.quantity} ${st.unit_label} (Exp: ${st.expiry_date}, Status: ${st.status})`,
+      status: 'ok',
+      startedAt: stStart,
+      completedAt: st.completed_at,
+      waitFromAt: st.verify_completed_at || stStart,
+      storageActive: isActive,
+    }));
+  });
+
+  distributions.forEach((d) => {
+    const distStart = d.started_at || d.created_at;
+    const distEnd = d.completed_at || d.created_at;
+    timeline.push(makeTimelineEvent({
+      order: 8,
+      stage: d.type === 'KASA' ? 'Distribusi Kasa Steril' : 'Distribusi Alat Steril',
+      date: d.dist_date,
+      officer: d.receiver_name ? `${d.officer} → ${d.receiver_name}` : d.officer,
+      detail: `${d.barcode} — ${d.quantity} ke ${d.unit_name}`,
+      status: 'ok',
+      startedAt: distStart,
+      completedAt: distEnd,
+      waitFromAt: d.stock_started_at,
+    }));
+  });
+
+  timeline.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    if (a.order !== b.order) return a.order - b.order;
+    return (a.started_at || '') < (b.started_at || '') ? -1 : 1;
+  });
+
+  const receiptWithTiming = enrichTimingRow({ ...receipt });
+  return { receipt: receiptWithTiming, timeline, summary: summarizeTimeline(timeline) };
 }
 
 async function buildDttTrace(dttReceiptId) {
@@ -2944,75 +3504,100 @@ async function buildDttTrace(dttReceiptId) {
     [dttReceiptId]
   );
 
+  const recDate = (receipt.receipt_datetime || '').slice(0, 10);
+  const recStart = receipt.started_at || receipt.receipt_datetime || receipt.created_at;
+  const recEnd = receipt.completed_at || receipt.receipt_datetime || receipt.created_at;
+
   const timeline = [
-    {
+    makeTimelineEvent({
       order: 1,
-      stage: 'Penerimaan Alat Kotor DTT (RIUS)',
-      date: (receipt.receipt_datetime || '').slice(0, 10),
+      stage: 'Penerimaan Alat Kotor DTT (Reuse)',
+      date: recDate,
       officer: `${receipt.sender_name} → ${receipt.receiver_name}`,
       detail: `${receipt.barcode} — ${receipt.item_name} (${receipt.quantity} ${receipt.unit_label}) • Pemakaian ke-${receipt.reuse_count} • Kondisi: ${receipt.tool_condition}`,
       status: 'ok',
-    },
-    {
+      startedAt: recStart,
+      completedAt: recEnd,
+      waitFromAt: null,
+    }),
+    makeTimelineEvent({
       order: 2,
       stage: 'Pencucian & DTT',
-      date: (receipt.receipt_datetime || '').slice(0, 10),
+      date: recDate,
       officer: receipt.receiver_name,
       detail: `${receipt.dtt_method} • Cairan: ${receipt.dtt_liquid} • Waktu: ${receipt.dtt_duration_min} menit`,
       status: 'ok',
-    },
-    {
+      startedAt: recStart,
+      completedAt: recEnd,
+      waitFromAt: recEnd,
+    }),
+    makeTimelineEvent({
       order: 3,
       stage: 'Verifikasi & Penyimpanan DTT',
-      date: (receipt.receipt_datetime || '').slice(0, 10),
+      date: recDate,
       officer: receipt.receiver_name,
       detail: `Hasil Verifikasi: ${receipt.verification_result} • Status: ${receipt.process_stage}`,
       status: receipt.verification_result === 'Gagal / Cuci Ulang' ? 'fail' : 'ok',
-    },
+      startedAt: recEnd,
+      completedAt: recEnd,
+      waitFromAt: recEnd,
+    }),
   ];
 
   distributions.forEach((d) => {
-    timeline.push({
+    const dStart = d.started_at || d.dist_datetime || d.created_at;
+    const dEnd = d.completed_at || d.dist_datetime || d.created_at;
+    timeline.push(makeTimelineEvent({
       order: 4,
-      stage: 'Distribusi Alat Hasil DTT (RIUS)',
+      stage: 'Distribusi Alat Hasil DTT (Reuse)',
       date: (d.dist_datetime || '').slice(0, 10),
       officer: `${d.officer} → ${d.receiver_name}`,
       detail: `${d.barcode} — ${d.quantity} ${d.unit_label} ke ${d.unit_name} (Pemakaian ke-${d.reuse_count})`,
       status: 'ok',
-    });
+      startedAt: dStart,
+      completedAt: dEnd,
+      waitFromAt: recEnd,
+    }));
+  });
+
+  const receiptWithTiming = enrichTimingRow({
+    ...receipt,
+    receipt_date: recDate,
+    is_dtt: true,
   });
 
   return {
-    receipt: {
-      ...receipt,
-      receipt_date: (receipt.receipt_datetime || '').slice(0, 10),
-      is_dtt: true,
-    },
+    receipt: receiptWithTiming,
     timeline,
+    summary: summarizeTimeline(timeline),
   };
 }
 
 router.get('/traceability', auth, wrap(async (req, res) => {
   const code = sanitizeText(req.query.barcode || '').slice(0, 50);
-  if (!code) throw new HttpError(422, 'Barcode wajib diisi', { barcode: 'Barcode wajib diisi' });
+  const rawUnitId = req.user.role === 'unit' ? req.user.unit_id : (req.query.unit_id ? Number(req.query.unit_id) : null);
+  const unitId = rawUnitId && Number.isInteger(Number(rawUnitId)) && Number(rawUnitId) > 0 ? Number(rawUnitId) : null;
+  const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_from || '') ? req.query.date_from : '';
+  const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_to || '') ? req.query.date_to : '';
+  const timeFrom = /^\d{2}:\d{2}(:\d{2})?$/.test(req.query.time_from || '')
+    ? (req.query.time_from.length === 5 ? `${req.query.time_from}:00` : req.query.time_from)
+    : '';
+  const timeTo = /^\d{2}:\d{2}(:\d{2})?$/.test(req.query.time_to || '')
+    ? (req.query.time_to.length === 5 ? `${req.query.time_to}:59` : req.query.time_to)
+    : '';
+  const officer = sanitizeText(req.query.officer || '').slice(0, 100);
 
-  // 1. Cek Transaksi DTT (RIUS)
-  const [dttByReceipt] = await pool.query('SELECT id FROM dtt_receipts WHERE barcode = ?', [code]);
-  const [dttByDist] = await pool.query('SELECT dtt_receipt_id AS id FROM dtt_distributions WHERE barcode = ?', [code]);
-  const dttIds = [...new Set([...dttByReceipt, ...dttByDist].map((r) => r.id))];
-
-  if (dttIds.length > 0) {
-    let traces = (await Promise.all(dttIds.map(buildDttTrace))).filter(Boolean);
-    if (req.user.role === 'unit') {
-      if (!req.user.unit_id) throw new HttpError(404, 'Data tidak ditemukan atau tidak memiliki akses');
-      traces = traces.filter((t) => Number(t.receipt.unit_id) === Number(req.user.unit_id));
-    }
-    if (!traces.length) throw new HttpError(404, 'Data tidak ditemukan atau tidak memiliki akses');
-    return res.json({ success: true, data: traces });
+  const hasAnyFilter = Boolean(code || req.query.unit_id || dateFrom || dateTo || timeFrom || timeTo || officer);
+  if (!hasAnyFilter) {
+    throw new HttpError(422, 'Isi minimal satu filter pencarian (barcode, unit asal, tanggal, jam proses, atau petugas)');
   }
 
-  // 2. Cek Barcode Transaksi BMHP (Khusus Internal CSSD)
-  if (req.user.role !== 'unit') {
+  if (req.user.role === 'unit' && !unitId) {
+    return res.json({ success: true, data: [] });
+  }
+
+  // 1. Cek BMHP hanya jika mencari barcode exact tanpa filter unit/tanggal/petugas (khusus internal CSSD)
+  if (code && !req.query.unit_id && !dateFrom && !dateTo && !timeFrom && !timeTo && !officer && req.user.role !== 'unit') {
     const [bmhpItem] = await pool.query('SELECT * FROM bmhp_items WHERE code = ? LIMIT 1', [code]);
     if (bmhpItem.length > 0) {
       const item = bmhpItem[0];
@@ -3033,44 +3618,189 @@ router.get('/traceability', auth, wrap(async (req, res) => {
           timeline: [
             {
               stage: 'Stok Terdaftar',
-              date: item.created_at,
+              date: String(item.created_at || '').slice(0, 10),
+              started_time: String(item.created_at || '').slice(11, 19) || '-',
+              completed_time: String(item.created_at || '').slice(11, 19) || '-',
+              process_duration: '0 dtk',
+              wait_duration: '0 dtk',
               detail: `Stok saat ini: ${item.stock} ${item.unit_label} (Min: ${item.min_stock}). Batch: ${item.batch_no || '-'}, Exp: ${item.expiry_date || '-'}`,
               officer: 'Logistik CSSD',
             },
             ...txs.map((t) => ({
               stage: t.type === 'MASUK' ? 'Barang Masuk' : 'Barang Keluar',
               date: t.trx_date,
+              started_time: String(t.created_at || '').slice(11, 19) || '-',
+              completed_time: String(t.created_at || '').slice(11, 19) || '-',
+              process_duration: '0 dtk',
+              wait_duration: '0 dtk',
               detail: `${t.type === 'MASUK' ? '+' : '-'}${t.quantity} ${item.unit_label} • ${t.notes || '-'}`,
               officer: t.officer,
             })),
           ],
+          summary: { total_process_duration: '0 dtk', total_wait_duration: '0 dtk', total_elapsed_duration: '0 dtk' },
         }],
       });
     }
   }
 
-  // 3. Cek Transaksi CSSD Standar (Alat Kotor, Paket, Distribusi, Batch)
-  const [byReceipt] = await pool.query('SELECT id FROM dirty_receipts WHERE barcode = ?', [code]);
-  const [byPackage] = await pool.query('SELECT receipt_id AS id FROM packagings WHERE barcode = ?', [code]);
-  const [byDist] = await pool.query(
-    'SELECT p.receipt_id AS id FROM distributions d JOIN sterile_stock s ON s.id = d.stock_id JOIN packagings p ON p.id = s.packaging_id WHERE d.barcode = ?',
-    [code]
-  );
-  const [byBatch] = await pool.query(
-    `SELECT DISTINCT p.receipt_id AS id FROM sterilizations s
-     JOIN sterilization_items si ON si.sterilization_id = s.id
-     JOIN packagings p ON p.id = si.packaging_id WHERE s.batch_no = ?`,
-    [code]
-  );
-  const ids = [...new Set([...byReceipt, ...byPackage, ...byDist, ...byBatch].map((r) => r.id))].slice(0, 20);
-  if (!ids.length) throw new HttpError(404, 'Barcode / batch tidak ditemukan');
+  // 2. Query Alur Steril (dirty_receipts) berdasarkan semua filter aktif
+  const sterileWhere = ['1=1'];
+  const sterileParams = [];
 
-  let traces = (await Promise.all(ids.map(buildTrace))).filter(Boolean);
-  if (req.user.role === 'unit') {
-    if (!req.user.unit_id) throw new HttpError(404, 'Data tidak ditemukan atau tidak memiliki akses');
-    traces = traces.filter((t) => Number(t.receipt.unit_id) === Number(req.user.unit_id));
+  if (unitId) {
+    sterileWhere.push('r.unit_id = ?');
+    sterileParams.push(unitId);
   }
-  if (!traces.length) throw new HttpError(404, 'Data tidak ditemukan atau tidak memiliki akses');
+  if (code) {
+    const codeLike = `%${escapeLike(code)}%`;
+    sterileWhere.push(`(
+      r.barcode LIKE ?
+      OR EXISTS (SELECT 1 FROM packagings p WHERE p.receipt_id = r.id AND p.barcode LIKE ?)
+      OR EXISTS (
+        SELECT 1 FROM distributions d
+        JOIN sterile_stock s ON s.id = d.stock_id
+        JOIN packagings p ON p.id = s.packaging_id
+        WHERE p.receipt_id = r.id AND d.barcode LIKE ?
+      )
+      OR EXISTS (
+        SELECT 1 FROM sterilizations st
+        JOIN sterilization_items si ON si.sterilization_id = st.id
+        JOIN packagings p ON p.id = si.packaging_id
+        WHERE p.receipt_id = r.id AND st.batch_no LIKE ?
+      )
+    )`);
+    sterileParams.push(codeLike, codeLike, codeLike, codeLike);
+  }
+  if (dateFrom) {
+    sterileWhere.push(`(
+      r.receipt_date >= ?
+      OR EXISTS (SELECT 1 FROM washings w WHERE w.receipt_id = r.id AND w.wash_date >= ?)
+      OR EXISTS (SELECT 1 FROM dryings d WHERE d.receipt_id = r.id AND d.dry_date >= ?)
+      OR EXISTS (SELECT 1 FROM packagings p WHERE p.receipt_id = r.id AND p.pack_date >= ?)
+      OR EXISTS (SELECT 1 FROM distributions di JOIN sterile_stock ss ON ss.id = di.stock_id JOIN packagings p ON p.id = ss.packaging_id WHERE p.receipt_id = r.id AND di.dist_date >= ?)
+    )`);
+    sterileParams.push(dateFrom, dateFrom, dateFrom, dateFrom, dateFrom);
+  }
+  if (dateTo) {
+    sterileWhere.push(`(
+      r.receipt_date <= ?
+      OR EXISTS (SELECT 1 FROM washings w WHERE w.receipt_id = r.id AND w.wash_date <= ?)
+      OR EXISTS (SELECT 1 FROM dryings d WHERE d.receipt_id = r.id AND d.dry_date <= ?)
+      OR EXISTS (SELECT 1 FROM packagings p WHERE p.receipt_id = r.id AND p.pack_date <= ?)
+      OR EXISTS (SELECT 1 FROM distributions di JOIN sterile_stock ss ON ss.id = di.stock_id JOIN packagings p ON p.id = ss.packaging_id WHERE p.receipt_id = r.id AND di.dist_date <= ?)
+    )`);
+    sterileParams.push(dateTo, dateTo, dateTo, dateTo, dateTo);
+  }
+  if (timeFrom || timeTo) {
+    const makeTimeRangeSql = (expr) => {
+      if (timeFrom && timeTo) {
+        sterileParams.push(timeFrom, timeTo);
+        return `(${expr} >= ? AND ${expr} <= ?)`;
+      }
+      if (timeFrom) {
+        sterileParams.push(timeFrom);
+        return `(${expr} >= ?)`;
+      }
+      sterileParams.push(timeTo);
+      return `(${expr} <= ?)`;
+    };
+    const rCond = makeTimeRangeSql('TIME(COALESCE(r.started_at, r.created_at))');
+    const wCond = makeTimeRangeSql('TIME(COALESCE(w.started_at, w.created_at))');
+    const dCond = makeTimeRangeSql('TIME(COALESCE(d.started_at, d.created_at))');
+    const pCond = makeTimeRangeSql('TIME(COALESCE(p.started_at, p.created_at))');
+    const sCond = makeTimeRangeSql('TIME(COALESCE(st.started_at, st.created_at))');
+    const vCond = makeTimeRangeSql('TIME(COALESCE(v.started_at, v.created_at))');
+    const diCond = makeTimeRangeSql('TIME(COALESCE(di.started_at, di.created_at))');
+    sterileWhere.push(`(
+      ${rCond}
+      OR EXISTS (SELECT 1 FROM washings w WHERE w.receipt_id = r.id AND ${wCond})
+      OR EXISTS (SELECT 1 FROM dryings d WHERE d.receipt_id = r.id AND ${dCond})
+      OR EXISTS (SELECT 1 FROM packagings p WHERE p.receipt_id = r.id AND ${pCond})
+      OR EXISTS (SELECT 1 FROM sterilizations st JOIN sterilization_items si ON si.sterilization_id = st.id JOIN packagings p ON p.id = si.packaging_id WHERE p.receipt_id = r.id AND ${sCond})
+      OR EXISTS (SELECT 1 FROM verifications v JOIN sterilization_items si ON si.sterilization_id = v.sterilization_id JOIN packagings p ON p.id = si.packaging_id WHERE p.receipt_id = r.id AND ${vCond})
+      OR EXISTS (SELECT 1 FROM distributions di JOIN sterile_stock ss ON ss.id = di.stock_id JOIN packagings p ON p.id = ss.packaging_id WHERE p.receipt_id = r.id AND ${diCond})
+    )`);
+  }
+  if (officer) {
+    const offLike = `%${escapeLike(officer)}%`;
+    sterileWhere.push(`(
+      r.sender_name LIKE ? OR r.receiver_name LIKE ?
+      OR EXISTS (SELECT 1 FROM washings w WHERE w.receipt_id = r.id AND w.officer LIKE ?)
+      OR EXISTS (SELECT 1 FROM dryings d WHERE d.receipt_id = r.id AND d.officer LIKE ?)
+      OR EXISTS (SELECT 1 FROM packagings p WHERE p.receipt_id = r.id AND p.officer LIKE ?)
+      OR EXISTS (SELECT 1 FROM sterilizations st JOIN sterilization_items si ON si.sterilization_id = st.id JOIN packagings p ON p.id = si.packaging_id WHERE p.receipt_id = r.id AND st.officer LIKE ?)
+      OR EXISTS (SELECT 1 FROM verifications v JOIN sterilization_items si ON si.sterilization_id = v.sterilization_id JOIN packagings p ON p.id = si.packaging_id WHERE p.receipt_id = r.id AND v.officer LIKE ?)
+      OR EXISTS (SELECT 1 FROM distributions di JOIN sterile_stock ss ON ss.id = di.stock_id JOIN packagings p ON p.id = ss.packaging_id WHERE p.receipt_id = r.id AND (di.officer LIKE ? OR di.receiver_name LIKE ?))
+    )`);
+    sterileParams.push(offLike, offLike, offLike, offLike, offLike, offLike, offLike, offLike, offLike);
+  }
+
+  const [sterileRows] = await pool.query(
+    `SELECT r.id FROM dirty_receipts r WHERE ${sterileWhere.join(' AND ')} ORDER BY r.id DESC LIMIT 20`,
+    sterileParams
+  );
+
+  // 3. Query Alur DTT (Reuse)
+  const dttWhere = ['1=1'];
+  const dttParams = [];
+  if (unitId) {
+    dttWhere.push('dr.unit_id = ?');
+    dttParams.push(unitId);
+  }
+  if (code) {
+    const codeLike = `%${escapeLike(code)}%`;
+    dttWhere.push('(dr.barcode LIKE ? OR EXISTS (SELECT 1 FROM dtt_distributions dd WHERE dd.dtt_receipt_id = dr.id AND dd.barcode LIKE ?))');
+    dttParams.push(codeLike, codeLike);
+  }
+  if (dateFrom) {
+    dttWhere.push('(DATE(dr.receipt_datetime) >= ? OR EXISTS (SELECT 1 FROM dtt_distributions dd WHERE dd.dtt_receipt_id = dr.id AND DATE(dd.dist_datetime) >= ?))');
+    dttParams.push(dateFrom, dateFrom);
+  }
+  if (dateTo) {
+    dttWhere.push('(DATE(dr.receipt_datetime) <= ? OR EXISTS (SELECT 1 FROM dtt_distributions dd WHERE dd.dtt_receipt_id = dr.id AND DATE(dd.dist_datetime) <= ?))');
+    dttParams.push(dateTo, dateTo);
+  }
+  if (timeFrom || timeTo) {
+    const makeDttTimeSql = (expr) => {
+      if (timeFrom && timeTo) {
+        dttParams.push(timeFrom, timeTo);
+        return `(${expr} >= ? AND ${expr} <= ?)`;
+      }
+      if (timeFrom) {
+        dttParams.push(timeFrom);
+        return `(${expr} >= ?)`;
+      }
+      dttParams.push(timeTo);
+      return `(${expr} <= ?)`;
+    };
+    const drCond = makeDttTimeSql('TIME(COALESCE(dr.started_at, dr.receipt_datetime, dr.created_at))');
+    const ddCond = makeDttTimeSql('TIME(COALESCE(dd.started_at, dd.dist_datetime, dd.created_at))');
+    dttWhere.push(`(${drCond} OR EXISTS (SELECT 1 FROM dtt_distributions dd WHERE dd.dtt_receipt_id = dr.id AND ${ddCond}))`);
+  }
+  if (officer) {
+    const offLike = `%${escapeLike(officer)}%`;
+    dttWhere.push('(dr.sender_name LIKE ? OR dr.receiver_name LIKE ? OR EXISTS (SELECT 1 FROM dtt_distributions dd WHERE dd.dtt_receipt_id = dr.id AND (dd.officer LIKE ? OR dd.receiver_name LIKE ?)))');
+    dttParams.push(offLike, offLike, offLike, offLike);
+  }
+
+  const [dttRows] = await pool.query(
+    `SELECT dr.id FROM dtt_receipts dr WHERE ${dttWhere.join(' AND ')} ORDER BY dr.id DESC LIMIT 20`,
+    dttParams
+  );
+
+  const [sterileTraces, dttTraces] = await Promise.all([
+    Promise.all(sterileRows.map((r) => buildTrace(r.id))),
+    Promise.all(dttRows.map((r) => buildDttTrace(r.id))),
+  ]);
+
+  const traces = [...sterileTraces.filter(Boolean), ...dttTraces.filter(Boolean)]
+    .sort((a, b) => {
+      const ka = a.receipt.started_at || a.receipt.created_at || a.receipt.receipt_date || '';
+      const kb = b.receipt.started_at || b.receipt.created_at || b.receipt.receipt_date || '';
+      return kb < ka ? -1 : kb > ka ? 1 : 0;
+    })
+    .slice(0, 25);
+
   res.json({ success: true, data: traces });
 }));
 
@@ -3652,8 +4382,54 @@ async function ensureAppSchemaUpdates() {
     await addCol('distributions', 'receiver_signature TEXT DEFAULT NULL');
     await addCol('distributions', 'officer_signature TEXT DEFAULT NULL');
 
+    await addCol('items', "unit_id INT UNSIGNED DEFAULT NULL AFTER id");
+    try {
+      await pool.query('ALTER TABLE items ADD KEY idx_items_unit_id (unit_id)');
+    } catch (err) {}
     await addCol('items', "process_type ENUM('Steril','DTT') NOT NULL DEFAULT 'Steril'");
     await addCol('items', "unit_label VARCHAR(50) NOT NULL DEFAULT 'Set'");
+
+    // Pastikan kolom started_at & completed_at tersedia di seluruh tabel tahapan CSSD & DTT
+    const timingTables = [
+      'dirty_receipts',
+      'washings',
+      'dryings',
+      'packagings',
+      'sterilizations',
+      'verifications',
+      'sterile_stock',
+      'distributions',
+      'dtt_receipts',
+      'dtt_distributions',
+    ];
+    for (const tbl of timingTables) {
+      await addCol(tbl, 'started_at DATETIME DEFAULT NULL');
+      await addCol(tbl, 'completed_at DATETIME DEFAULT NULL');
+    }
+
+    // Backfill data lama yang belum memiliki started_at / completed_at
+    const backfillPairs = [
+      ['dirty_receipts', 'created_at', true],
+      ['washings', 'created_at', true],
+      ['dryings', 'created_at', true],
+      ['packagings', 'created_at', true],
+      ['sterilizations', 'created_at', true],
+      ['verifications', 'created_at', true],
+      ['sterile_stock', 'created_at', false],
+      ['distributions', 'created_at', true],
+      ['dtt_receipts', 'COALESCE(receipt_datetime, created_at)', true],
+      ['dtt_distributions', 'COALESCE(dist_datetime, created_at)', true],
+    ];
+    for (const [tbl, fallbackExpr, fillCompleted] of backfillPairs) {
+      try {
+        await pool.query(`UPDATE ${tbl} SET started_at = ${fallbackExpr} WHERE started_at IS NULL`);
+        if (fillCompleted) {
+          await pool.query(`UPDATE ${tbl} SET completed_at = COALESCE(started_at, ${fallbackExpr}) WHERE completed_at IS NULL`);
+        } else {
+          await pool.query(`UPDATE ${tbl} SET completed_at = COALESCE(started_at, ${fallbackExpr}) WHERE completed_at IS NULL AND status != 'Tersedia'`);
+        }
+      } catch (err) {}
+    }
 
     // Pastikan 5 preset mesin standar tersedia
     const presets = [

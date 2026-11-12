@@ -26,7 +26,8 @@ export const REPORTS = {
   'distribusi-dtt': asReport(dttDistributionsConfig, { key: 'laporan-distribusi-dtt', title: '10. Laporan Distribusi Alat DTT', subtitle: 'Rekap serah terima kembali alat hasil DTT ke unit dengan tanda tangan' }),
   'stok-bmhp': asReport(bmhpItemsConfig, { key: 'laporan-stok-bmhp', title: '11. Laporan Stok BMHP', subtitle: 'Posisi stok dan stok minimum barang medis habis pakai', dateFilter: false, filters: bmhpItemsConfig.filters }),
   karantina: asReport(quarantinesConfig, { key: 'laporan-karantina-gagal', title: '12. Laporan Karantina/Gagal', subtitle: 'Paket tidak lulus verifikasi dan riwayat penanganan' }),
-  'dtt-rius': asReport(dttReceiptsConfig, { key: 'laporan-dtt-rius', title: 'Laporan Penerimaan DTT (RIUS)', subtitle: 'Buku kontrol digital penggunaan ulang alat medis (reuse count), kondisi fisik, dan serah terima' }),
+  'dtt-reuse': asReport(dttReceiptsConfig, { key: 'laporan-dtt-reuse', title: 'Laporan Penerimaan DTT (Reuse)', subtitle: 'Buku kontrol digital penggunaan ulang alat medis (reuse count), kondisi fisik, dan serah terima' }),
+  'dtt-rius': asReport(dttReceiptsConfig, { key: 'laporan-dtt-reuse', title: 'Laporan Penerimaan DTT (Reuse)', subtitle: 'Buku kontrol digital penggunaan ulang alat medis (reuse count), kondisi fisik, dan serah terima' }),
   distribusi: asReport(distAllConfig, { key: 'laporan-distribusi-gabungan', title: 'Laporan Distribusi Gabungan', subtitle: 'Rekap gabungan distribusi alat dan kasa steril ke seluruh unit' }),
   'mutasi-bmhp': asReport(bmhpMutationConfig, { key: 'laporan-mutasi-bmhp', title: 'Laporan Mutasi BMHP', subtitle: 'Barang masuk, keluar, dan kartu stok BMHP', fixedParams: undefined }),
 };
@@ -42,7 +43,7 @@ export const REPORT_LIST = [
   { slug: 'stok-steril', label: '7. Laporan Stok Alat Steril', group: 'Stok & Distribusi' },
   { slug: 'distribusi-alat', label: '8. Laporan Distribusi Alat Steril', group: 'Stok & Distribusi' },
   { slug: 'distribusi-kasa', label: '9. Laporan Distribusi Kasa Steril', group: 'Stok & Distribusi' },
-  { slug: 'distribusi-dtt', label: '10. Laporan Distribusi Alat DTT', group: 'DTT (RIUS)' },
+  { slug: 'distribusi-dtt', label: '10. Laporan Distribusi Alat DTT', group: 'DTT (Reuse)' },
   { slug: 'stok-bmhp', label: '11. Laporan Stok BMHP', group: 'Inventaris BMHP' },
   { slug: 'karantina', label: '12. Laporan Karantina/Gagal', group: 'Alur Proses CSSD' },
   { slug: 'ketertelusuran', label: '13. Laporan Ketertelusuran', group: 'Pelacakan Digital' },

@@ -4,7 +4,7 @@ import { PACKAGE_TYPES } from '@/utils/constants';
 import { getList } from '@/utils/request';
 import { formatDate, formatDateTime, formatNumber, todayISO } from '@/utils/format';
 import { Badge } from '@/components/ui/Badge';
-import { badge, bold, date, dateTime, expiry, mono, qty } from '@/config/cells';
+import { badge, bold, date, dateTime, durationBadge, expiry, mono, qty, timeWindow } from '@/config/cells';
 import { ROUTES } from '@/config/routes';
 import { officerSelectField } from '@/config/officerField';
 
@@ -18,16 +18,21 @@ export const sterileStockConfig = {
   readOnly: true,
   searchPlaceholder: 'Cari nama alat, barcode, batch...',
   dateFilter: true,
+  timeFilter: true,
   filters: [
+    { name: 'origin_unit_id', label: 'Unit Asal', optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS },
     { name: 'category', label: 'Kategori', options: PACKAGE_TYPES },
     { name: 'status', label: 'Status', options: ['Tersedia', 'Terdistribusi', 'Kedaluwarsa'] },
   ],
   columns: [
     { key: 'item_name', label: 'Nama Alat', sortable: true, render: bold('item_name') },
+    { key: 'origin_unit_name', label: 'Unit Asal', render: (r) => r.origin_unit_name || '-' },
     { key: 'category', label: 'Kategori', sortable: true },
     { key: 'barcode', label: 'Barcode', sortable: true, render: mono('barcode') },
     { key: 'batch_no', label: 'Batch', sortable: true, render: mono('batch_no') },
     { key: 'sterile_date', label: 'Tgl Steril', sortable: true, render: date('sterile_date') },
+    { key: 'started_at', label: 'Masuk / Diambil', sortable: true, render: timeWindow },
+    { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     { key: 'expiry_date', label: 'Kedaluwarsa', sortable: true, render: expiry },
     { key: 'quantity', label: 'Sisa', sortable: true, render: qty() },
     { key: 'display_status', label: 'Status', render: badge('display_status') },

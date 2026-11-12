@@ -45,15 +45,15 @@ export default function CounterBarcodePage() {
     },
     {
       number: 4,
-      title: 'Penerimaan Alat Kotor DTT (RIUS)',
+      title: 'Penerimaan Alat Kotor DTT (Reuse)',
       subtitle: 'Alur: Unit → CSSD',
       barcodeValue: 'TRX-DTT-KOTOR',
       targetUrl: `${origin}${ROUTES.DTT_RECEIPTS}`,
-      instructions: 'Scan QR Code ini untuk serah terima alat medis kotor DTT reuse (RIUS) di loket CSSD.',
+      instructions: 'Scan QR Code ini untuk serah terima alat medis kotor DTT Reuse di loket CSSD.',
     },
     {
       number: 5,
-      title: 'Distribusi Alat Hasil DTT (RIUS)',
+      title: 'Distribusi Alat Hasil DTT (Reuse)',
       subtitle: 'Alur: CSSD → Unit',
       barcodeValue: 'TRX-DTT-DIST',
       targetUrl: `${origin}${ROUTES.DTT_DISTRIBUTIONS}`,

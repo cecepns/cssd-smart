@@ -45,7 +45,7 @@ export const API_ENDPOINTS = {
     PACKAGING_MATERIALS: '/lookups/packaging-materials',
   },
 
-  // DTT (RIUS) - Penggunaan Ulang Alat Medis
+  // DTT (Reuse) - Penggunaan Ulang Alat Medis
   DTT_RECEIPTS: {
     ...crud('/dtt-receipts'),
     READY: '/dtt-receipts/ready',

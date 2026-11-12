@@ -6,6 +6,7 @@ import {
   Calendar,
   CheckCircle2,
   ChevronDown,
+  Clock,
   Download,
   Eye,
   EyeOff,
@@ -136,7 +137,7 @@ export default function ReportsHubPage() {
       ['Verifikasi Lolos', steril.passed_verifications || 0],
       ['Verifikasi Gagal', steril.failed_verifications || 0],
       [],
-      ['2. REKAP DTT (RIUS)'],
+      ['2. REKAP DTT (REUSE)'],
       ['Total Alat Kotor DTT Diterima', dtt.total_receipts || 0],
       ['Jumlah Fisik Alat Masuk', dtt.total_tools_received || 0],
       ['Kondisi Baik', dtt.condition_baik || 0],
@@ -160,6 +161,16 @@ export default function ReportsHubPage() {
       ['Distribusi DTT Kembali', overall?.dtt_distributions || 0],
       ['BMHP Keluar / Terpakai', overall?.bmhp_consumed || 0],
       ['Kejadian Karantina / Gagal', overall?.quarantines_count || 0],
+      [],
+      ['5. WAKTU PROSES & WAKTU TUNGGU PER TAHAPAN CSSD'],
+      ['Tahapan', 'Jumlah Data', 'Rata-Rata Lama Proses', 'Rata-Rata Waktu Tunggu', 'Total Lama Proses'],
+      ...(monthlyData.timings || []).map((t) => [
+        t.stage,
+        t.total_records || 0,
+        t.avg_process_duration || '-',
+        t.avg_wait_duration || '-',
+        t.total_process_duration || '-',
+      ]),
     ];
 
     const csvContent = lines.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -530,7 +541,7 @@ export default function ReportsHubPage() {
                 </div>
               </div>
 
-              {/* 2. Rekap DTT (RIUS) Bulanan */}
+              {/* 2. Rekap DTT (Reuse) Bulanan */}
               <div className="rounded-2xl border border-violet-200 bg-violet-50/30 p-4 sm:p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600 text-white font-bold text-xs">
@@ -538,7 +549,7 @@ export default function ReportsHubPage() {
                   </span>
                   <h3 className="text-base font-extrabold text-violet-950 flex items-center gap-2">
                     <Sparkles size={18} className="text-violet-600" />
-                    <span>Rekap DTT (RIUS)</span>
+                    <span>Rekap DTT (Reuse)</span>
                   </h3>
                 </div>
 
@@ -675,7 +686,7 @@ export default function ReportsHubPage() {
                       </tr>
                       <tr>
                         <td className="p-2.5 font-bold">7</td>
-                        <td className="p-2.5">Transaksi Alat Medis DTT (RIUS)</td>
+                        <td className="p-2.5">Transaksi Alat Medis DTT (Reuse)</td>
                         <td className="p-2.5 text-right font-extrabold text-violet-700">{formatNumber(monthlyData.overall.dtt_receipts)}</td>
                         <td className="p-2.5 text-slate-500">Penerimaan ({monthlyData.overall.dtt_distributions} terdistribusi kembali)</td>
                       </tr>
@@ -695,6 +706,46 @@ export default function ReportsHubPage() {
                   </table>
                 </div>
               </div>
+
+              {/* 5. Rekap Lama Proses & Waktu Tunggu per Tahapan CSSD */}
+              {monthlyData.timings?.length > 0 && (
+                <div className="rounded-2xl border border-sky-200 bg-sky-50/30 p-4 sm:p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-600 text-white font-bold text-xs">
+                      5
+                    </span>
+                    <h3 className="text-base font-extrabold text-sky-950 flex items-center gap-2">
+                      <Clock size={18} className="text-sky-600" />
+                      <span>Waktu Proses &amp; Waktu Tunggu per Tahapan CSSD</span>
+                    </h3>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#0A192F] text-[#E5C07B] uppercase tracking-wider font-extrabold">
+                        <tr>
+                          <th className="p-2.5 rounded-l-lg">Tahapan Proses CSSD</th>
+                          <th className="p-2.5 text-right">Jumlah Data</th>
+                          <th className="p-2.5 text-right">Rata-Rata Lama Proses</th>
+                          <th className="p-2.5 text-right">Rata-Rata Waktu Tunggu</th>
+                          <th className="p-2.5 text-right rounded-r-lg">Total Lama Proses</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 font-semibold text-slate-700 bg-white">
+                        {monthlyData.timings.map((t) => (
+                          <tr key={t.stage}>
+                            <td className="p-2.5 font-bold text-slate-900">{t.stage}</td>
+                            <td className="p-2.5 text-right font-mono">{formatNumber(t.total_records || 0)}</td>
+                            <td className="p-2.5 text-right font-bold text-sky-700">{t.avg_process_duration || '-'}</td>
+                            <td className="p-2.5 text-right font-bold text-amber-700">{t.avg_wait_duration || '-'}</td>
+                            <td className="p-2.5 text-right font-mono text-slate-600">{t.total_process_duration || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Tanda Tangan Pengesahan Laporan Bulanan */}
               <div className="grid grid-cols-2 pt-6 text-center text-xs text-slate-700">

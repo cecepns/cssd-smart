@@ -60,11 +60,12 @@ export const itemsConfig = {
   ...masterBase,
   key: 'master-jenis-alat',
   title: 'Jenis Alat',
-  subtitle: 'Master data instrumen dan alat medis untuk Kategori Steril dan DTT',
+  subtitle: 'Master data instrumen & alat medis per Unit Asal untuk Kategori Steril dan DTT',
   icon: Tags,
   endpoint: API_ENDPOINTS.ITEMS,
-  searchPlaceholder: 'Cari kode, nama alat, satuan...',
+  searchPlaceholder: 'Cari kode, nama alat, unit asal, satuan...',
   filters: [
+    { name: 'unit_id', label: 'Unit Asal', optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS },
     { name: 'process_type', label: 'Kategori Proses', options: ['Steril', 'DTT'] },
     { name: 'category', label: 'Kategori Kemasan', options: PACKAGE_TYPES },
     ...masterBase.filters,
@@ -82,6 +83,16 @@ export const itemsConfig = {
     },
     { key: 'code', label: 'Kode', sortable: true, render: mono('code') },
     { key: 'name', label: 'Nama Alat', sortable: true, render: bold('name') },
+    {
+      key: 'unit_name',
+      label: 'Unit Asal',
+      sortable: true,
+      render: (r) => (
+        <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-[#00338E]">
+          {r.unit_name || 'Belum di-set'}
+        </span>
+      ),
+    },
     {
       key: 'process_type',
       label: 'Kategori',
@@ -106,8 +117,19 @@ export const itemsConfig = {
     activeColumn,
   ],
   form: {
-    subtitle: 'Petugas memilih Kategori (Steril / DTT) kemudian memilih satuan sesuai jenis alat dari Master Satuan.',
+    subtitle: 'Pilih Unit Asal pemilik alat (POLI THT, POLI GIGI, Kebidanan, IGD, OK, dll.) lalu isi detail alat & satuannya.',
     fields: [
+      {
+        type: 'remote-select',
+        name: 'unit_id',
+        label: 'Unit Asal (Pemilik Alat)',
+        required: true,
+        span: 2,
+        placeholder: 'Pilih unit / ruangan pemilik alat...',
+        optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS,
+        optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+        help: 'Setiap alat wajib terhubung ke unit asal agar tidak tercampur antar poli / ruangan.',
+      },
       {
         name: 'process_type',
         label: 'Kategori Proses Layanan',
@@ -201,8 +223,8 @@ export const itemsSterilConfig = {
 export const itemsDttConfig = {
   ...itemsConfig,
   key: 'master-alat-dtt',
-  title: 'Master Data Alat DTT (RIUS)',
-  subtitle: 'Daftar alat medis reuse untuk disinfeksi tingkat tinggi (Kanul Suction, Sungkup, Selang Ventilator, Trocar, dll.)',
+  title: 'Master Data Alat DTT (Reuse)',
+  subtitle: 'Daftar alat medis reuse per unit untuk disinfeksi tingkat tinggi (Kanul Suction, Sungkup, Selang Ventilator, Trocar, dll.)',
   icon: Sparkles,
   fixedParams: { process_type: 'DTT' },
   form: {

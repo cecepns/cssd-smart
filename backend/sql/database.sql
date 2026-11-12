@@ -115,6 +115,7 @@ CREATE TABLE `users` (
 
 CREATE TABLE `items` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `unit_id` INT UNSIGNED DEFAULT NULL,
   `code` VARCHAR(30) NOT NULL,
   `name` VARCHAR(150) NOT NULL,
   `process_type` ENUM('Steril','DTT') NOT NULL DEFAULT 'Steril',
@@ -128,7 +129,9 @@ CREATE TABLE `items` (
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_items_code` (`code`),
-  KEY `idx_items_process_type` (`process_type`)
+  KEY `idx_items_unit_id` (`unit_id`),
+  KEY `idx_items_process_type` (`process_type`),
+  CONSTRAINT `fk_items_unit` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `machines` (
@@ -229,6 +232,8 @@ CREATE TABLE `dirty_receipts` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `barcode` VARCHAR(50) NOT NULL,
   `receipt_date` DATE NOT NULL,
+  `started_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
   `unit_id` INT UNSIGNED NOT NULL,
   `item_id` INT UNSIGNED DEFAULT NULL,
   `item_name` VARCHAR(150) NOT NULL,
@@ -261,6 +266,8 @@ CREATE TABLE `washings` (
   `duration_min` SMALLINT UNSIGNED DEFAULT NULL,
   `officer` VARCHAR(100) NOT NULL,
   `wash_date` DATE NOT NULL,
+  `started_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
   `notes` VARCHAR(500) DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -278,6 +285,8 @@ CREATE TABLE `dryings` (
   `function_ok` TINYINT(1) NOT NULL DEFAULT 0,
   `officer` VARCHAR(100) NOT NULL,
   `dry_date` DATE NOT NULL,
+  `started_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
   `notes` VARCHAR(500) DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -297,6 +306,8 @@ CREATE TABLE `packagings` (
   `unit_label` VARCHAR(30) NOT NULL DEFAULT 'paket',
   `officer` VARCHAR(100) NOT NULL,
   `pack_date` DATE NOT NULL,
+  `started_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
   `status` ENUM('Dikemas','Disterilkan','Lulus','Karantina','Terdistribusi') NOT NULL DEFAULT 'Dikemas',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -317,6 +328,8 @@ CREATE TABLE `sterilizations` (
   `duration_min` SMALLINT UNSIGNED NOT NULL,
   `officer` VARCHAR(100) NOT NULL,
   `steril_date` DATE NOT NULL,
+  `started_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
   `notes` VARCHAR(500) DEFAULT NULL,
   `status` ENUM('Menunggu Verifikasi','Lulus','Gagal') NOT NULL DEFAULT 'Menunggu Verifikasi',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -352,6 +365,8 @@ CREATE TABLE `verifications` (
   `officer` VARCHAR(100) NOT NULL,
   `signature` VARCHAR(255) DEFAULT NULL,
   `verify_date` DATE NOT NULL,
+  `started_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
   `notes` VARCHAR(500) DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -369,6 +384,8 @@ CREATE TABLE `sterile_stock` (
   `item_name` VARCHAR(150) NOT NULL,
   `batch_no` VARCHAR(50) NOT NULL,
   `sterile_date` DATE NOT NULL,
+  `started_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
   `expiry_date` DATE NOT NULL,
   `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
   `unit_label` VARCHAR(30) NOT NULL DEFAULT 'paket',
@@ -414,6 +431,8 @@ CREATE TABLE `distributions` (
   `receiver_name` VARCHAR(100) DEFAULT NULL,
   `receiver_signature` TEXT DEFAULT NULL,
   `dist_date` DATE NOT NULL,
+  `started_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
   `notes` VARCHAR(500) DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -424,13 +443,15 @@ CREATE TABLE `distributions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
--- DTT (RIUS) - Buku Kontrol Penggunaan Ulang Alat Medis (2 Barcode Transaksi)
+-- DTT (Reuse) - Buku Kontrol Penggunaan Ulang Alat Medis (2 Barcode Transaksi)
 -- ------------------------------------------------------------
--- Transaksi 1: Penerimaan Alat Kotor DTT/RIUS (Unit -> CSSD)
+-- Transaksi 1: Penerimaan Alat Kotor DTT (Reuse) (Unit -> CSSD)
 CREATE TABLE `dtt_receipts` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `barcode` VARCHAR(50) NOT NULL,
   `receipt_datetime` DATETIME NOT NULL,
+  `started_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
   `unit_id` INT UNSIGNED NOT NULL,
   `item_code` VARCHAR(50) DEFAULT NULL,
   `item_name` VARCHAR(150) NOT NULL,
@@ -458,12 +479,14 @@ CREATE TABLE `dtt_receipts` (
   CONSTRAINT `fk_dtt_receipts_unit` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Transaksi 2: Distribusi Alat Hasil DTT/RIUS (CSSD -> Unit)
+-- Transaksi 2: Distribusi Alat Hasil DTT (Reuse) (CSSD -> Unit)
 CREATE TABLE `dtt_distributions` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `barcode` VARCHAR(50) NOT NULL,
   `dtt_receipt_id` INT UNSIGNED NOT NULL,
   `dist_datetime` DATETIME NOT NULL,
+  `started_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
   `unit_id` INT UNSIGNED NOT NULL,
   `item_name` VARCHAR(150) NOT NULL,
   `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
@@ -542,14 +565,14 @@ INSERT INTO `units` (`id`,`code`,`name`,`pic_name`,`phone`) VALUES
 (5,'RI','Rawat Inap','Ns. Dewi','081200000005'),
 (6,'PG','Poli Gigi','drg. Andi','081200000006');
 
-INSERT INTO `items` (`id`,`code`,`name`,`category`,`shelf_life_months`,`description`) VALUES
-(1,'SET-LAP','Set Laparotomi','Set Instrumen',6,'Set instrumen laparotomi'),
-(2,'SET-MNR','Set Minor','Set Instrumen',6,'Set bedah minor'),
-(3,'DUK-LAP','Duk Laparotomi','Duk & Jas Operasi',6,'Duk steril laparotomi'),
-(4,'KSA-10','Kasa 10x10','Kasa Steril',6,'Kasa steril 10x10 cm'),
-(5,'JAS-OP','Jas Operasi','Duk & Jas Operasi',6,'Jas operasi steril'),
-(6,'ALT-GNT','Gunting Hecting Satuan','Alat Satuan',6,'Gunting angkat jahitan / hecting lepasan'),
-(7,'ALT-PNS','Pinset Sirurgis Satuan','Alat Satuan',6,'Pinset sirurgis lepasan IGD/Poli');
+INSERT INTO `items` (`id`,`unit_id`,`code`,`name`,`category`,`shelf_life_months`,`description`) VALUES
+(1,1,'SET-LAP','Set Laparotomi','Set Instrumen',6,'Set instrumen laparotomi'),
+(2,2,'SET-MNR','Set Minor','Set Instrumen',6,'Set bedah minor'),
+(3,1,'DUK-LAP','Duk Laparotomi','Duk & Jas Operasi',6,'Duk steril laparotomi'),
+(4,5,'KSA-10','Kasa 10x10','Kasa Steril',6,'Kasa steril 10x10 cm'),
+(5,1,'JAS-OP','Jas Operasi','Duk & Jas Operasi',6,'Jas operasi steril'),
+(6,2,'ALT-GNT','Gunting Hecting Satuan','Alat Satuan',6,'Gunting angkat jahitan / hecting lepasan'),
+(7,6,'ALT-PNS','Pinset Sirurgis Satuan','Alat Satuan',6,'Pinset sirurgis lepasan Poli Gigi');
 
 INSERT INTO `item_units` (`id`,`code`,`name`,`category`,`description`) VALUES
 (1,'SET','Set','Semua','Set instrumen bedah/tindakan lengkap'),

@@ -41,9 +41,6 @@ export default function Topbar({ collapsed, mobileOpen, onToggleMobile, onToggle
                 SMART
               </span>
             </span>
-            <span className="hidden rounded-full bg-gradient-to-r from-[#FFE36E] via-[#FFD028] to-[#F5B000] px-3.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-[#001D5A] shadow-[0_2px_10px_rgba(255,208,40,0.4)] sm:inline-block">
-              RSUD SERPONG UTARA
-            </span>
           </div>
           <p className="truncate text-[11px] font-semibold tracking-wide text-sky-100/90">
             Sterile Management System

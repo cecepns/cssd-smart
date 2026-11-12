@@ -2,7 +2,7 @@ import { Boxes, Truck } from 'lucide-react';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { getList } from '@/utils/request';
 import { formatDate, todayISO, fileUrl } from '@/utils/format';
-import { badge, bold, date, mono, qty } from '@/config/cells';
+import { badge, bold, date, durationBadge, mono, qty, timeWindow } from '@/config/cells';
 import { officerSelectField } from '@/config/officerField';
 import SterileSetSelector from '@/components/distribution/SterileSetSelector';
 
@@ -78,9 +78,13 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
   searchPlaceholder: 'Cari barcode, nama, unit tujuan...',
   createLabel: 'Distribusi Baru',
   dateFilter: true,
+  timeFilter: true,
+  filters: [{ name: 'unit_id', label: 'Unit Tujuan', optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS }],
   columns: [
     { key: 'barcode', label: 'Barcode', sortable: true, render: mono('barcode') },
     { key: 'dist_date', label: 'Tanggal', sortable: true, render: date('dist_date') },
+    { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
+    { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     ...(gauze
       ? [{ key: 'gauze_type', label: 'Jenis Kasa', sortable: true, render: (r) => <b className="font-bold text-brand-700">{r.gauze_type || r.item_name}</b> }]
       : [{ key: 'item_name', label: 'Alat', sortable: true, render: bold('item_name') }]),
@@ -213,7 +217,10 @@ export const distAllConfig = {
   subtitle: 'Seluruh distribusi alat dan kasa steril ke unit',
   fixedParams: undefined,
   fixedBody: undefined,
-  filters: [{ name: 'type', label: 'Jenis', options: [{ value: 'ALAT', label: 'Alat' }, { value: 'KASA', label: 'Kasa' }] }],
+  filters: [
+    { name: 'type', label: 'Jenis', options: [{ value: 'ALAT', label: 'Alat' }, { value: 'KASA', label: 'Kasa' }] },
+    { name: 'unit_id', label: 'Unit Tujuan', optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS },
+  ],
 };
 
 /** Laporan khusus Distribusi Kasa Steril. */

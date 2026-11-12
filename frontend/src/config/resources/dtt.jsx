@@ -1,8 +1,8 @@
 import { RefreshCw, Sparkles, Truck, BookOpen, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { getList } from '@/utils/request';
-import { formatDateTime, fileUrl, todayISO } from '@/utils/format';
-import { bold, mono, qty } from '@/config/cells';
+import { formatDateTime, fileUrl, wibDateTimeNow } from '@/utils/format';
+import { bold, durationBadge, mono, qty, timeWindow } from '@/config/cells';
 import { officerSelectField } from '@/config/officerField';
 
 export const TOOL_CONDITIONS = ['Baik', 'Perlu Perbaikan', 'Rusak / Afkir'];
@@ -44,11 +44,11 @@ const renderSignatureCell = (key) => (r) => {
 };
 
 /* ------------------------------------------------------------
- * 1. Barcode Penerimaan Alat Kotor DTT (RIUS) (Unit -> CSSD)
+ * 1. Barcode Penerimaan Alat Kotor DTT (Reuse) (Unit -> CSSD)
  * ------------------------------------------------------------ */
 export const dttReceiptsConfig = {
   key: 'dtt-penerimaan',
-  title: 'Penerimaan Alat Kotor DTT (RIUS)',
+  title: 'Penerimaan Alat Kotor DTT (Reuse)',
   subtitle: 'Penerimaan alat medis reuse dari unit ke CSSD — barcode otomatis (RD-...)',
   icon: Sparkles,
   endpoint: API_ENDPOINTS.DTT_RECEIPTS,
@@ -56,7 +56,9 @@ export const dttReceiptsConfig = {
   createLabel: 'Terima Alat Kotor DTT',
   defaultSort: 'id',
   dateFilter: true,
+  timeFilter: true,
   filters: [
+    { name: 'unit_id', label: 'Unit Pengirim', optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS },
     { name: 'tool_condition', label: 'Kondisi Alat', options: TOOL_CONDITIONS },
     { name: 'process_stage', label: 'Tahap Proses', options: DTT_PROCESS_STAGES },
     { name: 'verification_result', label: 'Verifikasi', options: DTT_VERIFY_RESULTS },
@@ -64,6 +66,8 @@ export const dttReceiptsConfig = {
   columns: [
     { key: 'barcode', label: 'Barcode RD', sortable: true, render: mono('barcode') },
     { key: 'receipt_datetime', label: 'Waktu Diterima', sortable: true, render: (r) => formatDateTime(r.receipt_datetime) },
+    { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
+    { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     { key: 'unit_name', label: 'Unit Pengirim', sortable: true },
     { key: 'item_name', label: 'Nama Alat Medis', sortable: true, render: bold('item_name') },
     { key: 'quantity', label: 'Jumlah', sortable: true, render: qty() },
@@ -89,15 +93,15 @@ export const dttReceiptsConfig = {
   traceField: 'barcode',
   form: {
     size: 'lg',
-    createTitle: 'Penerimaan Alat Kotor DTT (RIUS)',
-    subtitle: 'Barcode penerimaan dibuat otomatis (format RD-DDMMYY-001). Penyerah tanda tangan di layar HP.',
+    createTitle: 'Penerimaan Alat Kotor DTT (Reuse)',
+    subtitle: 'Barcode penerimaan dibuat otomatis (format RD-DDMMYY-001) dan jam mulai/selesai dicatat otomatis. Pilih Unit Pengirim agar daftar alat sesuai unit.',
     fields: [
       {
         name: 'receipt_datetime',
         label: 'Tanggal & Jam Otomatis',
         type: 'datetime-local',
         required: true,
-        default: () => new Date().toISOString().slice(0, 16),
+        default: () => wibDateTimeNow().slice(0, 16).replace(' ', 'T'),
       },
       {
         type: 'remote-select',
@@ -108,6 +112,40 @@ export const dttReceiptsConfig = {
         optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS,
         optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
         default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
+        onChange: (next, { values, setValues }) => {
+          if (String(next || '') !== String(values?.unit_id || '')) {
+            setValues({ _item_lookup: '', item_code: '', item_name: '' });
+          }
+        },
+      },
+      {
+        type: 'remote-select',
+        name: '_item_lookup',
+        label: 'Pilih Alat Medis DTT (sesuai unit)',
+        span: 2,
+        noSubmit: true,
+        placeholder: 'Pilih alat DTT terdaftar milik unit...',
+        disabledPlaceholder: 'Pilih Unit Pengirim terlebih dahulu...',
+        emptyText: 'Belum ada alat DTT terdaftar untuk unit ini di Master Alat',
+        enabledWhen: (vals) => Boolean(vals?.unit_id),
+        optionsEndpoint: API_ENDPOINTS.LOOKUPS.ITEMS,
+        optionsParams: (vals) => ({
+          is_active: 1,
+          sort_by: 'name',
+          order: 'asc',
+          process_type: 'DTT',
+          require_unit: 1,
+          unit_id: vals?.unit_id || '',
+        }),
+        optionLabel: (r) => `${r.code} — ${r.name}${r.unit_label ? ` (${r.unit_label})` : ''}`,
+        onChange: (_, { option, setValues }) => {
+          if (!option) return;
+          setValues({
+            item_code: option.code || '',
+            item_name: option.name || '',
+            unit_label: option.unit_label || 'Pcs',
+          });
+        },
       },
       {
         name: 'item_code',
@@ -117,7 +155,7 @@ export const dttReceiptsConfig = {
       },
       {
         name: 'item_name',
-        label: 'Nama Alat Medis DTT / RIUS',
+        label: 'Nama Alat Medis DTT / Reuse',
         required: true,
         maxLength: 150,
         placeholder: 'mis. Sungkup Laring (LMA) / Tabung Suction / Selang Ventilator',
@@ -266,11 +304,11 @@ export const dttReceiptsConfig = {
 };
 
 /* ------------------------------------------------------------
- * 2. Barcode Distribusi Alat Hasil DTT (RIUS) (CSSD -> Unit)
+ * 2. Barcode Distribusi Alat Hasil DTT (Reuse) (CSSD -> Unit)
  * ------------------------------------------------------------ */
 export const dttDistributionsConfig = {
   key: 'dtt-distribusi',
-  title: 'Distribusi Alat Hasil DTT (RIUS)',
+  title: 'Distribusi Alat Hasil DTT (Reuse)',
   subtitle: 'Penyerahan kembali alat hasil DTT ke unit — barcode otomatis (DDTT-...)',
   icon: Truck,
   endpoint: API_ENDPOINTS.DTT_DISTRIBUTIONS,
@@ -278,10 +316,16 @@ export const dttDistributionsConfig = {
   createLabel: 'Distribusi Hasil DTT',
   defaultSort: 'id',
   dateFilter: true,
-  filters: [{ name: 'tool_condition', label: 'Kondisi Alat', options: TOOL_CONDITIONS }],
+  timeFilter: true,
+  filters: [
+    { name: 'unit_id', label: 'Unit Penerima', optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS },
+    { name: 'tool_condition', label: 'Kondisi Alat', options: TOOL_CONDITIONS },
+  ],
   columns: [
     { key: 'barcode', label: 'Barcode DDTT', sortable: true, render: mono('barcode') },
     { key: 'dist_datetime', label: 'Waktu Distribusi', sortable: true, render: (r) => formatDateTime(r.dist_datetime) },
+    { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
+    { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     { key: 'receipt_barcode', label: 'Barcode Penerimaan', render: mono('receipt_barcode') },
     { key: 'unit_name', label: 'Unit Penerima', sortable: true },
     { key: 'item_name', label: 'Nama Alat', sortable: true, render: bold('item_name') },
@@ -303,7 +347,7 @@ export const dttDistributionsConfig = {
   traceField: 'barcode',
   form: {
     size: 'lg',
-    createTitle: 'Distribusi Alat Hasil DTT (RIUS)',
+    createTitle: 'Distribusi Alat Hasil DTT (Reuse)',
     subtitle: 'Barcode distribusi dibuat otomatis (DDTT-DDMMYY-001). Petugas unit penerima menandatangani di layar HP.',
     fields: [
       {
@@ -334,7 +378,7 @@ export const dttDistributionsConfig = {
         label: 'Waktu Distribusi (Otomatis)',
         type: 'datetime-local',
         required: true,
-        default: () => new Date().toISOString().slice(0, 16),
+        default: () => wibDateTimeNow().slice(0, 16).replace(' ', 'T'),
       },
       {
         type: 'remote-select',
@@ -396,12 +440,12 @@ export const dttDistributionsConfig = {
 };
 
 /* ------------------------------------------------------------
- * 3. Buku Kontrol & Laporan Penggunaan Ulang Alat Medis DTT (RIUS)
+ * 3. Buku Kontrol & Laporan Penggunaan Ulang Alat Medis DTT (Reuse)
  * ------------------------------------------------------------ */
 export const dttControlConfig = {
   ...dttReceiptsConfig,
   key: 'dtt-buku-kontrol',
-  title: 'Buku Kontrol Penggunaan Ulang Alat Medis DTT (RIUS)',
+  title: 'Buku Kontrol Penggunaan Ulang Alat Medis DTT (Reuse)',
   subtitle: 'Pencatatan digital kontrol siklus pemakaian ulang alat medis, batas pakai, dan riwayat kondisi',
   icon: BookOpen,
   readOnly: true,
