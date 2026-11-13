@@ -21,6 +21,14 @@ export const API_ENDPOINTS = {
   TRACEABILITY: '/traceability',
   PUBLIC_UNIT_STATUS: (id) => `/public/unit-status/${id}`,
   REPORTS_MONTHLY: '/reports/monthly-summary',
+  MONITORING_PROCESS_TIMINGS: '/monitoring/process-timings',
+
+  // Notifikasi Aktivitas Admin CSSD
+  NOTIFICATIONS: {
+    LIST: '/notifications',
+    MARK_READ: (id) => `/notifications/${id}/read`,
+    MARK_ALL_READ: '/notifications/mark-all-read',
+  },
 
   UPLOADS: {
     IMAGE: '/uploads/image',
@@ -83,4 +91,18 @@ export const API_ENDPOINTS = {
     SUMMARY: '/bmhp-summary',
   },
   BMHP_TRANSACTIONS: crud('/bmhp-transactions'),
+
+  // Log Penggunaan Mesin Washer & Steam
+  MACHINE_LOGS: crud('/machine-logs'),
+
+  // Kebutuhan Alat/Set Unit & Pengajuan Alat Baru
+  UNIT_REQUISITIONS: {
+    ...crud('/unit-requisitions'),
+    UPDATE_STATUS: (id) => `/unit-requisitions/${id}/status`,
+  },
+  ITEM_PROPOSALS: {
+    ...crud('/item-proposals'),
+    APPROVE: (id) => `/item-proposals/${id}/approve`,
+    REJECT: (id) => `/item-proposals/${id}/reject`,
+  },
 };

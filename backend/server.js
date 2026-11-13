@@ -553,6 +553,67 @@ async function getReceipt(conn, id) {
 
 const STOCK_STATUS_SQL = "(CASE WHEN t.status = 'Tersedia' AND t.expiry_date < CURDATE() THEN 'Kedaluwarsa' ELSE t.status END)";
 
+async function recordAdminNotification(connOrNull, payload) {
+  try {
+    const q = connOrNull || pool;
+    const {
+      type,
+      title,
+      unit_id,
+      unit_name,
+      item_name,
+      quantity = 1,
+      unit_label = 'set',
+      barcode,
+      officer_sender,
+      officer_receiver,
+      signature_sender,
+      signature_receiver,
+      trx_date,
+      trx_time,
+      ref_table,
+      ref_id,
+      data_payload,
+    } = payload;
+
+    let resolvedUnitName = unit_name;
+    if (!resolvedUnitName && unit_id) {
+      const [[u]] = await q.query('SELECT name FROM units WHERE id = ?', [unit_id]);
+      if (u) resolvedUnitName = u.name;
+    }
+
+    const jsonPayload = typeof data_payload === 'string' ? data_payload : JSON.stringify(data_payload || {});
+
+    await q.query(`
+      INSERT INTO activity_notifications
+      (type, title, unit_id, unit_name, item_name, quantity, unit_label, barcode,
+       officer_sender, officer_receiver, signature_sender, signature_receiver,
+       trx_date, trx_time, ref_table, ref_id, data_payload, is_read)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `, [
+      type,
+      title,
+      unit_id || null,
+      resolvedUnitName || null,
+      item_name || null,
+      quantity,
+      unit_label || 'set',
+      barcode || null,
+      officer_sender || null,
+      officer_receiver || null,
+      signature_sender || null,
+      signature_receiver || null,
+      trx_date || todayStr(),
+      trx_time || nowDateTimeStr().slice(11, 16),
+      ref_table,
+      ref_id,
+      jsonPayload,
+    ]);
+  } catch (err) {
+    console.error('recordAdminNotification error (non-fatal):', err.message);
+  }
+}
+
 /* ============================================================
  * RESOURCES
  * ============================================================ */
@@ -858,6 +919,33 @@ registerCrud({
     data.stage = 1;
     data.status = 'Diterima';
     data.created_by = ctx.user.id;
+  },
+  async afterCreate(conn, id, data, ctx) {
+    const [[fresh]] = await conn.query(
+      'SELECT r.*, u.name AS unit_name FROM dirty_receipts r LEFT JOIN units u ON u.id = r.unit_id WHERE r.id = ?',
+      [id]
+    );
+    if (fresh) {
+      await recordAdminNotification(conn, {
+        type: 'RECEIPT',
+        title: 'Penerimaan Alat Kotor Masuk',
+        unit_id: fresh.unit_id,
+        unit_name: fresh.unit_name,
+        item_name: fresh.item_name,
+        quantity: fresh.quantity,
+        unit_label: fresh.unit_label,
+        barcode: fresh.barcode,
+        officer_sender: fresh.sender_name,
+        officer_receiver: fresh.receiver_name,
+        signature_sender: fresh.sender_signature,
+        signature_receiver: fresh.receiver_signature,
+        trx_date: fresh.receipt_date,
+        trx_time: (fresh.started_at || fresh.created_at || '').toString().slice(11, 16) || null,
+        ref_table: 'dirty_receipts',
+        ref_id: id,
+        data_payload: fresh,
+      });
+    }
   },
   async beforeDelete(conn, existing) {
     // Bersihkan data relasi proses terkait agar penghapusan konsisten
@@ -1641,6 +1729,36 @@ registerCrud({
     if (ctx.stock.quantity - data.quantity <= 0) {
       await conn.query("UPDATE packagings SET status = 'Terdistribusi' WHERE id = ?", [ctx.stock.packaging_id]);
     }
+    const [[fresh]] = await conn.query(
+      `SELECT d.*, u.name AS unit_name, st.item_name AS stock_item_name, st.unit_label AS stock_unit_label
+       FROM distributions d
+       LEFT JOIN units u ON u.id = d.unit_id
+       LEFT JOIN sterile_stock st ON st.id = d.stock_id
+       WHERE d.id = ?`,
+      [id]
+    );
+    if (fresh) {
+      const itemTitle = fresh.gauze_type || fresh.stock_item_name || 'Alat Steril';
+      await recordAdminNotification(conn, {
+        type: 'DISTRIBUTION',
+        title: fresh.type === 'KASA' ? 'Distribusi Kasa Steril' : 'Pengambilan Alat Steril',
+        unit_id: fresh.unit_id,
+        unit_name: fresh.unit_name,
+        item_name: itemTitle,
+        quantity: fresh.quantity,
+        unit_label: fresh.stock_unit_label || 'set',
+        barcode: fresh.barcode,
+        officer_sender: fresh.officer,
+        officer_receiver: fresh.receiver_name,
+        signature_sender: fresh.officer_signature,
+        signature_receiver: fresh.receiver_signature,
+        trx_date: fresh.dist_date,
+        trx_time: (fresh.started_at || fresh.created_at || '').toString().slice(11, 16) || null,
+        ref_table: 'distributions',
+        ref_id: id,
+        data_payload: fresh,
+      });
+    }
   },
 });
 
@@ -1732,6 +1850,33 @@ registerCrud({
     const today = (data.receipt_datetime || todayStr()).slice(0, 10);
     data.barcode = data.barcode || (await makeCode(conn, 'RD', today));
   },
+  async afterCreate(conn, id, data, ctx) {
+    const [[fresh]] = await conn.query(
+      'SELECT r.*, u.name AS unit_name FROM dtt_receipts r LEFT JOIN units u ON u.id = r.unit_id WHERE r.id = ?',
+      [id]
+    );
+    if (fresh) {
+      await recordAdminNotification(conn, {
+        type: 'DTT_RECEIPT',
+        title: 'Penerimaan Alat Kotor DTT (Reuse)',
+        unit_id: fresh.unit_id,
+        unit_name: fresh.unit_name,
+        item_name: fresh.item_name,
+        quantity: fresh.quantity,
+        unit_label: fresh.unit_label,
+        barcode: fresh.barcode,
+        officer_sender: fresh.sender_name,
+        officer_receiver: fresh.receiver_name,
+        signature_sender: fresh.sender_signature,
+        signature_receiver: fresh.receiver_signature,
+        trx_date: (fresh.receipt_datetime || '').toString().slice(0, 10),
+        trx_time: (fresh.receipt_datetime || '').toString().slice(11, 16),
+        ref_table: 'dtt_receipts',
+        ref_id: id,
+        data_payload: fresh,
+      });
+    }
+  },
 });
 
 // ---------- DTT (Reuse) Transaksi 2: Distribusi Alat Hasil DTT (CSSD -> Unit) ----------
@@ -1800,6 +1945,33 @@ registerCrud({
     const today = (data.dist_datetime || todayStr()).slice(0, 10);
     data.barcode = data.barcode || (await makeCode(conn, 'DDTT', today));
     await conn.query("UPDATE dtt_receipts SET process_stage = 'Selesai' WHERE id = ?", [data.dtt_receipt_id]);
+  },
+  async afterCreate(conn, id, data, ctx) {
+    const [[fresh]] = await conn.query(
+      'SELECT d.*, u.name AS unit_name FROM dtt_distributions d LEFT JOIN units u ON u.id = d.unit_id WHERE d.id = ?',
+      [id]
+    );
+    if (fresh) {
+      await recordAdminNotification(conn, {
+        type: 'DTT_DISTRIBUTION',
+        title: 'Distribusi Alat Hasil DTT (Reuse)',
+        unit_id: fresh.unit_id,
+        unit_name: fresh.unit_name,
+        item_name: fresh.item_name,
+        quantity: fresh.quantity,
+        unit_label: fresh.unit_label,
+        barcode: fresh.barcode,
+        officer_sender: fresh.officer,
+        officer_receiver: fresh.receiver_name,
+        signature_sender: fresh.officer_signature,
+        signature_receiver: fresh.receiver_signature,
+        trx_date: (fresh.dist_datetime || '').toString().slice(0, 10),
+        trx_time: (fresh.dist_datetime || '').toString().slice(11, 16),
+        ref_table: 'dtt_distributions',
+        ref_id: id,
+        data_payload: fresh,
+      });
+    }
   },
   async beforeUpdate(conn, data, ctx, existing) {
     if (ctx.user.role === 'unit') {
@@ -3210,10 +3382,10 @@ router.get('/public/unit-status/:id', wrap(async (req, res) => {
 
   // 3. Alat DTT yang SUDAH SELESAI & SIAP DIAMBIL
   const [readyDtt] = await pool.query(`
-    SELECT d.id, d.barcode, d.item_name, d.quantity, d.unit_label, d.receipt_datetime, d.process_stage, d.officer_cssd
+    SELECT d.id, d.barcode, d.item_name, d.quantity, d.unit_label, d.receipt_datetime, d.process_stage, d.receiver_name AS officer_cssd
     FROM dtt_receipts d
     WHERE d.unit_id = ? AND d.process_stage IN ('Selesai Steril/DTT', 'Siap Distribusi', 'Selesai')
-    AND d.id NOT IN (SELECT receipt_id FROM dtt_distributions WHERE unit_id = ?)
+    AND d.id NOT IN (SELECT dtt_receipt_id FROM dtt_distributions WHERE unit_id = ?)
     ORDER BY d.id DESC LIMIT 50
   `, [unitId, unitId]);
 
@@ -3224,14 +3396,14 @@ router.get('/public/unit-status/:id', wrap(async (req, res) => {
   `, [unitId]);
 
   const [recentDistributions] = await pool.query(`
-    SELECT 'Pengambilan Alat Steril' AS jenis, st.barcode, d.dist_date AS tanggal, st.item_name, d.quantity, st.unit_label, d.officer_unit AS petugas
+    SELECT 'Pengambilan Alat Steril' AS jenis, st.barcode, d.dist_date AS tanggal, st.item_name, d.quantity, st.unit_label, d.receiver_name AS petugas
     FROM distributions d
     JOIN sterile_stock st ON st.id = d.stock_id
     WHERE d.unit_id = ? ORDER BY d.id DESC LIMIT 5
   `, [unitId]);
 
   const [recentDtt] = await pool.query(`
-    SELECT 'Pengambilan Alat DTT' AS jenis, dd.barcode, dd.dist_datetime AS tanggal, dd.item_name, dd.quantity, dd.unit_label, dd.officer_unit AS petugas
+    SELECT 'Pengambilan Alat DTT' AS jenis, dd.barcode, dd.dist_datetime AS tanggal, dd.item_name, dd.quantity, dd.unit_label, dd.receiver_name AS petugas
     FROM dtt_distributions dd
     WHERE dd.unit_id = ? ORDER BY dd.id DESC LIMIT 5
   `, [unitId]);
@@ -3834,6 +4006,427 @@ router.post('/uploads/signature', auth, wrap(async (req, res) => {
   res.status(201).json({ success: true, message: 'Tanda tangan tersimpan', data: { path: saveImageBuffer(buffer, 'signatures') } });
 }));
 
+// ---------- Notifikasi Aktivitas Admin CSSD ----------
+router.get('/notifications', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
+  const type = req.query.type ? sanitizeText(req.query.type) : null;
+  const isRead = req.query.is_read !== undefined && req.query.is_read !== '' ? parseInt(req.query.is_read, 10) : null;
+
+  const where = ['1=1'];
+  const params = [];
+  if (type) {
+    where.push('type = ?');
+    params.push(type);
+  }
+  if (isRead !== null && !Number.isNaN(isRead)) {
+    where.push('is_read = ?');
+    params.push(isRead);
+  }
+
+  const [rows] = await pool.query(
+    `SELECT * FROM activity_notifications WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT ?`,
+    [...params, limit]
+  );
+
+  const [[{ unread_count }]] = await pool.query(
+    'SELECT COUNT(*) AS unread_count FROM activity_notifications WHERE is_read = 0'
+  );
+
+  res.json({
+    success: true,
+    data: rows,
+    unread_count: Number(unread_count || 0),
+  });
+}));
+
+router.post('/notifications/:id(\\d+)/read', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const id = parseId(req.params.id);
+  await pool.query('UPDATE activity_notifications SET is_read = 1 WHERE id = ?', [id]);
+  res.json({ success: true, message: 'Notifikasi ditandai sudah dibaca' });
+}));
+
+router.post('/notifications/mark-all-read', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  await pool.query('UPDATE activity_notifications SET is_read = 1 WHERE is_read = 0');
+  res.json({ success: true, message: 'Semua notifikasi ditandai sudah dibaca' });
+}));
+
+// ---------- Pemantauan Log Waktu Pengerjaan Alat di CSSD (Request 2) ----------
+router.get('/monitoring/process-timings', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const unitId = req.query.unit_id ? parseInt(req.query.unit_id, 10) : null;
+  const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_from || '') ? req.query.date_from : '';
+  const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_to || '') ? req.query.date_to : '';
+  const status = req.query.status ? sanitizeText(req.query.status) : '';
+  const search = (req.query.search || '').trim();
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+  const offset = (page - 1) * limit;
+
+  const where = ['1=1'];
+  const params = [];
+
+  if (unitId) {
+    where.push('r.unit_id = ?');
+    params.push(unitId);
+  }
+  if (dateFrom) {
+    where.push('r.receipt_date >= ?');
+    params.push(dateFrom);
+  }
+  if (dateTo) {
+    where.push('r.receipt_date <= ?');
+    params.push(dateTo);
+  }
+  if (status) {
+    where.push('r.status = ?');
+    params.push(status);
+  }
+  if (search) {
+    const q = `%${escapeLike(search)}%`;
+    where.push('(r.barcode LIKE ? OR r.item_name LIKE ? OR u.name LIKE ? OR r.receiver_name LIKE ?)');
+    params.push(q, q, q, q);
+  }
+
+  const [[{ total }]] = await pool.query(`
+    SELECT COUNT(*) AS total
+    FROM dirty_receipts r
+    LEFT JOIN units u ON u.id = r.unit_id
+    WHERE ${where.join(' AND ')}
+  `, params);
+
+  const [receipts] = await pool.query(`
+    SELECT r.id
+    FROM dirty_receipts r
+    LEFT JOIN units u ON u.id = r.unit_id
+    WHERE ${where.join(' AND ')}
+    ORDER BY r.id DESC
+    LIMIT ? OFFSET ?
+  `, [...params, limit, offset]);
+
+  const items = [];
+  for (const r of receipts) {
+    const trace = await buildTrace(r.id);
+    if (!trace) continue;
+    items.push({
+      receipt: trace.receipt,
+      timeline: trace.timeline,
+      summary: trace.summary,
+    });
+  }
+
+  const [[kpi]] = await pool.query(`
+    SELECT
+      COUNT(*) AS total_receipts,
+      AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(w.started_at, w.created_at), COALESCE(w.completed_at, w.created_at)), 0)) AS avg_wash_sec,
+      AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(st.started_at, st.created_at), COALESCE(st.completed_at, st.created_at)), 0)) AS avg_steril_sec,
+      AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(r.started_at, r.created_at), COALESCE(d.completed_at, d.created_at)), 0)) AS avg_turnaround_sec
+    FROM dirty_receipts r
+    LEFT JOIN washings w ON w.receipt_id = r.id
+    LEFT JOIN packagings p ON p.receipt_id = r.id
+    LEFT JOIN sterilization_items si ON si.packaging_id = p.id
+    LEFT JOIN sterilizations st ON st.id = si.sterilization_id
+    LEFT JOIN sterile_stock s ON s.packaging_id = p.id
+    LEFT JOIN distributions d ON d.stock_id = s.id
+    WHERE r.receipt_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+  `);
+
+  res.json({
+    success: true,
+    data: items,
+    kpi: {
+      total_receipts: Number(kpi?.total_receipts || 0),
+      avg_wash_duration: formatDurationSec(kpi?.avg_wash_sec),
+      avg_steril_duration: formatDurationSec(kpi?.avg_steril_sec),
+      avg_turnaround_duration: formatDurationSec(kpi?.avg_turnaround_sec),
+    },
+    pagination: {
+      page,
+      limit,
+      total: Number(total || 0),
+      totalPages: Math.ceil(Number(total || 0) / limit),
+    },
+  });
+}));
+
+// ---------- Log Penggunaan Mesin Washer dan Steam (Request 3) ----------
+registerCrud({
+  path: 'machine-logs',
+  table: 'machine_usage_logs',
+  from: 'machine_usage_logs t LEFT JOIN machines m ON m.id = t.machine_id',
+  select: `t.*, m.code AS machine_code,
+    GREATEST(TIMESTAMPDIFF(SECOND, t.started_at, t.completed_at), 0) AS process_seconds`,
+  search: ['t.log_code', 't.machine_name', 't.officer', 't.cycle_batch_no', 't.load_description'],
+  sort: { id: 't.id', log_code: 't.log_code', log_date: 't.log_date', started_at: 't.started_at', machine_name: 't.machine_name', officer: 't.officer' },
+  defaultSort: 'id',
+  filters: { machine_type: 't.machine_type', process_result: 't.process_result', has_delay_issue: 't.has_delay_issue', machine_id: 't.machine_id' },
+  dateColumn: 't.log_date',
+  timeColumn: 'TIME(t.started_at)',
+  exportColumns: [
+    ['log_code', 'Kode Log'], ['log_date', 'Tanggal'], ['machine_type', 'Tipe Mesin'], ['machine_name', 'Nama Mesin'],
+    ['started_time', 'Jam Mulai'], ['completed_time', 'Jam Selesai'], ['process_duration', 'Durasi Mesin'],
+    ['cycle_batch_no', 'No. Siklus / Batch'], ['officer', 'Petugas (Operator)'], ['load_description', 'Muatan / Alat'],
+    ['temperature', 'Suhu (°C)'], ['pressure_bar', 'Tekanan (Bar)'], ['process_result', 'Hasil Proses'],
+    ['has_delay_issue', 'Ada Kendala'], ['delay_reason', 'Alasan Kendala / Keterlambatan'], ['action_taken', 'Tindakan yang Dilakukan'],
+  ],
+  roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin'] },
+  fields: [
+    field('log_code', 'string', { label: 'Kode Log', max: 50, createOnly: true }),
+    field('machine_type', 'enum', { values: ['Washer', 'Steam'], default: 'Washer', label: 'Tipe Mesin', required: true }),
+    field('machine_id', 'int', { label: 'Mesin' }),
+    field('machine_name', 'string', { required: true, max: 100, label: 'Nama Mesin' }),
+    field('officer', 'string', { required: true, max: 100, label: 'Nama Petugas Operator' }),
+    field('log_date', 'date', { default: todayStr, label: 'Tanggal' }),
+    field('started_at', 'datetime', { required: true, label: 'Waktu Mulai' }),
+    field('completed_at', 'datetime', { required: true, label: 'Waktu Selesai' }),
+    field('cycle_batch_no', 'string', { required: true, max: 50, label: 'Nomor Siklus / Batch' }),
+    field('load_description', 'string', { required: true, label: 'Muatan / Instrumen', max: 500 }),
+    field('temperature', 'number', { label: 'Suhu (°C)' }),
+    field('pressure_bar', 'number', { label: 'Tekanan (Bar)' }),
+    field('duration_min', 'int', { label: 'Durasi (menit)' }),
+    field('process_result', 'enum', { values: ['Berhasil', 'Gagal'], default: 'Berhasil', label: 'Hasil Proses', required: true }),
+    field('has_delay_issue', 'bool', { default: 0, label: 'Ada Kendala / Keterlambatan' }),
+    field('delay_reason', 'string', { label: 'Alasan Kendala / Keterlambatan', max: 500 }),
+    field('action_taken', 'string', { label: 'Tindakan yang Dilakukan', max: 500 }),
+    field('notes', 'string', { label: 'Catatan Tambahan', max: 500 }),
+  ],
+  async beforeCreate(conn, data, ctx) {
+    if (!data.started_at) data.started_at = nowDateTimeStr();
+    if (!data.completed_at) data.completed_at = nowDateTimeStr();
+    if (!data.log_date) data.log_date = data.started_at.slice(0, 10);
+    const prefix = data.machine_type === 'Washer' ? 'WSH' : 'STM';
+    data.log_code = data.log_code || (await makeCode(conn, prefix, data.log_date));
+
+    if (data.process_result === 'Gagal' || Boolean(data.has_delay_issue)) {
+      if (!data.delay_reason || !data.delay_reason.trim()) {
+        throw new HttpError(422, 'Alasan kendala / keterlambatan wajib diisi jika hasil proses gagal atau ada kendala');
+      }
+      if (!data.action_taken || !data.action_taken.trim()) {
+        throw new HttpError(422, 'Tindakan yang dilakukan wajib diisi jika hasil proses gagal atau ada kendala');
+      }
+    }
+  },
+  async beforeUpdate(conn, data, ctx, existing) {
+    const isFailed = data.process_result ? data.process_result === 'Gagal' : existing.process_result === 'Gagal';
+    const hasDelay = data.has_delay_issue !== undefined ? Boolean(data.has_delay_issue) : Boolean(existing.has_delay_issue);
+    if (isFailed || hasDelay) {
+      const reason = data.delay_reason !== undefined ? data.delay_reason : existing.delay_reason;
+      const action = data.action_taken !== undefined ? data.action_taken : existing.action_taken;
+      if (!reason || !reason.trim()) {
+        throw new HttpError(422, 'Alasan kendala / keterlambatan wajib diisi');
+      }
+      if (!action || !action.trim()) {
+        throw new HttpError(422, 'Tindakan yang dilakukan wajib diisi');
+      }
+    }
+  },
+});
+
+// ---------- Kebutuhan Alat & Set Unit (Request 4) ----------
+registerCrud({
+  path: 'unit-requisitions',
+  table: 'unit_requisitions',
+  from: 'unit_requisitions t JOIN units u ON u.id = t.unit_id LEFT JOIN items i ON i.id = t.item_id',
+  select: 't.*, u.name AS unit_name, i.code AS item_code',
+  search: ['t.code', 't.procedure_name', 't.item_name', 'u.name', 't.requester_name'],
+  sort: { id: 't.id', code: 't.code', procedure_date: 't.procedure_date', procedure_name: 't.procedure_name', item_name: 't.item_name', unit_name: 'u.name', status: 't.status' },
+  defaultSort: 'id',
+  unitColumn: 't.unit_id',
+  filters: { unit_id: 't.unit_id', status: 't.status', urgency: 't.urgency' },
+  dateColumn: 't.procedure_date',
+  exportColumns: [
+    ['code', 'Kode Permintaan'], ['procedure_date', 'Tgl Tindakan'], ['procedure_time', 'Jam Tindakan'],
+    ['unit_name', 'Unit Pemohon'], ['procedure_name', 'Nama Tindakan / Operasi'], ['item_name', 'Nama Alat / Set'],
+    ['quantity', 'Jumlah Kebutuhan'], ['unit_label', 'Satuan'], ['urgency', 'Urgensi'], ['requester_name', 'Petugas Pemohon'],
+    ['status', 'Status'], ['processed_by', 'Diproses Oleh'], ['notes', 'Catatan'],
+  ],
+  roles: { read: ['admin', 'petugas', 'unit'], write: ['admin', 'petugas', 'unit'], remove: ['admin'] },
+  fields: [
+    field('code', 'string', { label: 'Kode', max: 50, createOnly: true }),
+    field('unit_id', 'int', { required: true, min: 1, label: 'Unit Pemohon' }),
+    field('procedure_name', 'string', { required: true, max: 150, label: 'Nama Tindakan / Operasi' }),
+    field('procedure_date', 'date', { default: todayStr, label: 'Tanggal Tindakan', required: true }),
+    field('procedure_time', 'string', { label: 'Jam Tindakan (WIB)', max: 10 }),
+    field('item_id', 'int', { label: 'Alat / Set' }),
+    field('item_name', 'string', { required: true, max: 150, label: 'Nama Alat / Set' }),
+    field('quantity', 'int', { required: true, min: 1, default: 1, label: 'Jumlah Kebutuhan' }),
+    field('unit_label', 'string', { default: 'set', max: 30, label: 'Satuan' }),
+    field('requester_name', 'string', { required: true, max: 100, label: 'Nama Petugas Pemohon' }),
+    field('urgency', 'enum', { values: ['Rutin', 'Segera / Cito', 'Elektif'], default: 'Rutin', label: 'Tingkat Urgensi' }),
+    field('status', 'enum', { values: ['Diajukan', 'Disiapkan CSSD', 'Siap Diambil', 'Selesai', 'Ditolak'], default: 'Diajukan', label: 'Status' }),
+    field('notes', 'string', { label: 'Catatan Kebutuhan', max: 500 }),
+    field('rejection_reason', 'string', { label: 'Alasan Penolakan', max: 500 }),
+  ],
+  async beforeCreate(conn, data, ctx) {
+    if (ctx.user.role === 'unit' && ctx.user.unit_id) {
+      data.unit_id = ctx.user.unit_id;
+    }
+    data.code = data.code || (await makeCode(conn, 'REQ', data.procedure_date || todayStr()));
+    data.status = 'Diajukan';
+  },
+  async afterCreate(conn, id, data, ctx) {
+    const [[fresh]] = await conn.query(
+      'SELECT r.*, u.name AS unit_name FROM unit_requisitions r LEFT JOIN units u ON u.id = r.unit_id WHERE r.id = ?',
+      [id]
+    );
+    if (fresh) {
+      await recordAdminNotification(conn, {
+        type: 'UNIT_REQUEST',
+        title: `Kebutuhan Alat: ${fresh.procedure_name} (${fresh.quantity} ${fresh.unit_label})`,
+        unit_id: fresh.unit_id,
+        unit_name: fresh.unit_name,
+        item_name: fresh.item_name,
+        quantity: fresh.quantity,
+        unit_label: fresh.unit_label,
+        barcode: fresh.code,
+        officer_sender: fresh.requester_name,
+        officer_receiver: 'Admin CSSD',
+        trx_date: fresh.procedure_date,
+        trx_time: fresh.procedure_time || null,
+        ref_table: 'unit_requisitions',
+        ref_id: id,
+        data_payload: fresh,
+      });
+    }
+  },
+});
+
+router.post('/unit-requisitions/:id(\\d+)/status', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const id = parseId(req.params.id);
+  const status = sanitizeText(req.body.status || '');
+  const allowed = ['Diajukan', 'Disiapkan CSSD', 'Siap Diambil', 'Selesai', 'Ditolak'];
+  if (!allowed.includes(status)) throw new HttpError(422, 'Status tidak valid');
+
+  const rejectionReason = status === 'Ditolak' ? sanitizeText(req.body.rejection_reason || '') : null;
+  await pool.query(
+    'UPDATE unit_requisitions SET status = ?, processed_by = ?, rejection_reason = ? WHERE id = ?',
+    [status, req.user.name, rejectionReason, id]
+  );
+  res.json({ success: true, message: `Status permintaan diubah menjadi ${status}` });
+}));
+
+// ---------- Pengajuan Alat & Set Baru oleh Unit (Request 4) ----------
+registerCrud({
+  path: 'item-proposals',
+  table: 'item_proposals',
+  from: 'item_proposals t JOIN units u ON u.id = t.unit_id',
+  select: 't.*, u.name AS unit_name',
+  search: ['t.code', 't.item_name', 'u.name', 't.requester_name', 't.specification'],
+  sort: { id: 't.id', code: 't.code', item_name: 't.item_name', category: 't.category', unit_name: 'u.name', status: 't.status', created_at: 't.created_at' },
+  defaultSort: 'id',
+  unitColumn: 't.unit_id',
+  filters: { unit_id: 't.unit_id', status: 't.status', category: 't.category' },
+  dateColumn: 'DATE(t.created_at)',
+  exportColumns: [
+    ['code', 'Kode Pengajuan'], ['item_name', 'Nama Alat / Set Baru'], ['category', 'Kategori'],
+    ['unit_name', 'Unit Pengaju'], ['proposed_quantity', 'Jumlah'], ['unit_label', 'Satuan'],
+    ['specification', 'Spesifikasi / Rincian'], ['reason', 'Alasan Pengajuan'], ['requester_name', 'Petugas Pengaju'],
+    ['status', 'Status'], ['verified_by', 'Diverifikasi Oleh'], ['admin_notes', 'Catatan Admin'],
+  ],
+  roles: { read: ['admin', 'petugas', 'unit'], write: ['admin', 'petugas', 'unit'], remove: ['admin'] },
+  fields: [
+    field('code', 'string', { label: 'Kode', max: 50, createOnly: true }),
+    field('unit_id', 'int', { required: true, min: 1, label: 'Unit Pengaju' }),
+    field('item_name', 'string', { required: true, max: 150, label: 'Nama Alat / Set Baru' }),
+    field('category', 'enum', { values: ['Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi', 'Kasa Steril', 'Alat DTT'], default: 'Set Instrumen', label: 'Kategori' }),
+    field('proposed_quantity', 'int', { required: true, min: 1, default: 1, label: 'Jumlah yang Diajukan' }),
+    field('unit_label', 'string', { default: 'set', max: 30, label: 'Satuan' }),
+    field('specification', 'string', { label: 'Spesifikasi / Isi Instrumen', max: 500 }),
+    field('reason', 'string', { required: true, label: 'Alasan Kebutuhan Baru', max: 500 }),
+    field('requester_name', 'string', { required: true, max: 100, label: 'Petugas Pengaju' }),
+    field('status', 'enum', { values: ['Menunggu Verifikasi', 'Disetujui', 'Ditolak'], default: 'Menunggu Verifikasi', label: 'Status' }),
+    field('admin_notes', 'string', { label: 'Catatan Admin', max: 500 }),
+  ],
+  async beforeCreate(conn, data, ctx) {
+    if (ctx.user.role === 'unit' && ctx.user.unit_id) {
+      data.unit_id = ctx.user.unit_id;
+    }
+    data.code = data.code || (await makeCode(conn, 'PAB', todayStr()));
+    data.status = 'Menunggu Verifikasi';
+  },
+  async afterCreate(conn, id, data, ctx) {
+    const [[fresh]] = await conn.query(
+      'SELECT p.*, u.name AS unit_name FROM item_proposals p LEFT JOIN units u ON u.id = p.unit_id WHERE p.id = ?',
+      [id]
+    );
+    if (fresh) {
+      await recordAdminNotification(conn, {
+        type: 'NEW_ITEM_REQUEST',
+        title: `Pengajuan Alat/Set Baru: ${fresh.item_name} (${fresh.unit_name})`,
+        unit_id: fresh.unit_id,
+        unit_name: fresh.unit_name,
+        item_name: fresh.item_name,
+        quantity: fresh.proposed_quantity,
+        unit_label: fresh.unit_label,
+        barcode: fresh.code,
+        officer_sender: fresh.requester_name,
+        officer_receiver: 'Admin CSSD',
+        trx_date: todayStr(),
+        trx_time: nowDateTimeStr().slice(11, 16),
+        ref_table: 'item_proposals',
+        ref_id: id,
+        data_payload: fresh,
+      });
+    }
+  },
+});
+
+router.post('/item-proposals/:id(\\d+)/approve', auth, allow('admin'), wrap(async (req, res) => {
+  const id = parseId(req.params.id);
+  await withTx(async (conn) => {
+    const [[prop]] = await conn.query('SELECT * FROM item_proposals WHERE id = ? FOR UPDATE', [id]);
+    if (!prop) throw new HttpError(404, 'Data pengajuan tidak ditemukan');
+    if (prop.status === 'Disetujui') throw new HttpError(409, 'Pengajuan ini sudah disetujui sebelumnya');
+
+    // 1. Tambahkan ke master items
+    await conn.query(`
+      INSERT INTO items (code, name, category, unit_id, unit_label, shelf_life_months, is_active)
+      VALUES (?, ?, ?, ?, ?, 3, 1)
+      ON DUPLICATE KEY UPDATE name = VALUES(name), is_active = 1
+    `, [
+      prop.code,
+      prop.item_name,
+      prop.category,
+      prop.unit_id,
+      prop.unit_label || 'set',
+    ]);
+
+    // 2. Jika Set Instrumen, daftarkan juga ke instrument_sets
+    if (prop.category === 'Set Instrumen') {
+      await conn.query(`
+        INSERT INTO instrument_sets (code, name, is_active, notes)
+        VALUES (?, ?, 1, ?)
+        ON DUPLICATE KEY UPDATE name = VALUES(name)
+      `, [
+        prop.code,
+        prop.item_name,
+        prop.specification ? `Spesifikasi: ${prop.specification}` : 'Dari pengajuan unit',
+      ]);
+    }
+
+    // 3. Update status proposal
+    await conn.query(`
+      UPDATE item_proposals
+      SET status = 'Disetujui', verified_by = ?, admin_notes = ?
+      WHERE id = ?
+    `, [req.user.name, req.body.admin_notes || 'Disetujui dan didaftarkan ke Master Data Alat', id]);
+  });
+
+  res.json({ success: true, message: 'Pengajuan disetujui dan berhasil didaftarkan ke Master Data Alat' });
+}));
+
+router.post('/item-proposals/:id(\\d+)/reject', auth, allow('admin'), wrap(async (req, res) => {
+  const id = parseId(req.params.id);
+  const notes = sanitizeText(req.body.admin_notes || '');
+  if (!notes) throw new HttpError(422, 'Alasan penolakan wajib diisi');
+
+  await pool.query(`
+    UPDATE item_proposals
+    SET status = 'Ditolak', verified_by = ?, admin_notes = ?
+    WHERE id = ?
+  `, [req.user.name, notes, id]);
+
+  res.json({ success: true, message: 'Pengajuan berhasil ditolak' });
+}));
+
 /* ============================================================
  * APP
  * ============================================================ */
@@ -4107,12 +4700,15 @@ async function ensureDiscrepancyTable() {
 
     const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM instrument_discrepancy_logs');
     if (total === 0) {
-      await pool.query(`
-        INSERT INTO instrument_discrepancy_logs 
-        (set_id, instrument_name, incident_type, quantity, unit_origin, officer, incident_date, notes, resolution_status)
-        VALUES
-        (4, 'Gunting episiotomi', 'Rusak', 1, 'Ruang Bersalin (VK)', 'Inge Kusryaningsih', CURDATE(), 'Gunting episiotomi mata gunting tumpul / dalam perbaikan teknisi', 'Belum Selesai')
-      `);
+      const [[anySet]] = await pool.query('SELECT id FROM instrument_sets LIMIT 1');
+      if (anySet?.id) {
+        await pool.query(`
+          INSERT INTO instrument_discrepancy_logs 
+          (set_id, instrument_name, incident_type, quantity, unit_origin, officer, incident_date, notes, resolution_status)
+          VALUES
+          (?, 'Gunting episiotomi', 'Rusak', 1, 'Ruang Bersalin (VK)', 'Inge Kusryaningsih', CURDATE(), 'Gunting episiotomi mata gunting tumpul / dalam perbaikan teknisi', 'Belum Selesai')
+        `, [anySet.id]);
+      }
     }
   } catch (err) {
     console.error('ensureDiscrepancyTable notice:', err.message);
@@ -4452,6 +5048,144 @@ async function ensureAppSchemaUpdates() {
   }
 }
 
+async function ensureNewFeatureTables() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS activity_notifications (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        type ENUM('RECEIPT', 'DISTRIBUTION', 'DTT_RECEIPT', 'DTT_DISTRIBUTION', 'UNIT_REQUEST', 'NEW_ITEM_REQUEST') NOT NULL,
+        title VARCHAR(150) NOT NULL,
+        unit_id INT UNSIGNED DEFAULT NULL,
+        unit_name VARCHAR(100) DEFAULT NULL,
+        item_name VARCHAR(255) DEFAULT NULL,
+        quantity INT UNSIGNED NOT NULL DEFAULT 1,
+        unit_label VARCHAR(30) DEFAULT 'set',
+        barcode VARCHAR(50) DEFAULT NULL,
+        officer_sender VARCHAR(100) DEFAULT NULL,
+        officer_receiver VARCHAR(100) DEFAULT NULL,
+        signature_sender TEXT DEFAULT NULL,
+        signature_receiver TEXT DEFAULT NULL,
+        trx_date DATE DEFAULT NULL,
+        trx_time VARCHAR(10) DEFAULT NULL,
+        ref_table VARCHAR(50) NOT NULL,
+        ref_id INT UNSIGNED NOT NULL,
+        data_payload LONGTEXT DEFAULT NULL,
+        is_read TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_notif_read_created (is_read, created_at),
+        KEY idx_notif_type (type),
+        KEY idx_notif_ref (ref_table, ref_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS machine_usage_logs (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        log_code VARCHAR(50) NOT NULL,
+        machine_type ENUM('Washer', 'Steam') NOT NULL,
+        machine_id INT UNSIGNED DEFAULT NULL,
+        machine_name VARCHAR(100) NOT NULL,
+        officer VARCHAR(100) NOT NULL,
+        log_date DATE NOT NULL,
+        started_at DATETIME NOT NULL,
+        completed_at DATETIME NOT NULL,
+        cycle_batch_no VARCHAR(50) NOT NULL,
+        load_description TEXT NOT NULL,
+        temperature DECIMAL(5,2) DEFAULT NULL,
+        pressure_bar DECIMAL(4,2) DEFAULT NULL,
+        duration_min INT UNSIGNED DEFAULT NULL,
+        process_result ENUM('Berhasil', 'Gagal') NOT NULL DEFAULT 'Berhasil',
+        has_delay_issue TINYINT(1) NOT NULL DEFAULT 0,
+        delay_reason TEXT DEFAULT NULL,
+        action_taken TEXT DEFAULT NULL,
+        notes VARCHAR(500) DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_mlog_code (log_code),
+        KEY idx_mlog_date (log_date),
+        KEY idx_mlog_type (machine_type),
+        KEY idx_mlog_result (process_result),
+        CONSTRAINT fk_mlog_machine FOREIGN KEY (machine_id) REFERENCES machines (id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS unit_requisitions (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        code VARCHAR(50) NOT NULL,
+        unit_id INT UNSIGNED NOT NULL,
+        procedure_name VARCHAR(150) NOT NULL,
+        procedure_date DATE NOT NULL,
+        procedure_time VARCHAR(10) DEFAULT NULL,
+        item_id INT UNSIGNED DEFAULT NULL,
+        item_name VARCHAR(150) NOT NULL,
+        quantity INT UNSIGNED NOT NULL DEFAULT 1,
+        unit_label VARCHAR(30) NOT NULL DEFAULT 'set',
+        requester_name VARCHAR(100) NOT NULL,
+        urgency ENUM('Rutin', 'Segera / Cito', 'Elektif') NOT NULL DEFAULT 'Rutin',
+        status ENUM('Diajukan', 'Disiapkan CSSD', 'Siap Diambil', 'Selesai', 'Ditolak') NOT NULL DEFAULT 'Diajukan',
+        notes TEXT DEFAULT NULL,
+        processed_by VARCHAR(100) DEFAULT NULL,
+        rejection_reason TEXT DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_req_code (code),
+        KEY idx_req_unit (unit_id),
+        KEY idx_req_date (procedure_date),
+        KEY idx_req_status (status),
+        CONSTRAINT fk_req_unit FOREIGN KEY (unit_id) REFERENCES units (id),
+        CONSTRAINT fk_req_item FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS item_proposals (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        code VARCHAR(50) NOT NULL,
+        unit_id INT UNSIGNED NOT NULL,
+        item_name VARCHAR(150) NOT NULL,
+        category ENUM('Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi', 'Kasa Steril', 'Alat DTT') NOT NULL DEFAULT 'Set Instrumen',
+        proposed_quantity INT UNSIGNED NOT NULL DEFAULT 1,
+        unit_label VARCHAR(30) NOT NULL DEFAULT 'set',
+        specification TEXT DEFAULT NULL,
+        reason TEXT NOT NULL,
+        requester_name VARCHAR(100) NOT NULL,
+        status ENUM('Menunggu Verifikasi', 'Disetujui', 'Ditolak') NOT NULL DEFAULT 'Menunggu Verifikasi',
+        verified_by VARCHAR(100) DEFAULT NULL,
+        admin_notes TEXT DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_prop_code (code),
+        KEY idx_prop_unit (unit_id),
+        KEY idx_prop_status (status),
+        CONSTRAINT fk_prop_unit FOREIGN KEY (unit_id) REFERENCES units (id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Pastikan mesin Washer & Steam tersedia
+    const washerPresets = [
+      { code: 'WD1', name: 'Washer Disinfector 1', type: 'Washer' },
+      { code: 'WD2', name: 'Washer Disinfector 2', type: 'Washer' },
+      { code: 'AU1', name: 'Autoclave Steam 1', type: 'Steam' },
+      { code: 'AU2', name: 'Autoclave Steam 2', type: 'Steam' },
+      { code: 'ST1', name: 'Steam Sterilizer', type: 'Steam' },
+      { code: 'PL1', name: 'Plasma Sterilizer', type: 'Plasma' },
+    ];
+    for (const m of washerPresets) {
+      await pool.query(
+        'INSERT INTO machines (code, name, type, is_active) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE name = VALUES(name), type = VALUES(type)',
+        [m.code, m.name, m.type]
+      );
+    }
+  } catch (err) {
+    console.error('ensureNewFeatureTables notice:', err.message);
+  }
+}
+
 async function start() {
   try {
     await pool.query('SELECT 1');
@@ -4466,6 +5200,7 @@ async function start() {
     await ensureItemUnitsTable();
     await ensureDttTables();
     await ensureAppSchemaUpdates();
+    await ensureNewFeatureTables();
   } catch (err) {
     console.error('Gagal terhubung ke database. Pastikan MySQL berjalan dan sql/database.sql sudah diimport.');
     console.error(err.message);

@@ -16,6 +16,11 @@ export const ROUTES = {
   DTT_CONTROL: '/dtt-buku-kontrol',
   INSTRUMENT_SETS: '/set-instrumen',
 
+  // Monitoring Log & SLA
+  PROCESS_TIMINGS: '/log-waktu-pengerjaan',
+  MACHINE_LOGS: '/log-mesin',
+  UNIT_REQUISITIONS: '/kebutuhan-alat-unit',
+
   BMHP: '/bmhp',
   BMHP_IN: '/bmhp/masuk',
   BMHP_OUT: '/bmhp/keluar',

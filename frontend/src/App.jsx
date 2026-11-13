@@ -16,6 +16,7 @@ import {
 import { distGauzeConfig, distToolsConfig } from '@/config/resources/distribution';
 import { dttControlConfig, dttDistributionsConfig, dttReceiptsConfig } from '@/config/resources/dtt';
 import { bmhpInConfig, bmhpItemsConfig, bmhpMutationConfig, bmhpOutConfig } from '@/config/resources/stock';
+import { machineLogsConfig } from '@/config/resources/machineLogs';
 import {
   itemUnitsConfig,
   itemsConfig,
@@ -39,6 +40,8 @@ const GuidePage = lazy(() => import('@/pages/GuidePage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const CounterBarcodePage = lazy(() => import('@/pages/CounterBarcodePage'));
 const UnitTrackingPage = lazy(() => import('@/pages/UnitTrackingPage'));
+const ProcessTimingMonitorPage = lazy(() => import('@/pages/ProcessTimingMonitorPage'));
+const UnitRequisitionsPage = lazy(() => import('@/pages/UnitRequisitionsPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 const PageLoader = () => (
@@ -74,6 +77,7 @@ export default function App() {
             <Route index element={<DashboardPage />} />
 
             <Route path={ROUTES.RECEIPTS} element={resource(receiptsConfig)} />
+            <Route path={ROUTES.UNIT_REQUISITIONS} element={<UnitRequisitionsPage />} />
             <Route path={ROUTES.INSTRUMENT_SETS} element={<InstrumentSetsPage />} />
             <Route path={ROUTES.DIST_TOOLS} element={resource(distToolsConfig)} />
             <Route path={ROUTES.DIST_GAUZE} element={resource(distGauzeConfig)} />
@@ -89,6 +93,8 @@ export default function App() {
               <Route path={ROUTES.PACKAGINGS} element={resource(packagingsConfig)} />
               <Route path={ROUTES.STERILIZATIONS} element={resource(sterilizationsConfig)} />
               <Route path={ROUTES.VERIFICATIONS} element={resource(verificationsConfig)} />
+              <Route path={ROUTES.MACHINE_LOGS} element={resource(machineLogsConfig)} />
+              <Route path={ROUTES.PROCESS_TIMINGS} element={<ProcessTimingMonitorPage />} />
               <Route path={ROUTES.DTT_CONTROL} element={resource(dttControlConfig)} />
 
               <Route path={ROUTES.BMHP} element={<BmhpHubPage />} />

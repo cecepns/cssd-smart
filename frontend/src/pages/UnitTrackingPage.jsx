@@ -357,7 +357,7 @@ export default function UnitTrackingPage() {
                               <Sparkles size={12} /> {item.process_stage}
                             </span>
                           </td>
-                          <td className="text-xs text-slate-700">{item.officer_cssd || '-'}</td>
+                          <td className="text-xs text-slate-700">{item.officer_cssd || item.receiver_name || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
