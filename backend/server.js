@@ -907,7 +907,7 @@ registerCrud({
     field('unit_label', 'string', { default: 'set', max: 30, label: 'Satuan' }),
     field('sender_name', 'string', { required: true, label: 'Petugas penyerah', max: 100 }),
     field('sender_signature', 'path', { label: 'TTD penyerah' }),
-    field('receiver_name', 'string', { required: true, label: 'Petugas penerima', max: 100 }),
+    field('receiver_name', 'string', { label: 'Petugas penerima', max: 100 }),
     field('receiver_signature', 'path', { label: 'TTD penerima' }),
     field('notes', 'string', { label: 'Catatan', max: 500 }),
   ],
@@ -919,6 +919,17 @@ registerCrud({
     data.stage = 1;
     data.status = 'Diterima';
     data.created_by = ctx.user.id;
+
+    if (ctx.user.role === 'unit') {
+      data.unit_id = ctx.user.unit_id || data.unit_id;
+      data.receiver_name = data.receiver_name || 'Menunggu Konfirmasi CSSD';
+      data.confirmed_at = null;
+      data.confirmed_by = null;
+    } else {
+      data.receiver_name = data.receiver_name || ctx.user.name;
+      data.confirmed_at = nowDateTimeStr();
+      data.confirmed_by = ctx.user.name;
+    }
   },
   async afterCreate(conn, id, data, ctx) {
     const [[fresh]] = await conn.query(
@@ -982,7 +993,7 @@ registerCrud({
     ['item_name', 'Jenis Alat'], ['unit_name', 'Unit Asal'], ['method', 'Metode'], ['liquid', 'Cairan'],
     ['duration_min', 'Durasi Mesin (menit)'], ['officer', 'Petugas'],
   ],
-  roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
+  roles: { read: ['admin'], write: ['admin'], remove: ['admin'] },
   fields: [
     field('receipt_id', 'int', { required: true, min: 1, label: 'Alat kotor', createOnly: true }),
     field('method', 'enum', { values: ['Washer', 'Manual', 'Ultrasonik'], default: 'Washer', label: 'Metode' }),
@@ -1034,7 +1045,7 @@ registerCrud({
     ['item_name', 'Jenis Alat'], ['unit_name', 'Unit Asal'], ['is_dry', 'Kering Sempurna'],
     ['no_rust', 'Tidak Berkarat'], ['function_ok', 'Fungsi Baik'], ['officer', 'Petugas'],
   ],
-  roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
+  roles: { read: ['admin'], write: ['admin'], remove: ['admin'] },
   fields: [
     field('receipt_id', 'int', { required: true, min: 1, label: 'Alat kotor', createOnly: true }),
     field('is_dry', 'bool', { default: 0, label: 'Alat kering sempurna' }),
@@ -1091,7 +1102,7 @@ registerCrud({
     ['package_type', 'Jenis Kemasan'], ['material', 'Bahan Kemasan'], ['quantity', 'Jumlah'],
     ['unit_label', 'Satuan'], ['officer', 'Petugas'], ['status', 'Status'],
   ],
-  roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
+  roles: { read: ['admin'], write: ['admin'], remove: ['admin'] },
   fields: [
     field('receipt_id', 'int', { required: true, min: 1, label: 'Alat kotor', createOnly: true }),
     field('package_type', 'enum', { values: PACKAGE_TYPES, required: true, label: 'Jenis kemasan', createOnly: true }),
@@ -1152,7 +1163,7 @@ registerCrud({
     ['cycle_no', 'No. Siklus'], ['batch_no', 'No. Batch'], ['temperature', 'Suhu (C)'],
     ['duration_min', 'Durasi Siklus (menit)'], ['total_packages', 'Jumlah Paket'], ['officer', 'Petugas'], ['status', 'Status'],
   ],
-  roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
+  roles: { read: ['admin'], write: ['admin'], remove: ['admin'] },
   fields: [
     field('machine_id', 'int', { required: true, min: 1, label: 'Mesin' }),
     field('cycle_no', 'string', { label: 'No. siklus', max: 20 }),
@@ -1229,7 +1240,7 @@ registerCrud({
     ['chem_external', 'Indikator Kimia Eksternal'], ['bio_indicator', 'Indikator Biologi'], ['bowie_dick', 'Bowie-Dick Test'],
     ['result', 'Hasil'], ['fail_reason', 'Alasan Gagal'], ['officer', 'Petugas'],
   ],
-  roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
+  roles: { read: ['admin'], write: ['admin'], remove: ['admin'] },
   createdMessage: 'Verifikasi tersimpan, status alat diperbarui otomatis',
   fields: [
     field('sterilization_id', 'int', { required: true, min: 1, label: 'Batch sterilisasi' }),
@@ -1593,7 +1604,7 @@ registerCrud({
   filters: { status: 't.status', barcode: 't.barcode' },
   dateColumn: 'DATE(t.created_at)',
   exportColumns: [['created_at', 'Waktu'], ['barcode', 'Barcode'], ['batch_no', 'Batch / Siklus'], ['reason', 'Alasan Gagal'], ['status', 'Status'], ['notes', 'Catatan']],
-  roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
+  roles: { read: ['admin'], write: ['admin'], remove: ['admin'] },
   noCreate: true,
   noDelete: true,
   fields: [
@@ -4147,6 +4158,123 @@ router.get('/monitoring/process-timings', auth, allow('admin', 'petugas'), wrap(
   });
 }));
 
+// ---------- Konfirmasi Penerimaan Alat Kotor 1-Klik (Resti, Alvin, Admin) ----------
+router.post('/dirty-receipts/:id(\\d+)/confirm-receipt', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const id = parseId(req.params.id);
+  const officerName = sanitizeText(req.body.receiver_name) || req.user.name;
+  const now = nowDateTimeStr();
+
+  const [[existing]] = await pool.query('SELECT * FROM dirty_receipts WHERE id = ?', [id]);
+  if (!existing) throw new HttpError(404, 'Data alat kotor tidak ditemukan');
+
+  await pool.query(
+    'UPDATE dirty_receipts SET receiver_name = ?, confirmed_at = ?, confirmed_by = ?, completed_at = COALESCE(completed_at, ?), status = "Diterima" WHERE id = ?',
+    [officerName, now, officerName, now, id]
+  );
+
+  const [[fresh]] = await pool.query(
+    'SELECT r.*, u.name AS unit_name FROM dirty_receipts r LEFT JOIN units u ON u.id = r.unit_id WHERE r.id = ?',
+    [id]
+  );
+
+  await recordAdminNotification(null, {
+    type: 'RECEIPT',
+    title: `Konfirmasi Penerimaan: ${fresh.item_name} (${officerName})`,
+    unit_id: fresh.unit_id,
+    unit_name: fresh.unit_name,
+    item_name: fresh.item_name,
+    quantity: fresh.quantity,
+    unit_label: fresh.unit_label,
+    barcode: fresh.barcode,
+    officer_sender: fresh.sender_name,
+    officer_receiver: officerName,
+    signature_sender: fresh.sender_signature,
+    signature_receiver: fresh.receiver_signature,
+    trx_date: fresh.receipt_date,
+    trx_time: now.slice(11, 16),
+    ref_table: 'dirty_receipts',
+    ref_id: id,
+    data_payload: fresh,
+  });
+
+  res.json({ success: true, message: `Alat kotor ${fresh.barcode} berhasil diterima oleh ${officerName}`, data: fresh });
+}));
+
+// ---------- Alur Cepat 1-Klik Tahapan CSSD Khusus Admin (Pencucian -> Steril -> Siap Distribusi) ----------
+router.post('/dirty-receipts/:id(\\d+)/quick-advance', auth, allow('admin'), wrap(async (req, res) => {
+  const id = parseId(req.params.id);
+  const targetStage = parseInt(req.body.target_stage, 10);
+  const officerName = req.user.name;
+  const now = nowDateTimeStr();
+  const today = todayStr();
+
+  const [[receipt]] = await pool.query('SELECT * FROM dirty_receipts WHERE id = ?', [id]);
+  if (!receipt) throw new HttpError(404, 'Data alat kotor tidak ditemukan');
+  if (receipt.status === 'Karantina') throw new HttpError(409, 'Alat dalam karantina');
+
+  await withTx(async (conn) => {
+    if (targetStage === 2) {
+      await conn.query(`
+        INSERT INTO washings (receipt_id, wash_date, method, liquid, duration_min, officer, started_at, completed_at)
+        VALUES (?, ?, 'Washer', 'Enzimatis', 30, ?, ?, ?)
+      `, [id, today, officerName, now, now]);
+      await conn.query("UPDATE dirty_receipts SET stage = 2, status = 'Proses' WHERE id = ?", [id]);
+    } else if (targetStage === 3) {
+      await conn.query(`
+        INSERT INTO dryings (receipt_id, dry_date, is_dry, no_rust, function_ok, officer, started_at, completed_at)
+        VALUES (?, ?, 1, 1, 1, ?, ?, ?)
+      `, [id, today, officerName, now, now]);
+      await conn.query("UPDATE dirty_receipts SET stage = 3, status = 'Proses' WHERE id = ?", [id]);
+    } else if (targetStage === 4) {
+      const pkgCode = await makeCode(conn, 'PK', today);
+      await conn.query(`
+        INSERT INTO packagings (receipt_id, package_type, material, barcode, quantity, unit_label, officer, pack_date, started_at, completed_at)
+        VALUES (?, 'Set Instrumen', 'Pouches Medis', ?, ?, ?, ?, ?, ?, ?)
+      `, [id, pkgCode, receipt.quantity, receipt.unit_label, officerName, today, now, now]);
+      await conn.query("UPDATE dirty_receipts SET stage = 4, status = 'Proses' WHERE id = ?", [id]);
+    } else if (targetStage === 5) {
+      const [[pkg]] = await conn.query('SELECT id FROM packagings WHERE receipt_id = ? ORDER BY id DESC LIMIT 1', [id]);
+      if (!pkg) throw new HttpError(400, 'Alat belum dikemas');
+      const [[machine]] = await conn.query('SELECT id FROM machines WHERE type LIKE "%Steam%" OR type LIKE "%Autoclave%" LIMIT 1');
+      const machineId = machine?.id || 1;
+      const batchNo = `STM-${today.replace(/-/g, '')}-${id}`;
+      const [stRes] = await conn.query(`
+        INSERT INTO sterilizations (machine_id, cycle_no, batch_no, temperature, duration_min, officer, steril_date, started_at, completed_at)
+        VALUES (?, '1', ?, 134, 45, ?, ?, ?, ?)
+      `, [machineId, batchNo, officerName, today, now, now]);
+      await conn.query(`
+        INSERT INTO sterilization_items (sterilization_id, packaging_id) VALUES (?, ?)
+      `, [stRes.insertId, pkg.id]);
+      await conn.query("UPDATE dirty_receipts SET stage = 5, status = 'Proses' WHERE id = ?", [id]);
+    } else if (targetStage === 6) {
+      const [[stItem]] = await conn.query(`
+        SELECT si.sterilization_id, p.id AS packaging_id, p.barcode AS pkg_barcode
+        FROM packagings p
+        JOIN sterilization_items si ON si.packaging_id = p.id
+        WHERE p.receipt_id = ? ORDER BY p.id DESC LIMIT 1
+      `, [id]);
+      if (!stItem) throw new HttpError(400, 'Data kemasan atau sterilisasi tidak ditemukan');
+      await conn.query(`
+        INSERT INTO verifications (sterilization_id, condition_packaging, chem_internal, chem_external, bio_indicator, bowie_dick, result, officer, verify_date, started_at, completed_at)
+        VALUES (?, 'Baik', 'Sesuai', 'Sesuai', 'Sesuai', 'Sesuai', 'Lulus', ?, ?, ?, ?)
+      `, [stItem.sterilization_id, officerName, today, now, now]);
+
+      const expiryDate = new Date();
+      expiryDate.setMonth(expiryDate.getMonth() + 6);
+      const expDateStr = expiryDate.toISOString().slice(0, 10);
+      const stockBarcode = `DS-${receipt.barcode.replace(/^AK-/, '')}`;
+      await conn.query(`
+        INSERT INTO sterile_stock (packaging_id, barcode, item_name, unit_id, quantity, unit_label, sterilized_date, expiry_date, status, started_at, completed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Tersedia', ?, ?)
+        ON DUPLICATE KEY UPDATE status = 'Tersedia'
+      `, [stItem.packaging_id, stockBarcode, receipt.item_name, receipt.unit_id, receipt.quantity, receipt.unit_label, today, expDateStr, now, now]);
+      await conn.query("UPDATE dirty_receipts SET stage = 6, status = 'Selesai' WHERE id = ?", [id]);
+    }
+  });
+
+  res.json({ success: true, message: `Tahapan proses berhasil dimajukan ke Tahap ${targetStage}` });
+}));
+
 // ---------- Log Penggunaan Mesin Washer dan Steam (Request 3) ----------
 registerCrud({
   path: 'machine-logs',
@@ -4167,7 +4295,7 @@ registerCrud({
     ['temperature', 'Suhu (°C)'], ['pressure_bar', 'Tekanan (Bar)'], ['process_result', 'Hasil Proses'],
     ['has_delay_issue', 'Ada Kendala'], ['delay_reason', 'Alasan Kendala / Keterlambatan'], ['action_taken', 'Tindakan yang Dilakukan'],
   ],
-  roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin'] },
+  roles: { read: ['admin'], write: ['admin'], remove: ['admin'] },
   fields: [
     field('log_code', 'string', { label: 'Kode Log', max: 50, createOnly: true }),
     field('machine_type', 'enum', { values: ['Washer', 'Steam'], default: 'Washer', label: 'Tipe Mesin', required: true }),
@@ -4984,6 +5112,8 @@ async function ensureAppSchemaUpdates() {
     } catch (err) {}
     await addCol('items', "process_type ENUM('Steril','DTT') NOT NULL DEFAULT 'Steril'");
     await addCol('items', "unit_label VARCHAR(50) NOT NULL DEFAULT 'Set'");
+    await addCol('dirty_receipts', 'confirmed_at DATETIME DEFAULT NULL');
+    await addCol('dirty_receipts', 'confirmed_by VARCHAR(100) DEFAULT NULL');
 
     // Pastikan kolom started_at & completed_at tersedia di seluruh tabel tahapan CSSD & DTT
     const timingTables = [

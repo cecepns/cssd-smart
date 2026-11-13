@@ -113,12 +113,13 @@ export default function ResourcePage({ config }) {
 
   const hasFilters = Boolean(list.searchInput) || Object.values(list.filters).some(Boolean);
   const showActions = Boolean(
-    config.label || config.traceField || canEdit || (!isUnit && config.canDelete && writable && (config.adminOnlyDelete ? isAdmin : true))
+    config.extraActions || config.label || config.traceField || canEdit || (!isUnit && config.canDelete && writable && (config.adminOnlyDelete ? isAdmin : true))
   );
 
   const renderActions = showActions
     ? (row) => (
         <>
+          {config.extraActions && config.extraActions(row, { reload: list.reload, user, isAdmin })}
           {config.label && row[config.labelField || 'barcode'] && (
             <IconButton icon={QrCode} label="Cetak label barcode" onClick={() => setLabel(config.label(row))} />
           )}

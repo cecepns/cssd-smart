@@ -71,7 +71,11 @@ export const API_ENDPOINTS = {
   },
 
   // Proses CSSD
-  RECEIPTS: crud('/dirty-receipts'),
+  RECEIPTS: {
+    ...crud('/dirty-receipts'),
+    CONFIRM_RECEIPT: (id) => `/dirty-receipts/${id}/confirm-receipt`,
+    QUICK_ADVANCE: (id) => `/dirty-receipts/${id}/quick-advance`,
+  },
   WASHINGS: crud('/washings'),
   DRYINGS: crud('/dryings'),
   PACKAGINGS: crud('/packagings'),

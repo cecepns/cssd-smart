@@ -83,13 +83,13 @@ export default function UnitRequisitionsPage() {
   const propPagination = propData?.pagination || { total: 0, totalPages: 1 };
 
   // Form State: Requisition
+  const [reqItems, setReqItems] = useState([
+    { item_name: '', quantity: 1, unit_label: 'Set' }
+  ]);
   const [reqForm, setReqForm] = useState({
     unit_id: user?.unit_id || '',
     procedure_name: '',
     procedure_count: 1,
-    item_name: '',
-    quantity: 1,
-    unit_label: 'Set',
     procedure_date: todayISO(),
     procedure_time: '08:00',
     room_name: 'Kamar Operasi (OK)',
@@ -111,24 +111,32 @@ export default function UnitRequisitionsPage() {
   // Handle Create Requisition
   const handleSaveRequisition = async (e) => {
     e.preventDefault();
+    if (reqItems.length === 0 || !reqItems[0].item_name) {
+      toast.error('Mohon isi minimal 1 jenis set alat medis');
+      return;
+    }
     setSubmittingReq(true);
     try {
+      const totalQty = reqItems.reduce((acc, curr) => acc + Number(curr.quantity || 1), 0);
+      const combinedItemName = reqItems.map((it) => `${it.item_name} (${it.quantity} ${it.unit_label})`).join(', ');
+
       await api.post(API_ENDPOINTS.UNIT_REQUISITIONS.LIST, {
         ...reqForm,
         unit_id: user?.role === 'unit' ? user.unit_id : reqForm.unit_id,
         procedure_count: Number(reqForm.procedure_count),
-        quantity: Number(reqForm.quantity),
+        item_name: combinedItemName,
+        quantity: totalQty,
+        unit_label: 'Set/Item',
+        notes: reqForm.notes ? `${reqForm.notes} | Rincian: ${combinedItemName}` : `Rincian: ${combinedItemName}`,
       });
       toast.success('Permintaan kebutuhan alat operasi berhasil diajukan!');
       setOpenReqModal(false);
       refetchReq();
+      setReqItems([{ item_name: '', quantity: 1, unit_label: 'Set' }]);
       setReqForm({
         unit_id: user?.unit_id || '',
         procedure_name: '',
         procedure_count: 1,
-        item_name: '',
-        quantity: 1,
-        unit_label: 'Set',
         procedure_date: todayISO(),
         procedure_time: '08:00',
         room_name: 'Kamar Operasi (OK)',
@@ -723,53 +731,88 @@ export default function UnitRequisitionsPage() {
                   <p className="mt-1 text-[10px] text-slate-500">Misal: 3 operasi</p>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Jumlah Kebutuhan Alat/Set
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={reqForm.quantity}
-                    onChange={(e) => setReqForm({ ...reqForm, quantity: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-brand-500 focus:outline-none font-bold text-brand-900"
-                    required
-                  />
-                  <p className="mt-1 text-[10px] text-slate-500">Misal: 3 set untuk 3 operasi</p>
-                </div>
+                <div className="md:col-span-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-800">
+                      Daftar Jenis Set Instrumen / Alat Medis (Bisa lebih dari 1 jenis set)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setReqItems([...reqItems, { item_name: '', quantity: 1, unit_label: 'Set' }])}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-brand-700 hover:text-brand-900 bg-brand-50 px-2.5 py-1 rounded-lg border border-brand-200 transition"
+                    >
+                      <Plus size={14} /> + Tambah Jenis Set Lain
+                    </button>
+                  </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Pilih Jenis Alat / Set Instrumen
-                  </label>
-                  <input
-                    type="text"
-                    list="items-list"
-                    value={reqForm.item_name}
-                    onChange={(e) => setReqForm({ ...reqForm, item_name: e.target.value })}
-                    placeholder="Ketik atau pilih nama set alat..."
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-brand-500 focus:outline-none font-medium"
-                    required
-                  />
-                  <datalist id="items-list">
-                    {availableItems.map((it) => (
-                      <option key={it.id} value={it.name} />
-                    ))}
-                  </datalist>
-                </div>
+                  {reqItems.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          list={`items-list-${idx}`}
+                          value={item.item_name}
+                          onChange={(e) => {
+                            const next = [...reqItems];
+                            next[idx].item_name = e.target.value;
+                            setReqItems(next);
+                          }}
+                          placeholder="Pilih atau ketik nama set instrumen..."
+                          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs focus:border-brand-500 focus:outline-none bg-white font-medium"
+                          required
+                        />
+                        <datalist id={`items-list-${idx}`}>
+                          {availableItems.map((it) => (
+                            <option key={it.id} value={it.name} />
+                          ))}
+                        </datalist>
+                      </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Satuan</label>
-                  <select
-                    value={reqForm.unit_label}
-                    onChange={(e) => setReqForm({ ...reqForm, unit_label: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-brand-500 focus:outline-none"
-                  >
-                    <option value="Set">Set</option>
-                    <option value="Pcs">Pcs</option>
-                    <option value="Buah">Buah</option>
-                    <option value="Pasang">Pasang</option>
-                  </select>
+                      <div className="w-24">
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const next = [...reqItems];
+                            next[idx].quantity = e.target.value;
+                            setReqItems(next);
+                          }}
+                          placeholder="Jumlah"
+                          className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs focus:border-brand-500 focus:outline-none bg-white text-center font-bold"
+                          required
+                        />
+                      </div>
+
+                      <div className="w-24">
+                        <select
+                          value={item.unit_label}
+                          onChange={(e) => {
+                            const next = [...reqItems];
+                            next[idx].unit_label = e.target.value;
+                            setReqItems(next);
+                          }}
+                          className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none bg-white"
+                        >
+                          <option value="Set">Set</option>
+                          <option value="Pcs">Pcs</option>
+                          <option value="Buah">Buah</option>
+                          <option value="Pasang">Pasang</option>
+                        </select>
+                      </div>
+
+                      {reqItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setReqItems(reqItems.filter((_, i) => i !== idx))}
+                          className="rounded-lg p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          title="Hapus baris set ini"
+                        >
+                          <X size={15} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
 
                 <div>

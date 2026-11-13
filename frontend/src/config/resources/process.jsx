@@ -1,4 +1,6 @@
-import { Droplets, Flame, Package, ScanLine, ShieldCheck, Wind } from 'lucide-react';
+import { Check, Droplets, Flame, Package, Play, ScanLine, ShieldCheck, Wind } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { api } from '@/utils/api';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { INDICATOR_OPTIONS, PACKAGE_TYPES, STAGE_LABELS, UNIT_LABELS, WASH_METHODS } from '@/utils/constants';
 import { todayISO, formatDate } from '@/utils/format';
@@ -58,6 +60,126 @@ export const receiptsConfig = {
   ],
   canEdit: true,
   canDelete: true,
+  extraActions: (row, { reload, user, isAdmin }) => {
+    const isUnconfirmed = !row.confirmed_at && (row.receiver_name === 'Menunggu Konfirmasi CSSD' || !row.receiver_name);
+    return (
+      <div className="flex items-center gap-1.5">
+        {isUnconfirmed && user?.role !== 'unit' && (
+          <button
+            type="button"
+            title="Klik Konfirmasi Penerimaan Alat Kotor"
+            onClick={async () => {
+              try {
+                await api.post(API_ENDPOINTS.RECEIPTS.CONFIRM_RECEIPT(row.id));
+                toast.success(`Alat kotor ${row.barcode} berhasil dikonfirmasi diterima oleh ${user?.name || 'Petugas'}!`);
+                reload();
+              } catch (e) {
+                toast.error(e.response?.data?.message || 'Gagal konfirmasi penerimaan');
+              }
+            }}
+            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-2 py-1 text-xs font-bold text-white shadow-sm transition"
+          >
+            <Check size={13} /> TERIMA
+          </button>
+        )}
+
+        {isAdmin && row.status !== 'Karantina' && !isUnconfirmed && (
+          <>
+            {row.stage === 1 && (
+              <button
+                type="button"
+                title="Mulai Proses Pencucian (Admin)"
+                onClick={async () => {
+                  try {
+                    await api.post(API_ENDPOINTS.RECEIPTS.QUICK_ADVANCE(row.id), { target_stage: 2 });
+                    toast.success(`Alat kotor ${row.barcode} masuk ke tahap Pencucian!`);
+                    reload();
+                  } catch (e) {
+                    toast.error(e.response?.data?.message || 'Gagal memajukan tahap');
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 hover:bg-cyan-700 px-2 py-1 text-xs font-semibold text-white shadow-sm transition"
+              >
+                <Play size={12} /> Cuci
+              </button>
+            )}
+            {row.stage === 2 && (
+              <button
+                type="button"
+                title="Mulai Pengeringan & Pemeriksaan (Admin)"
+                onClick={async () => {
+                  try {
+                    await api.post(API_ENDPOINTS.RECEIPTS.QUICK_ADVANCE(row.id), { target_stage: 3 });
+                    toast.success(`Alat kotor ${row.barcode} masuk ke tahap Pengeringan!`);
+                    reload();
+                  } catch (e) {
+                    toast.error(e.response?.data?.message || 'Gagal memajukan tahap');
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded-lg bg-sky-600 hover:bg-sky-700 px-2 py-1 text-xs font-semibold text-white shadow-sm transition"
+              >
+                <Play size={12} /> Keringkan
+              </button>
+            )}
+            {row.stage === 3 && (
+              <button
+                type="button"
+                title="Mulai Pengemasan Alat (Admin)"
+                onClick={async () => {
+                  try {
+                    await api.post(API_ENDPOINTS.RECEIPTS.QUICK_ADVANCE(row.id), { target_stage: 4 });
+                    toast.success(`Alat kotor ${row.barcode} masuk ke tahap Pengemasan!`);
+                    reload();
+                  } catch (e) {
+                    toast.error(e.response?.data?.message || 'Gagal memajukan tahap');
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded-lg bg-amber-600 hover:bg-amber-700 px-2 py-1 text-xs font-semibold text-white shadow-sm transition"
+              >
+                <Play size={12} /> Kemas
+              </button>
+            )}
+            {row.stage === 4 && (
+              <button
+                type="button"
+                title="Mulai Sterilisasi Steam (Admin)"
+                onClick={async () => {
+                  try {
+                    await api.post(API_ENDPOINTS.RECEIPTS.QUICK_ADVANCE(row.id), { target_stage: 5 });
+                    toast.success(`Alat kotor ${row.barcode} masuk ke siklus Sterilisasi!`);
+                    reload();
+                  } catch (e) {
+                    toast.error(e.response?.data?.message || 'Gagal memajukan tahap');
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded-lg bg-blue-600 hover:bg-blue-700 px-2 py-1 text-xs font-semibold text-white shadow-sm transition"
+              >
+                <Play size={12} /> Steril
+              </button>
+            )}
+            {row.stage === 5 && (
+              <button
+                type="button"
+                title="Verifikasi Lulus & Masukkan ke Stok Siap Distribusi (Admin)"
+                onClick={async () => {
+                  try {
+                    await api.post(API_ENDPOINTS.RECEIPTS.QUICK_ADVANCE(row.id), { target_stage: 6 });
+                    toast.success(`Alat ${row.barcode} LULUS Verifikasi & Siap Distribusi!`);
+                    reload();
+                  } catch (e) {
+                    toast.error(e.response?.data?.message || 'Gagal verifikasi');
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-2 py-1 text-xs font-bold text-white shadow-sm transition"
+              >
+                <Check size={12} /> Selesai Steril
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    );
+  },
   deleteMessage: (row) => `Hapus penerimaan alat kotor ${row.barcode}? Data proses terkait akan ikut dibersihkan.`,
   traceField: 'barcode',
   label: (row) => labelOf(row.barcode, row.item_name, `${row.quantity} ${row.unit_label} • ${row.unit_name || ''} • ${formatDate(row.receipt_date)}`),
