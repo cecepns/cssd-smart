@@ -158,7 +158,7 @@ export default function ReportsHubPage() {
       ['Alat Steril Terdistribusi', overall?.sterile_tools_distributed || 0],
       ['Kasa Steril Terdistribusi', overall?.gauze_distributed || 0],
       ['Penerimaan DTT Masuk', overall?.dtt_receipts || 0],
-      ['Distribusi DTT Kembali', overall?.dtt_distributions || 0],
+      ['Pengambilan Alat DTT Kembali', overall?.dtt_distributions || 0],
       ['BMHP Keluar / Terpakai', overall?.bmhp_consumed || 0],
       ['Kejadian Karantina / Gagal', overall?.quarantines_count || 0],
       [],
@@ -358,7 +358,7 @@ export default function ReportsHubPage() {
                     <option value="stok-steril">7. Laporan Stok Alat Steril</option>
                     <option value="distribusi-alat">8. Laporan Pengambilan Alat Steril</option>
                     <option value="distribusi-kasa">9. Laporan Pengambilan Kasa Steril</option>
-                    <option value="distribusi-dtt">10. Laporan Distribusi Alat DTT</option>
+                    <option value="distribusi-dtt">10. Laporan Pengambilan Alat DTT</option>
                     <option value="stok-bmhp">11. Laporan Stok BMHP</option>
                     <option value="ketertelusuran">13. Laporan Ketertelusuran</option>
                   </optgroup>

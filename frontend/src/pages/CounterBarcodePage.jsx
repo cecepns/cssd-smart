@@ -53,11 +53,11 @@ export default function CounterBarcodePage() {
     },
     {
       number: 5,
-      title: 'Distribusi Alat Hasil DTT (Reuse)',
+      title: 'Pengambilan Alat DTT (Reuse)',
       subtitle: 'Alur: CSSD → Unit',
       barcodeValue: 'TRX-DTT-DIST',
       targetUrl: `${origin}${ROUTES.DTT_DISTRIBUTIONS}`,
-      instructions: 'Scan QR Code ini untuk pengambilan alat steril hasil DTT oleh petugas unit dengan TTD layar HP.',
+      instructions: 'Scan QR Code ini untuk pengambilan alat hasil DTT oleh petugas unit dengan TTD layar HP.',
     },
     {
       number: 6,

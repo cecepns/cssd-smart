@@ -2243,7 +2243,7 @@ registerCrud({
     if (fresh) {
       await recordAdminNotification(conn, {
         type: 'DTT_DISTRIBUTION',
-        title: 'Distribusi Alat Hasil DTT (Reuse)',
+        title: 'Pengambilan Alat DTT (Reuse)',
         unit_id: fresh.unit_id,
         unit_name: fresh.unit_name,
         item_name: fresh.item_name,
@@ -3449,7 +3449,7 @@ router.get('/reports/monthly-summary', auth, allow('admin'), wrap(async (req, re
       FROM dtt_receipts t
       WHERE MONTH(t.receipt_datetime) = ? AND YEAR(t.receipt_datetime) = ?
     `),
-    calcStageTiming('Distribusi Alat DTT (Reuse)', `
+    calcStageTiming('Pengambilan Alat DTT (Reuse)', `
       SELECT COUNT(*) AS cnt,
         AVG(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.dist_datetime, t.created_at), COALESCE(t.completed_at, t.dist_datetime, t.created_at)), 0)) AS avg_process_seconds,
         SUM(GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.dist_datetime, t.created_at), COALESCE(t.completed_at, t.dist_datetime, t.created_at)), 0)) AS total_process_seconds,
@@ -4010,7 +4010,7 @@ async function buildDttTrace(dttReceiptId) {
     const dEnd = d.completed_at || d.dist_datetime || d.created_at;
     timeline.push(makeTimelineEvent({
       order: 4,
-      stage: 'Distribusi Alat Hasil DTT (Reuse)',
+      stage: 'Pengambilan Alat DTT (Reuse)',
       date: (d.dist_datetime || '').slice(0, 10),
       officer: `${d.officer} → ${d.receiver_name}`,
       detail: `${d.barcode} — ${d.quantity} ${d.unit_label} ke ${d.unit_name} (Pemakaian ke-${d.reuse_count})`,

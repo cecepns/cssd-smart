@@ -308,12 +308,12 @@ export const dttReceiptsConfig = {
  * ------------------------------------------------------------ */
 export const dttDistributionsConfig = {
   key: 'dtt-distribusi',
-  title: 'Distribusi Alat Hasil DTT (Reuse)',
+  title: 'Pengambilan Alat DTT (Reuse)',
   subtitle: 'Penyerahan kembali alat hasil DTT ke unit — barcode otomatis (DDTT-...)',
   icon: Truck,
   endpoint: API_ENDPOINTS.DTT_DISTRIBUTIONS,
   searchPlaceholder: 'Cari barcode DDTT, alat, unit, petugas...',
-  createLabel: 'Distribusi Hasil DTT',
+  createLabel: 'Pengambilan Alat DTT',
   defaultSort: 'id',
   dateFilter: true,
   timeFilter: true,
@@ -323,7 +323,7 @@ export const dttDistributionsConfig = {
   ],
   columns: [
     { key: 'barcode', label: 'Barcode DDTT', sortable: true, render: mono('barcode') },
-    { key: 'dist_datetime', label: 'Waktu Distribusi', sortable: true, render: (r) => formatDateTime(r.dist_datetime) },
+    { key: 'dist_datetime', label: 'Waktu Pengambilan', sortable: true, render: (r) => formatDateTime(r.dist_datetime) },
     { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
     { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     { key: 'receipt_barcode', label: 'Barcode Penerimaan', render: mono('receipt_barcode') },
@@ -343,12 +343,12 @@ export const dttDistributionsConfig = {
   ],
   canEdit: true,
   canDelete: true,
-  deleteMessage: (row) => `Hapus distribusi DTT ${row.barcode}?`,
+  deleteMessage: (row) => `Hapus pengambilan DTT ${row.barcode}?`,
   traceField: 'barcode',
   form: {
     size: 'lg',
-    createTitle: 'Distribusi Alat Hasil DTT (Reuse)',
-    subtitle: 'Barcode distribusi dibuat otomatis (DDTT-DDMMYY-001). Petugas unit penerima menandatangani di layar HP.',
+    createTitle: 'Pengambilan Alat DTT (Reuse)',
+    subtitle: 'Barcode pengambilan dibuat otomatis (DDTT-DDMMYY-001). Petugas unit penerima menandatangani di layar HP.',
     fields: [
       {
         type: 'remote-select',

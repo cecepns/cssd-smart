@@ -47,7 +47,7 @@ export const NAV_SECTIONS = [
     title: 'Transaksi Barcode DTT (Reuse)',
     items: [
       { label: 'Penerimaan Alat DTT', to: ROUTES.DTT_RECEIPTS, icon: Sparkles, allowUnit: true },
-      { label: 'Distribusi Hasil DTT', to: ROUTES.DTT_DISTRIBUTIONS, icon: Truck, allowUnit: true },
+      { label: 'Pengambilan Alat DTT', to: ROUTES.DTT_DISTRIBUTIONS, icon: Truck, allowUnit: true },
       { label: 'Buku Kontrol Reuse DTT', to: ROUTES.DTT_CONTROL, icon: BookOpen },
     ],
   },
@@ -97,7 +97,7 @@ export const MENU_CARDS = [
   { title: 'Pengambilan Alat Steril Barcode', desc: 'Alat steril siap diambil unit dengan tanda tangan HP', to: ROUTES.DIST_TOOLS, icon: Truck, tone: 'green', allowUnit: true },
   { title: 'Pengambilan Kasa Steril Barcode', desc: 'Pengambilan kasa lipat dan rol steril ke unit memakai barcode', to: ROUTES.DIST_GAUZE, icon: Boxes, tone: 'green', allowUnit: true },
   { title: 'Penerimaan Alat Kotor DTT (Reuse)', desc: 'Barcode penerimaan alat kotor DTT unit ke CSSD dengan TTD HP', to: ROUTES.DTT_RECEIPTS, icon: Sparkles, tone: 'purple', allowUnit: true },
-  { title: 'Distribusi Alat Hasil DTT (Reuse)', desc: 'Barcode serah terima alat hasil DTT CSSD ke unit dengan TTD HP', to: ROUTES.DTT_DISTRIBUTIONS, icon: RefreshCw, tone: 'blue', allowUnit: true },
+  { title: 'Pengambilan Alat DTT (Reuse)', desc: 'Barcode serah terima alat hasil DTT CSSD ke unit dengan TTD HP', to: ROUTES.DTT_DISTRIBUTIONS, icon: RefreshCw, tone: 'blue', allowUnit: true },
   { title: 'Buku Kontrol Reuse DTT', desc: 'Buku kontrol riwayat pemakaian ulang dan batas siklus alat medis', to: ROUTES.DTT_CONTROL, icon: BookOpen, tone: 'purple', adminOnly: true },
   { title: 'Indikator Sterilisasi', desc: 'Bowie-Dick, indikator kimia, biologi, dan verifikasi batch', to: ROUTES.VERIFICATIONS, icon: ShieldCheck, tone: 'purple', adminOnly: true },
   { title: 'Stok BMHP Barcode', desc: 'Barang masuk, keluar, kedaluwarsa dan mutasi stok BMHP', to: ROUTES.BMHP, icon: Archive, tone: 'amber', adminOnly: true },
