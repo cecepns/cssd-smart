@@ -51,6 +51,7 @@ export const API_ENDPOINTS = {
     OFFICERS: '/lookups/officers',
     MACHINES: '/lookups/machines',
     PACKAGING_MATERIALS: '/lookups/packaging-materials',
+    SET_INSTRUMENTS: '/lookups/set-instruments',
   },
 
   // DTT (Reuse) - Penggunaan Ulang Alat Medis

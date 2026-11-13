@@ -874,16 +874,73 @@ router.get('/lookups/packaging-materials', auth, allow('admin', 'petugas'), wrap
   res.json({ success: true, data: rows });
 }));
 
-// ---------- Tahap 1: Alat Kotor Masuk (barcode) ----------
-// Dukungan penerimaan beberapa set sekaligus dalam 1 kali input
-router.post('/dirty-receipts', auth, allow('admin', 'petugas', 'unit'), wrap(async (req, res, next) => {
-  const rawItems = Array.isArray(req.body.items) ? req.body.items : [];
-  const validItems = rawItems.filter((it) => it && it.item_name && String(it.item_name).trim() !== '');
+router.get('/lookups/set-instruments', auth, allow('admin', 'petugas', 'unit'), wrap(async (req, res) => {
+  const { set_id, item_id, set_name } = req.query;
 
-  if (validItems.length <= 1) {
-    return next();
+  if (set_id) {
+    const [items] = await pool.query(
+      'SELECT id, set_id, instrument_name, quantity, unit_label FROM instrument_set_items WHERE set_id = ? ORDER BY sort_order ASC, id ASC',
+      [parseInt(set_id, 10)]
+    );
+    const [[set]] = await pool.query('SELECT id, code, name, completeness_status FROM instrument_sets WHERE id = ?', [parseInt(set_id, 10)]);
+    return res.json({ success: true, data: { set: set || null, items: items || [] } });
   }
 
+  if (item_id) {
+    const [[item]] = await pool.query('SELECT id, code, name, category FROM items WHERE id = ?', [parseInt(item_id, 10)]);
+    if (item) {
+      const [[set]] = await pool.query(
+        'SELECT id, code, name, completeness_status FROM instrument_sets WHERE LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?) LIMIT 1',
+        [item.name, item.code || item.name]
+      );
+      if (set) {
+        const [items] = await pool.query(
+          'SELECT id, set_id, instrument_name, quantity, unit_label FROM instrument_set_items WHERE set_id = ? ORDER BY sort_order ASC, id ASC',
+          [set.id]
+        );
+        return res.json({ success: true, data: { set, items } });
+      }
+    }
+  }
+
+  if (set_name && set_name.trim()) {
+    const trimmed = set_name.trim();
+    const [[set]] = await pool.query(
+      'SELECT id, code, name, completeness_status FROM instrument_sets WHERE LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?) OR name LIKE ? LIMIT 1',
+      [trimmed, trimmed, `%${trimmed}%`]
+    );
+    if (set) {
+      const [items] = await pool.query(
+        'SELECT id, set_id, instrument_name, quantity, unit_label FROM instrument_set_items WHERE set_id = ? ORDER BY sort_order ASC, id ASC',
+        [set.id]
+      );
+      return res.json({ success: true, data: { set, items } });
+    }
+  }
+
+  const [allSets] = await pool.query('SELECT id, code, name, completeness_status FROM instrument_sets WHERE is_active = 1 ORDER BY name ASC');
+  const [allItems] = await pool.query('SELECT id, set_id, instrument_name, quantity, unit_label FROM instrument_set_items ORDER BY sort_order ASC, id ASC');
+
+  const itemsMap = {};
+  for (const s of allSets) {
+    const sItems = allItems.filter((i) => i.set_id === s.id);
+    itemsMap[s.id] = sItems;
+    itemsMap[s.name.toLowerCase()] = sItems;
+    if (s.code) itemsMap[s.code.toLowerCase()] = sItems;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      sets: allSets,
+      itemsMap,
+    },
+  });
+}));
+
+// ---------- Tahap 1: Alat Kotor Masuk (barcode) ----------
+// Dukungan penerimaan beberapa set sekaligus + checklist instrumen + alat satuan tambahan
+router.post('/dirty-receipts', auth, allow('admin', 'petugas', 'unit'), wrap(async (req, res) => {
   const bodyInput = { ...req.body };
   if (req.user.role === 'unit' && !req.user.unit_id) {
     throw new HttpError(403, 'Akun unit tidak terhubung ke unit rumah sakit');
@@ -910,33 +967,114 @@ router.post('/dirty-receipts', auth, allow('admin', 'petugas', 'unit'), wrap(asy
   }
 
   const ts = resolveActionTimestamps(bodyInput);
-  const notes = sanitizeText(bodyInput.notes) || null;
+  const generalNotes = sanitizeText(bodyInput.notes) || '';
+
+  // 1. Kumpulkan Set Instrumen yang valid
+  let rawSets = Array.isArray(bodyInput.items) ? bodyInput.items : [];
+  let validSets = rawSets.filter((it) => it && it.item_name && String(it.item_name).trim() !== '');
+
+  if (validSets.length === 0 && bodyInput.item_name && String(bodyInput.item_name).trim() !== '') {
+    validSets = [{
+      item_name: bodyInput.item_name,
+      quantity: bodyInput.quantity || 1,
+      unit_label: bodyInput.unit_label || 'Set',
+      item_id: bodyInput.item_id || null,
+      checklist: Array.isArray(bodyInput.checklist) ? bodyInput.checklist : [],
+    }];
+  }
+
+  // 2. Kumpulkan Alat Satuan Tambahan di Luar Set
+  const rawExtra = Array.isArray(bodyInput.extra_items)
+    ? bodyInput.extra_items
+    : (Array.isArray(bodyInput.extra_single_items) ? bodyInput.extra_single_items : []);
+  const validExtra = rawExtra.filter((it) => it && it.item_name && String(it.item_name).trim() !== '');
+
+  if (validSets.length === 0 && validExtra.length === 0) {
+    throw new HttpError(422, 'Set instrumen atau alat satuan wajib diisi minimal 1');
+  }
 
   const createdList = [];
+  const discrepancyAlerts = [];
+
   await withTx(async (conn) => {
-    for (const item of validItems) {
+    // Ambil nama unit asal
+    const [[unitRow]] = await conn.query('SELECT name FROM units WHERE id = ?', [unitId]);
+    const unitName = unitRow?.name || 'Unit';
+
+    // A. Proses Tiap Set Instrumen
+    for (const setItem of validSets) {
       const barcode = await makeCode(conn, 'AK', receiptDate);
-      const itemName = sanitizeText(item.item_name);
-      const qty = Math.max(parseInt(item.quantity, 10) || 1, 1);
-      const unitLabel = sanitizeText(item.unit_label) || 'set';
-      const itemId = item.item_id ? parseInt(item.item_id, 10) : null;
+      const itemName = sanitizeText(setItem.item_name);
+      const qty = Math.max(parseInt(setItem.quantity, 10) || 1, 1);
+      const unitLabel = sanitizeText(setItem.unit_label) || 'Set';
+      const itemId = setItem.item_id ? parseInt(setItem.item_id, 10) : null;
+      const checklist = Array.isArray(setItem.checklist) ? setItem.checklist : [];
+
+      // Evaluasi status kelengkapan set
+      const hasDamaged = checklist.some((c) => c && c.status === 'Rusak');
+      const hasMissing = checklist.some((c) => c && (c.status === 'Tidak ada' || c.status === 'Kurang'));
+      const checklistStatus = hasDamaged ? 'Ada Kerusakan' : (hasMissing ? 'Tidak Lengkap' : 'Lengkap');
+
+      // Gabungkan catatan ketidaklengkapan ke field notes
+      const issues = checklist
+        .filter((c) => c && (c.status === 'Tidak ada' || c.status === 'Rusak' || c.status === 'Kurang'))
+        .map((c) => `${c.instrument_name}: ${c.status}${c.notes ? ` (${c.notes})` : ''}`);
+
+      const itemNotes = [
+        generalNotes,
+        issues.length ? `[Pemeriksaan]: ${issues.join('; ')}` : null,
+      ].filter(Boolean).join(' • ');
+
+      const itemsDetailStr = checklist.length ? JSON.stringify(checklist) : null;
 
       const [insertRes] = await conn.query(`
         INSERT INTO dirty_receipts
         (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
-         sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, stage, status, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Diterima', ?)
+         sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Diterima', ?)
       `, [
         barcode, receiptDate, ts.started_at, ts.completed_at, unitId, itemId, itemName, qty, unitLabel,
-        senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, notes, req.user.id
+        senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, itemNotes || null, itemsDetailStr, checklistStatus, req.user.id
       ]);
 
       const insertedId = insertRes.insertId;
-      createdList.push({ id: insertedId, barcode, item_name: itemName, quantity: qty, unit_label: unitLabel });
+      createdList.push({ id: insertedId, barcode, item_name: itemName, quantity: qty, unit_label: unitLabel, checklist_status: checklistStatus });
+
+      // Catat ke instrument_discrepancy_logs jika ada alat yang tidak ada / rusak
+      if (hasDamaged || hasMissing) {
+        let setId = null;
+        if (itemId) {
+          const [[matchByItem]] = await conn.query('SELECT s.id FROM instrument_sets s JOIN items i ON (s.code = i.code OR s.name = i.name) WHERE i.id = ? LIMIT 1', [itemId]);
+          setId = matchByItem?.id;
+        }
+        if (!setId) {
+          const [[matchByName]] = await conn.query('SELECT id FROM instrument_sets WHERE LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?) OR name LIKE ? LIMIT 1', [itemName, itemName, `%${itemName}%`]);
+          setId = matchByName?.id;
+        }
+        if (!setId) {
+          const [[firstSet]] = await conn.query('SELECT id FROM instrument_sets LIMIT 1');
+          setId = firstSet?.id || 1;
+        }
+
+        for (const chk of checklist) {
+          if (chk && (chk.status === 'Tidak ada' || chk.status === 'Rusak' || chk.status === 'Kurang')) {
+            const incType = chk.status === 'Rusak' ? 'Rusak' : 'Kurang';
+            const discQty = Math.max(parseInt(chk.quantity, 10) || 1, 1);
+            const discNote = `[Penerimaan ${barcode}] ${chk.notes ? chk.notes : (chk.status === 'Rusak' ? 'Instrumen rusak saat serah terima alat kotor' : 'Instrumen tidak ada saat serah terima')}`;
+            await conn.query(`
+              INSERT INTO instrument_discrepancy_logs
+              (set_id, instrument_name, incident_type, quantity, unit_origin, officer, incident_date, notes, resolution_status)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Belum Selesai')
+            `, [setId, chk.instrument_name, incType, discQty, unitName, senderName, receiptDate, discNote]);
+
+            discrepancyAlerts.push(`${chk.instrument_name} (${incType})`);
+          }
+        }
+      }
 
       await recordAdminNotification(conn, {
         type: 'RECEIPT',
-        title: `Penerimaan Alat Kotor Masuk: ${itemName}`,
+        title: `Penerimaan Alat Kotor: ${itemName}`,
         unit_id: unitId,
         item_name: itemName,
         quantity: qty,
@@ -950,16 +1088,63 @@ router.post('/dirty-receipts', auth, allow('admin', 'petugas', 'unit'), wrap(asy
         trx_time: (ts.started_at || '').slice(11, 16) || null,
         ref_table: 'dirty_receipts',
         ref_id: insertedId,
-        data_payload: { id: insertedId, barcode, item_name: itemName, quantity: qty, unit_label: unitLabel, sender_name: senderName, receiver_name: receiverName },
+        data_payload: { id: insertedId, barcode, item_name: itemName, quantity: qty, unit_label: unitLabel, checklist_status: checklistStatus, sender_name: senderName, receiver_name: receiverName },
+      });
+    }
+
+    // B. Proses Penambahan Alat Satuan di Luar Set
+    for (const extra of validExtra) {
+      const barcode = await makeCode(conn, 'AK', receiptDate);
+      const extraName = sanitizeText(extra.item_name);
+      const extraQty = Math.max(parseInt(extra.quantity, 10) || 1, 1);
+      const extraUnitLabel = sanitizeText(extra.unit_label) || 'Buah';
+      const extraNotes = [generalNotes, 'Alat Satuan Tambahan di luar isi set'].filter(Boolean).join(' • ');
+      const extraDetailStr = JSON.stringify([{ instrument_name: extraName, quantity: extraQty, unit_label: extraUnitLabel, status: 'Lengkap' }]);
+
+      const [insertExtraRes] = await conn.query(`
+        INSERT INTO dirty_receipts
+        (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
+         sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
+        VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Lengkap', 1, 'Diterima', ?)
+      `, [
+        barcode, receiptDate, ts.started_at, ts.completed_at, unitId, `${extraName} (Alat Satuan)`, extraQty, extraUnitLabel,
+        senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, extraNotes, extraDetailStr, req.user.id
+      ]);
+
+      const insertedExtraId = insertExtraRes.insertId;
+      createdList.push({ id: insertedExtraId, barcode, item_name: `${extraName} (Alat Satuan)`, quantity: extraQty, unit_label: extraUnitLabel, checklist_status: 'Lengkap' });
+
+      await recordAdminNotification(conn, {
+        type: 'RECEIPT',
+        title: `Penerimaan Alat Satuan: ${extraName}`,
+        unit_id: unitId,
+        item_name: `${extraName} (Alat Satuan)`,
+        quantity: extraQty,
+        unit_label: extraUnitLabel,
+        barcode: barcode,
+        officer_sender: senderName,
+        officer_receiver: receiverName,
+        signature_sender: senderSignature,
+        signature_receiver: receiverSignature,
+        trx_date: receiptDate,
+        trx_time: (ts.started_at || '').slice(11, 16) || null,
+        ref_table: 'dirty_receipts',
+        ref_id: insertedExtraId,
+        data_payload: { id: insertedExtraId, barcode, item_name: `${extraName} (Alat Satuan)`, quantity: extraQty, unit_label: extraUnitLabel, sender_name: senderName, receiver_name: receiverName },
       });
     }
   });
 
   const [[firstRecord]] = await pool.query('SELECT r.*, u.name AS unit_name FROM dirty_receipts r LEFT JOIN units u ON u.id = r.unit_id WHERE r.id = ?', [createdList[0].id]);
 
+  let msg = `${createdList.length} penerimaan alat kotor berhasil disimpan`;
+  if (discrepancyAlerts.length > 0) {
+    msg += ` (${discrepancyAlerts.length} catatan ketidaklengkapan otomatis dicatat ke log pemantauan)`;
+  }
+
   res.status(201).json({
     success: true,
-    message: `${createdList.length} set alat kotor berhasil diterima dengan barcode terpisah`,
+    message: msg,
     data: firstRecord,
     items: createdList,
   });
@@ -999,6 +1184,9 @@ registerCrud({
     field('receiver_name', 'string', { label: 'Petugas penerima', max: 100 }),
     field('receiver_signature', 'path', { label: 'TTD penerima' }),
     field('notes', 'string', { label: 'Catatan', max: 500 }),
+    field('items_detail', 'string', { label: 'Rincian Instrumen' }),
+    field('extra_items', 'string', { label: 'Alat Satuan Tambahan' }),
+    field('checklist_status', 'string', { label: 'Status Kelengkapan', max: 50 }),
   ],
   async beforeCreate(conn, data, ctx) {
     const ts = resolveActionTimestamps(ctx.body);
@@ -5203,6 +5391,9 @@ async function ensureAppSchemaUpdates() {
     await addCol('items', "unit_label VARCHAR(50) NOT NULL DEFAULT 'Set'");
     await addCol('dirty_receipts', 'confirmed_at DATETIME DEFAULT NULL');
     await addCol('dirty_receipts', 'confirmed_by VARCHAR(100) DEFAULT NULL');
+    await addCol('dirty_receipts', 'items_detail LONGTEXT DEFAULT NULL');
+    await addCol('dirty_receipts', 'extra_items LONGTEXT DEFAULT NULL');
+    await addCol('dirty_receipts', "checklist_status ENUM('Lengkap', 'Tidak Lengkap', 'Ada Kerusakan') DEFAULT 'Lengkap'");
 
     // Pastikan kolom started_at & completed_at tersedia di seluruh tabel tahapan CSSD & DTT
     const timingTables = [
@@ -5264,6 +5455,37 @@ async function ensureAppSchemaUpdates() {
     }
   } catch (err) {
     console.error('ensureAppSchemaUpdates notice:', err.message);
+  }
+}
+
+async function ensureStandardSetItems() {
+  try {
+    const [[setMinor]] = await pool.query("SELECT id FROM instrument_sets WHERE LOWER(name) LIKE '%minor%' LIMIT 1");
+    if (setMinor?.id) {
+      const clientMinorInstruments = [
+        ['Gunting jaringan', 1, 'Buah', 1],
+        ['Pinset anatomis', 2, 'Buah', 2],
+        ['Pinset chirurgis', 2, 'Buah', 3],
+        ['Needle holder', 1, 'Buah', 4],
+        ['Klem mosquito', 4, 'Buah', 5],
+        ['Bengkok', 1, 'Buah', 6],
+        ['Bak instrumen', 1, 'Buah', 7],
+      ];
+      for (const [name, qty, unit, sort] of clientMinorInstruments) {
+        const [[existing]] = await pool.query(
+          'SELECT id FROM instrument_set_items WHERE set_id = ? AND LOWER(instrument_name) = LOWER(?)',
+          [setMinor.id, name]
+        );
+        if (!existing) {
+          await pool.query(
+            'INSERT INTO instrument_set_items (set_id, instrument_name, quantity, unit_label, sort_order) VALUES (?, ?, ?, ?, ?)',
+            [setMinor.id, name, qty, unit, sort]
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error('ensureStandardSetItems notice:', err.message);
   }
 }
 
@@ -5419,6 +5641,7 @@ async function start() {
     await ensureItemUnitsTable();
     await ensureDttTables();
     await ensureAppSchemaUpdates();
+    await ensureStandardSetItems();
     await ensureNewFeatureTables();
   } catch (err) {
     console.error('Gagal terhubung ke database. Pastikan MySQL berjalan dan sql/database.sql sudah diimport.');

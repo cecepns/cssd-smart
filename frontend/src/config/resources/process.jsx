@@ -52,7 +52,56 @@ export const receiptsConfig = {
     { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
     { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     { key: 'unit_name', label: 'Unit Asal', sortable: true },
-    { key: 'item_name', label: 'Jenis Alat', sortable: true, render: bold('item_name') },
+    {
+      key: 'item_name',
+      label: 'Jenis Alat / Set',
+      sortable: true,
+      render: (r) => {
+        let itemsDetail = [];
+        try {
+          if (r.items_detail) {
+            itemsDetail = typeof r.items_detail === 'string' ? JSON.parse(r.items_detail) : r.items_detail;
+          }
+        } catch (e) {}
+
+        const damaged = itemsDetail.filter((i) => i.status === 'Rusak');
+        const missing = itemsDetail.filter((i) => i.status === 'Tidak ada' || i.status === 'Kurang');
+
+        return (
+          <div>
+            <span className="font-bold text-slate-900">{r.item_name}</span>
+            {itemsDetail.length > 0 && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {damaged.length === 0 && missing.length === 0 ? (
+                  <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
+                    ✓ Lengkap ({itemsDetail.length} alat)
+                  </span>
+                ) : (
+                  <>
+                    {missing.length > 0 && (
+                      <span
+                        className="inline-flex items-center gap-0.5 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200"
+                        title={missing.map((m) => `${m.instrument_name}: ${m.notes || 'Tidak ada'}`).join(', ')}
+                      >
+                        ⚠ {missing.length} Kurang
+                      </span>
+                    )}
+                    {damaged.length > 0 && (
+                      <span
+                        className="inline-flex items-center gap-0.5 rounded-md bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200"
+                        title={damaged.map((d) => `${d.instrument_name}: ${d.notes || 'Rusak'}`).join(', ')}
+                      >
+                        ⚠ {damaged.length} Rusak
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
     { key: 'quantity', label: 'Jumlah', sortable: true, render: qty() },
     { key: 'sender_name', label: 'Penyerah' },
     { key: 'receiver_name', label: 'Penerima' },
@@ -210,6 +259,7 @@ export const receiptsConfig = {
       { name: 'quantity', type: 'hidden', default: 1 },
       { name: 'unit_label', type: 'hidden', default: 'set' },
       { name: 'item_id', type: 'hidden' },
+      { name: 'extra_items', type: 'hidden' },
       { name: 'sender_name', label: 'Petugas penyerah (unit)', required: true, maxLength: 100 },
       officerSelectField({
         name: 'receiver_name',

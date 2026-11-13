@@ -31,8 +31,8 @@ const lookupStock = (expectedGauze) => async (code, { setValue }) => {
     if (expectedGauze !== isGauze) {
       return {
         error: isGauze
-          ? 'Barcode ini adalah Kasa Steril, gunakan menu Distribusi Kasa Steril'
-          : 'Barcode ini adalah Alat Steril, gunakan menu Distribusi Alat Steril',
+          ? 'Barcode ini adalah Kasa Steril, gunakan menu Pengambilan Kasa Steril'
+          : 'Barcode ini adalah Alat Steril, gunakan menu Pengambilan Alat Steril',
       };
     }
 
@@ -193,7 +193,7 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
 
 export const distToolsConfig = buildConfig({
   key: 'distribusi-alat-steril',
-  title: 'Distribusi Alat Steril',
+  title: 'Pengambilan Alat Steril',
   subtitle: 'Alat steril siap diambil unit — pakai barcode',
   icon: Truck,
   type: 'ALAT',
@@ -202,8 +202,8 @@ export const distToolsConfig = buildConfig({
 
 export const distGauzeConfig = buildConfig({
   key: 'distribusi-kasa-steril',
-  title: 'Distribusi Kasa Steril',
-  subtitle: 'Distribusi kasa steril ke unit — pakai barcode',
+  title: 'Pengambilan Kasa Steril',
+  subtitle: 'Pengambilan kasa steril oleh unit — pakai barcode',
   icon: Boxes,
   type: 'KASA',
   gauze: true,
@@ -227,8 +227,8 @@ export const distAllConfig = {
 export const distGauzeReportConfig = {
   ...distGauzeConfig,
   key: 'laporan-distribusi-kasa',
-  title: 'Laporan Distribusi Kasa Steril',
-  subtitle: 'Rekap otomatis distribusi kasa lengkap dengan jenis kasa, unit, dan tanda tangan',
+  title: 'Laporan Pengambilan Kasa Steril',
+  subtitle: 'Rekap otomatis pengambilan kasa lengkap dengan jenis kasa, unit, dan tanda tangan',
   readOnly: true,
   report: true,
   dateFilter: true,

@@ -81,5 +81,5 @@ export const FLOW_STAGES = [
   { no: 5, label: 'Verifikasi Sterilisasi', sub: 'Uji Indikator & Batch', tone: 'green', to: '/verifikasi', cssdOnly: true },
   { no: 6, label: 'Penyimpanan Alat Steril', sub: 'Stok Siap Pakai', tone: 'cyan', to: '/laporan/stok-steril', adminOnly: true },
   { no: 7, label: 'Pengambilan Alat Steril', sub: 'Barcode CSSD → Unit', barcode: true, tone: 'green', to: '/distribusi-alat' },
-  { no: 8, label: 'Distribusi Kasa Steril', sub: 'Barcode CSSD → Unit', barcode: true, tone: 'green', to: '/distribusi-kasa' },
+  { no: 8, label: 'Pengambilan Kasa Steril', sub: 'Barcode CSSD → Unit', barcode: true, tone: 'green', to: '/distribusi-kasa' },
 ];

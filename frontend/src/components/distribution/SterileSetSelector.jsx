@@ -113,8 +113,8 @@ export default function SterileSetSelector({ values, setValue, setValues, gauze 
       if (gauze !== isGauze) {
         toast.error(
           isGauze
-            ? 'Barcode ini adalah Kasa Steril, gunakan menu Distribusi Kasa Steril'
-            : 'Barcode ini adalah Alat Steril, gunakan menu Distribusi Alat Steril'
+            ? 'Barcode ini adalah Kasa Steril, gunakan menu Pengambilan Kasa Steril'
+            : 'Barcode ini adalah Alat Steril, gunakan menu Pengambilan Alat Steril'
         );
         return;
       }

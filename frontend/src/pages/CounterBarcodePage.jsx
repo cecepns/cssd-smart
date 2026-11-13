@@ -29,7 +29,7 @@ export default function CounterBarcodePage() {
     },
     {
       number: 2,
-      title: 'Distribusi Alat Steril',
+      title: 'Pengambilan Alat Steril',
       subtitle: 'Alur: CSSD → Unit',
       barcodeValue: 'TRX-DIST-STERIL',
       targetUrl: `${origin}${ROUTES.DIST_TOOLS}`,
@@ -37,11 +37,11 @@ export default function CounterBarcodePage() {
     },
     {
       number: 3,
-      title: 'Distribusi Kasa Steril',
+      title: 'Pengambilan Kasa Steril',
       subtitle: 'Alur: CSSD → Unit',
       barcodeValue: 'TRX-DIST-KASA',
       targetUrl: `${origin}${ROUTES.DIST_GAUZE}`,
-      instructions: 'Scan QR Code ini untuk distribusi kasa steril (OK, Umum, Rol) ke unit tujuan.',
+      instructions: 'Scan QR Code ini untuk pengambilan kasa steril (OK, Umum, Rol) ke unit tujuan.',
     },
     {
       number: 4,

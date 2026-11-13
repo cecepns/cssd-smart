@@ -354,10 +354,10 @@ export default function ReportsHubPage() {
                     <option value="verifikasi">6. Laporan Verifikasi</option>
                     <option value="karantina">12. Laporan Karantina/Gagal</option>
                   </optgroup>
-                  <optgroup label="Stok, Distribusi, & DTT">
+                  <optgroup label="Stok, Pengambilan, & DTT">
                     <option value="stok-steril">7. Laporan Stok Alat Steril</option>
-                    <option value="distribusi-alat">8. Laporan Distribusi Alat Steril</option>
-                    <option value="distribusi-kasa">9. Laporan Distribusi Kasa Steril</option>
+                    <option value="distribusi-alat">8. Laporan Pengambilan Alat Steril</option>
+                    <option value="distribusi-kasa">9. Laporan Pengambilan Kasa Steril</option>
                     <option value="distribusi-dtt">10. Laporan Distribusi Alat DTT</option>
                     <option value="stok-bmhp">11. Laporan Stok BMHP</option>
                     <option value="ketertelusuran">13. Laporan Ketertelusuran</option>
@@ -674,15 +674,15 @@ export default function ReportsHubPage() {
                       </tr>
                       <tr>
                         <td className="p-2.5 font-bold">5</td>
-                        <td className="p-2.5">Distribusi Alat Steril (CSSD $\rightarrow$ Unit)</td>
+                        <td className="p-2.5">Pengambilan Alat Steril (CSSD $\rightarrow$ Unit)</td>
                         <td className="p-2.5 text-right font-extrabold text-emerald-700">{formatNumber(monthlyData.overall.sterile_tools_distributed)}</td>
                         <td className="p-2.5 text-slate-500">Paket instrumen diserahterimakan</td>
                       </tr>
                       <tr>
                         <td className="p-2.5 font-bold">6</td>
-                        <td className="p-2.5">Distribusi Kasa Steril</td>
+                        <td className="p-2.5">Pengambilan Kasa Steril</td>
                         <td className="p-2.5 text-right font-extrabold text-emerald-700">{formatNumber(monthlyData.overall.gauze_distributed)}</td>
-                        <td className="p-2.5 text-slate-500">Kasa lipat & rol didistribusikan</td>
+                        <td className="p-2.5 text-slate-500">Kasa lipat & rol diserahterimakan</td>
                       </tr>
                       <tr>
                         <td className="p-2.5 font-bold">7</td>

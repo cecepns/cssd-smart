@@ -39,8 +39,8 @@ export const NAV_SECTIONS = [
       { label: 'Alat Kotor Masuk', to: ROUTES.RECEIPTS, icon: ScanLine, allowUnit: true },
       { label: 'Permintaan Alat Unit', to: ROUTES.UNIT_REQUISITIONS, icon: ClipboardList, allowUnit: true },
       { label: 'Monitoring Set Instrumen', to: ROUTES.INSTRUMENT_SETS, icon: Layers, allowUnit: true },
-      { label: 'Distribusi Alat Steril', to: ROUTES.DIST_TOOLS, icon: Truck, allowUnit: true },
-      { label: 'Distribusi Kasa Steril', to: ROUTES.DIST_GAUZE, icon: Boxes, allowUnit: true },
+      { label: 'Pengambilan Alat Steril', to: ROUTES.DIST_TOOLS, icon: Truck, allowUnit: true },
+      { label: 'Pengambilan Kasa Steril', to: ROUTES.DIST_GAUZE, icon: Boxes, allowUnit: true },
     ],
   },
   {
@@ -69,7 +69,7 @@ export const NAV_SECTIONS = [
     items: [
       { label: 'Pusat Laporan Terpadu', to: ROUTES.REPORTS, icon: FileText, adminOnly: true },
       { label: 'Laporan Alat Kotor', to: ROUTES.REPORT('alat-kotor'), icon: FileText, adminOnly: true },
-      { label: 'Laporan Distribusi Kasa', to: ROUTES.REPORT('distribusi-kasa'), icon: Boxes, adminOnly: true },
+      { label: 'Laporan Pengambilan Kasa', to: ROUTES.REPORT('distribusi-kasa'), icon: Boxes, adminOnly: true },
       { label: 'Laporan DTT (Reuse)', to: ROUTES.REPORT('dtt-reuse'), icon: Sparkles, adminOnly: true },
       { label: 'Laporan Ketertelusuran', to: ROUTES.TRACE, icon: History, allowUnit: true },
       { label: 'Pantau Status Alat Unit', to: ROUTES.UNIT_TRACKING, icon: ScanLine, allowUnit: true },
@@ -95,7 +95,7 @@ export const MENU_CARDS = [
   { title: 'Log Mesin Washer & Steam', desc: 'Pencatatan siklus, operator, waktu proses, serta catatan kendala mesin', to: ROUTES.MACHINE_LOGS, icon: Cpu, tone: 'blue', adminOnly: true },
   { title: 'Log Waktu Pengerjaan Alat', desc: 'Pemantauan durasi proses, waktu tunggu, dan ketepatan SLA tiap tahapan CSSD', to: ROUTES.PROCESS_TIMINGS, icon: Clock, tone: 'purple', adminOnly: true },
   { title: 'Pengambilan Alat Steril Barcode', desc: 'Alat steril siap diambil unit dengan tanda tangan HP', to: ROUTES.DIST_TOOLS, icon: Truck, tone: 'green', allowUnit: true },
-  { title: 'Distribusi Kasa Steril Barcode', desc: 'Distribusi kasa lipat dan rol steril ke unit memakai barcode', to: ROUTES.DIST_GAUZE, icon: Boxes, tone: 'green', allowUnit: true },
+  { title: 'Pengambilan Kasa Steril Barcode', desc: 'Pengambilan kasa lipat dan rol steril ke unit memakai barcode', to: ROUTES.DIST_GAUZE, icon: Boxes, tone: 'green', allowUnit: true },
   { title: 'Penerimaan Alat Kotor DTT (Reuse)', desc: 'Barcode penerimaan alat kotor DTT unit ke CSSD dengan TTD HP', to: ROUTES.DTT_RECEIPTS, icon: Sparkles, tone: 'purple', allowUnit: true },
   { title: 'Distribusi Alat Hasil DTT (Reuse)', desc: 'Barcode serah terima alat hasil DTT CSSD ke unit dengan TTD HP', to: ROUTES.DTT_DISTRIBUTIONS, icon: RefreshCw, tone: 'blue', allowUnit: true },
   { title: 'Buku Kontrol Reuse DTT', desc: 'Buku kontrol riwayat pemakaian ulang dan batas siklus alat medis', to: ROUTES.DTT_CONTROL, icon: BookOpen, tone: 'purple', adminOnly: true },

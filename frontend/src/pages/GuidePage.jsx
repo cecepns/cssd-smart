@@ -15,7 +15,7 @@ const DETAILS = {
 };
 
 const TIPS = [
-  'Barcode hanya dipakai pada 3 transaksi utama: Alat Kotor Masuk, Distribusi Alat Steril, dan Distribusi Kasa Steril.',
+  'Barcode hanya dipakai pada 3 transaksi utama: Alat Kotor Masuk, Pengambilan Alat Steril, dan Pengambilan Kasa Steril.',
   'Setiap tahap terkunci: tahap berikutnya hanya menampilkan data yang sudah selesai di tahap sebelumnya.',
   'Scan lewat kamera HP membutuhkan koneksi HTTPS (atau localhost) dan izin kamera pada browser. Scanner USB/Bluetooth juga didukung — cukup arahkan kursor ke kolom barcode.',
   'Gunakan menu Ketertelusuran untuk melihat seluruh riwayat sebuah alat dari barcode atau nomor batch.',
