@@ -876,6 +876,96 @@ router.get('/lookups/packaging-materials', auth, allow('admin', 'petugas'), wrap
 }));
 
 // ---------- Tahap 1: Alat Kotor Masuk (barcode) ----------
+// Dukungan penerimaan beberapa set sekaligus dalam 1 kali input
+router.post('/dirty-receipts', auth, allow('admin', 'petugas', 'unit'), wrap(async (req, res, next) => {
+  const rawItems = Array.isArray(req.body.items) ? req.body.items : [];
+  const validItems = rawItems.filter((it) => it && it.item_name && String(it.item_name).trim() !== '');
+
+  if (validItems.length <= 1) {
+    return next();
+  }
+
+  const bodyInput = { ...req.body };
+  if (req.user.role === 'unit' && !req.user.unit_id) {
+    throw new HttpError(403, 'Akun unit tidak terhubung ke unit rumah sakit');
+  }
+  const unitId = req.user.role === 'unit' ? req.user.unit_id : parseInt(bodyInput.unit_id, 10);
+  if (!unitId) throw new HttpError(422, 'Unit asal wajib dipilih');
+
+  const receiptDate = /^\d{4}-\d{2}-\d{2}$/.test(bodyInput.receipt_date || '') ? bodyInput.receipt_date : todayStr();
+  const senderName = sanitizeText(bodyInput.sender_name);
+  if (!senderName) throw new HttpError(422, 'Petugas penyerah (unit) wajib diisi');
+  const senderSignature = sanitizeText(bodyInput.sender_signature) || null;
+
+  let receiverName = sanitizeText(bodyInput.receiver_name);
+  let receiverSignature = sanitizeText(bodyInput.receiver_signature) || null;
+  let confirmedAt = null;
+  let confirmedBy = null;
+
+  if (req.user.role === 'unit') {
+    receiverName = receiverName || 'Menunggu Konfirmasi CSSD';
+  } else {
+    receiverName = receiverName || req.user.name;
+    confirmedAt = nowDateTimeStr();
+    confirmedBy = req.user.name;
+  }
+
+  const ts = resolveActionTimestamps(bodyInput);
+  const notes = sanitizeText(bodyInput.notes) || null;
+
+  const createdList = [];
+  await withTx(async (conn) => {
+    for (const item of validItems) {
+      const barcode = await makeCode(conn, 'AK', receiptDate);
+      const itemName = sanitizeText(item.item_name);
+      const qty = Math.max(parseInt(item.quantity, 10) || 1, 1);
+      const unitLabel = sanitizeText(item.unit_label) || 'set';
+      const itemId = item.item_id ? parseInt(item.item_id, 10) : null;
+
+      const [insertRes] = await conn.query(`
+        INSERT INTO dirty_receipts
+        (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
+         sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, stage, status, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Diterima', ?)
+      `, [
+        barcode, receiptDate, ts.started_at, ts.completed_at, unitId, itemId, itemName, qty, unitLabel,
+        senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, notes, req.user.id
+      ]);
+
+      const insertedId = insertRes.insertId;
+      createdList.push({ id: insertedId, barcode, item_name: itemName, quantity: qty, unit_label: unitLabel });
+
+      await recordAdminNotification(conn, {
+        type: 'RECEIPT',
+        title: `Penerimaan Alat Kotor Masuk: ${itemName}`,
+        unit_id: unitId,
+        item_name: itemName,
+        quantity: qty,
+        unit_label: unitLabel,
+        barcode: barcode,
+        officer_sender: senderName,
+        officer_receiver: receiverName,
+        signature_sender: senderSignature,
+        signature_receiver: receiverSignature,
+        trx_date: receiptDate,
+        trx_time: (ts.started_at || '').slice(11, 16) || null,
+        ref_table: 'dirty_receipts',
+        ref_id: insertedId,
+        data_payload: { id: insertedId, barcode, item_name: itemName, quantity: qty, unit_label: unitLabel, sender_name: senderName, receiver_name: receiverName },
+      });
+    }
+  });
+
+  const [[firstRecord]] = await pool.query('SELECT r.*, u.name AS unit_name FROM dirty_receipts r LEFT JOIN units u ON u.id = r.unit_id WHERE r.id = ?', [createdList[0].id]);
+
+  res.status(201).json({
+    success: true,
+    message: `${createdList.length} set alat kotor berhasil diterima dengan barcode terpisah`,
+    data: firstRecord,
+    items: createdList,
+  });
+}));
+
 registerCrud({
   path: 'dirty-receipts',
   table: 'dirty_receipts',

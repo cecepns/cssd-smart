@@ -2,6 +2,7 @@ import { Check, Droplets, Flame, Package, Play, ScanLine, ShieldCheck, Wind } fr
 import toast from 'react-hot-toast';
 import { api } from '@/utils/api';
 import { API_ENDPOINTS } from '@/utils/endpoints';
+import MultiSetPicker from '@/components/form/MultiSetPicker';
 import { INDICATOR_OPTIONS, PACKAGE_TYPES, STAGE_LABELS, UNIT_LABELS, WASH_METHODS } from '@/utils/constants';
 import { todayISO, formatDate } from '@/utils/format';
 import { badge, bold, date, durationBadge, mono, qty, timeWindow, yesNo } from '@/config/cells.jsx';
@@ -193,51 +194,27 @@ export const receiptsConfig = {
         type: 'remote-select', name: 'unit_id', label: 'Unit asal', required: true, placeholder: 'Pilih unit...',
         optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
         default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
-        onChange: (next, { values, setValues }) => {
+        onChange: (next, { values, setValues, option }) => {
           if (String(next || '') !== String(values?.unit_id || '')) {
-            setValues({ item_id: '', item_name: '' });
+            setValues({ item_id: '', item_name: '', unit_name: option?.name || '' });
           }
         },
       },
       {
-        type: 'remote-select',
-        name: 'item_id',
-        label: 'Pilih jenis alat / set instrumen (sesuai unit)',
-        placeholder: 'Pilih alat atau set instrumen unit...',
-        disabledPlaceholder: 'Pilih Unit Asal terlebih dahulu...',
-        emptyText: 'Belum ada alat terdaftar untuk unit ini di Master Alat',
-        enabledWhen: (vals) => Boolean(vals?.unit_id),
-        optionsEndpoint: API_ENDPOINTS.LOOKUPS.ITEMS,
-        optionsParams: (vals) => ({
-          is_active: 1,
-          sort_by: 'name',
-          order: 'asc',
-          process_type: 'Steril',
-          require_unit: 1,
-          unit_id: vals?.unit_id || '',
-        }),
-        optionLabel: (r) => `${r.name} (${r.category})`,
-        onChange: (_, { option, setValues }) => {
-          if (!option) return;
-          const lower = String(option.unit_label || '').toLowerCase();
-          const unitLabel = UNIT_LABELS.includes(lower)
-            ? lower
-            : option.category === 'Set Instrumen'
-              ? 'set'
-              : option.category === 'Alat Satuan'
-                ? 'pcs'
-                : 'paket';
-          setValues({ item_name: option.name, unit_label: unitLabel });
-        },
+        name: 'items',
+        type: 'custom',
+        span: 2,
+        render: (props) => <MultiSetPicker {...props} />,
       },
-      { name: 'item_name', label: 'Nama alat / set', required: true, maxLength: 150, placeholder: 'mis. SET LAPAROTOMI' },
-      { name: 'quantity', label: 'Jumlah', type: 'number', required: true, min: 1, default: 1 },
-      { name: 'unit_label', label: 'Satuan', type: 'select', required: true, options: UNIT_LABELS, default: 'set' },
+      { name: 'item_name', type: 'hidden' },
+      { name: 'quantity', type: 'hidden', default: 1 },
+      { name: 'unit_label', type: 'hidden', default: 'set' },
+      { name: 'item_id', type: 'hidden' },
       { name: 'sender_name', label: 'Petugas penyerah (unit)', required: true, maxLength: 100 },
       officerSelectField({
         name: 'receiver_name',
         label: 'Petugas penerima (CSSD)',
-        required: true,
+        required: false,
         placeholder: 'Pilih petugas penerima...',
         onSignatureField: 'receiver_signature',
       }),
