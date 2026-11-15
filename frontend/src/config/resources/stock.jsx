@@ -1,4 +1,4 @@
-import { AlertOctagon, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Archive, CalendarX, ClipboardList, Layers, PackageCheck, PackageX } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Archive, CalendarX, ClipboardList, FileText, Layers, PackageCheck, PackageX } from 'lucide-react';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { PACKAGE_TYPES } from '@/utils/constants';
 import { getList } from '@/utils/request';
