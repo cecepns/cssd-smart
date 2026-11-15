@@ -87,6 +87,15 @@ export default function App() {
             <Route path={ROUTES.GUIDE} element={<GuidePage />} />
             <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
 
+            {/* Transaksi & Pengelolaan BMHP: Khusus Petugas CSSD dan Admin */}
+            <Route element={<Protected cssdOnly />}>
+              <Route path={ROUTES.BMHP} element={<BmhpHubPage />} />
+              <Route path={ROUTES.BMHP_STOCK_CARD} element={<BmhpHubPage initialSection="kartu-stok" />} />
+              <Route path={ROUTES.BMHP_IN} element={resource(bmhpInConfig)} />
+              <Route path={ROUTES.BMHP_OUT} element={resource(bmhpOutConfig)} />
+              <Route path={ROUTES.BMHP_STOCK} element={resource(bmhpItemsConfig)} />
+            </Route>
+
             <Route element={<Protected adminOnly />}>
               <Route path={ROUTES.WASHINGS} element={resource(washingsConfig)} />
               <Route path={ROUTES.DRYINGS} element={resource(dryingsConfig)} />
@@ -97,11 +106,6 @@ export default function App() {
               <Route path={ROUTES.PROCESS_TIMINGS} element={<ProcessTimingMonitorPage />} />
               <Route path={ROUTES.DTT_CONTROL} element={resource(dttControlConfig)} />
 
-              <Route path={ROUTES.BMHP} element={<BmhpHubPage />} />
-              <Route path={ROUTES.BMHP_STOCK_CARD} element={<BmhpHubPage initialSection="kartu-stok" />} />
-              <Route path={ROUTES.BMHP_IN} element={resource(bmhpInConfig)} />
-              <Route path={ROUTES.BMHP_OUT} element={resource(bmhpOutConfig)} />
-              <Route path={ROUTES.BMHP_STOCK} element={resource(bmhpItemsConfig)} />
               <Route path={ROUTES.BMHP_REPORT} element={resource(bmhpMutationConfig)} />
               <Route path={ROUTES.REPORTS} element={<ReportsHubPage />} />
               <Route path={`${ROUTES.REPORTS}/:slug`} element={<ReportPage />} />

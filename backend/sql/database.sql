@@ -670,6 +670,7 @@ CREATE TABLE `bmhp_batches` (
   `expiry_date` DATE DEFAULT NULL,
   `initial_stock` INT NOT NULL DEFAULT 0,
   `stock` INT NOT NULL DEFAULT 0,
+  `unit_price` DECIMAL(15,2) DEFAULT 0,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -688,6 +689,8 @@ CREATE TABLE `bmhp_transactions` (
   `batch_id` INT UNSIGNED DEFAULT NULL,
   `batch_no` VARCHAR(50) DEFAULT NULL,
   `expiry_date` DATE DEFAULT NULL,
+  `unit_price` DECIMAL(15,2) DEFAULT 0,
+  `total_price` DECIMAL(15,2) DEFAULT 0,
   `unit_id` INT UNSIGNED DEFAULT NULL,
   `unit_name` VARCHAR(100) DEFAULT 'Instalasi CSSD',
   `officer` VARCHAR(100) NOT NULL,
@@ -719,7 +722,8 @@ INSERT INTO `units` (`id`,`code`,`name`,`pic_name`,`phone`) VALUES
 (3,'ICU','Intensive Care Unit','Ns. Sari','081200000003'),
 (4,'VK','Ruang Bersalin','Bdn. Rina','081200000004'),
 (5,'RI','Rawat Inap','Ns. Dewi','081200000005'),
-(6,'PG','Poli Gigi','drg. Andi','081200000006');
+(6,'PG','Poli Gigi','drg. Andi','081200000006'),
+(7,'CSSD','Instalasi CSSD','Kepala Instalasi CSSD','081200000007');
 
 INSERT INTO `items` (`id`,`unit_id`,`code`,`name`,`category`,`shelf_life_months`,`description`) VALUES
 (1,1,'SET-LAP','Set Laparotomi','Set Instrumen',6,'Set instrumen laparotomi'),

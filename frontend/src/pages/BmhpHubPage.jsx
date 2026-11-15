@@ -53,7 +53,7 @@ const SVG_SIGNATURE_RESTI = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.o
 const DEFAULT_SAMPLE_PHOTO = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 100" width="160" height="100"><rect width="160" height="100" fill="%23f1f5f9"/><rect x="10" y="20" width="60" height="60" rx="4" fill="%23d97706" opacity="0.8"/><rect x="15" y="25" width="50" height="50" rx="3" fill="%23b45309"/><ellipse cx="110" cy="50" rx="35" ry="30" fill="%2338bdf8"/><ellipse cx="110" cy="50" rx="20" ry="16" fill="%23ffffff"/><text x="110" y="54" font-size="8" font-family="sans-serif" font-weight="bold" fill="%230284c7" text-anchor="middle">POUCH</text><text x="40" y="53" font-size="9" font-family="sans-serif" font-weight="bold" fill="%23ffffff" text-anchor="middle">BOX</text></svg>`;
 
 export default function BmhpHubPage() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [searchParams] = useSearchParams();
 
   // 1. Data Katalog Master BMHP
@@ -73,6 +73,16 @@ export default function BmhpHubPage() {
     order: 'asc',
   });
   const officers = useMemo(() => officersResponse?.data || officersResponse || [], [officersResponse]);
+
+  // 2.5 Data Unit Pemakai (Khusus BMHP: Terhubung ke Master Data Units, difilter hanya Instalasi CSSD)
+  const { data: unitsResponse } = useFetch(API_ENDPOINTS.LOOKUPS.UNITS, {
+    is_active: 1,
+    for_bmhp: 1,
+    limit: 10,
+    sort_by: 'name',
+    order: 'asc',
+  });
+  const bmhpUnits = useMemo(() => unitsResponse?.data || unitsResponse || [], [unitsResponse]);
 
   // Selected item ID across all sections
   const [selectedItemId, setSelectedItemId] = useState(null);
@@ -119,7 +129,9 @@ export default function BmhpHubPage() {
     fiscal_year: '2026',
     budget_source: 'BLUD',
     quantity: 50,
-    officer: 'Alvin',
+    unit_price: 0,
+    total_price: 0,
+    officer: user?.name || 'Alvin',
     officer_signature: SVG_SIGNATURE_ALVIN,
     proof_image: DEFAULT_SAMPLE_PHOTO,
     notes: 'Barang Masuk - Pembelian',
@@ -143,6 +155,14 @@ export default function BmhpHubPage() {
       }));
     }
   }, [selectedItem]);
+
+  // Sync default officer with logged-in user
+  useEffect(() => {
+    if (user?.name) {
+      setInForm((prev) => ({ ...prev, officer: prev.officer || user.name }));
+      setOutForm((prev) => ({ ...prev, officer: prev.officer || user.name }));
+    }
+  }, [user]);
 
   const handleInItemChange = (e) => {
     const val = Number(e.target.value);
@@ -200,11 +220,13 @@ export default function BmhpHubPage() {
         category: inForm.category,
         unit_label: inForm.unit_label,
         quantity: Number(inForm.quantity),
+        unit_price: Number(inForm.unit_price || 0),
+        total_price: Number(inForm.quantity || 0) * Number(inForm.unit_price || 0),
         batch_no: inForm.batch_no,
         expiry_date: inForm.expiry_date,
         fiscal_year: inForm.fiscal_year,
         budget_source: inForm.budget_source,
-        officer: inForm.officer || 'Alvin',
+        officer: inForm.officer || user?.name || 'Alvin',
         trx_date: inForm.receipt_date,
         trx_time: currentTimeStr,
         proof_image: inForm.proof_image,
@@ -235,12 +257,25 @@ export default function BmhpHubPage() {
     item_id: '',
     selected_batch_id: null,
     quantity: 10,
+    unit_id: '',
+    unit_name: 'Instalasi CSSD',
     purpose: 'Untuk pengemasan set instrumen',
-    officer: 'Resti',
+    officer: user?.name || 'Resti',
     officer_signature: SVG_SIGNATURE_RESTI,
   });
   const [outSubmitting, setOutSubmitting] = useState(false);
   const [outSigModal, setOutSigModal] = useState(false);
+
+  // Sync unit_id with loaded bmhpUnits (Instalasi CSSD)
+  useEffect(() => {
+    if (bmhpUnits.length > 0 && !outForm.unit_id) {
+      setOutForm((prev) => ({
+        ...prev,
+        unit_id: bmhpUnits[0].id,
+        unit_name: bmhpUnits[0].name,
+      }));
+    }
+  }, [bmhpUnits, outForm.unit_id]);
 
   // Fetch batches for selected item
   const { data: batchesResponse, refetch: refetchBatches, loading: batchesLoading } = useFetch(
@@ -295,8 +330,10 @@ export default function BmhpHubPage() {
         bmhp_item_id: selectedItemId,
         batch_id: outForm.selected_batch_id,
         quantity: Number(outForm.quantity),
+        unit_id: outForm.unit_id || bmhpUnits[0]?.id || null,
+        unit_name: outForm.unit_name || 'Instalasi CSSD',
         purpose: outForm.purpose,
-        officer: outForm.officer || 'Resti',
+        officer: outForm.officer || user?.name || 'Resti',
         trx_date: outForm.take_date,
         trx_time: outForm.take_time || currentTimeStr,
         officer_signature: outForm.officer_signature,
@@ -370,8 +407,12 @@ export default function BmhpHubPage() {
     fetchStockCard();
   }, [fetchStockCard]);
 
-  // Export CSV
+  // Export CSV (Khusus Admin / Kepala Instalasi)
   const exportStockCardCsv = () => {
+    if (!isAdmin) {
+      toast.error('Akses ekspor dan cetak laporan hanya untuk Admin / Kepala Instalasi');
+      return;
+    }
     const headers = ['No', 'Tanggal', 'Uraian Transaksi', 'Tahun Anggaran', 'Sumber Anggaran', 'Batch/Lot', 'ED', 'Masuk (+)', 'Keluar (-)', 'Sisa Stok', 'Petugas'];
     const lines = [headers.join(',')];
     stockCardData.rows.forEach((r, idx) => {
@@ -745,6 +786,39 @@ export default function BmhpHubPage() {
                 </div>
               </div>
 
+              {/* Row 4.5: 2 Kolom (Harga Satuan & Total Harga Pembelian) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Harga Satuan (Rp) <span className="text-slate-500 font-normal">(Per Transaksi)</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">Rp</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={inForm.unit_price}
+                      onChange={(e) => {
+                        const price = Math.max(0, parseFloat(e.target.value) || 0);
+                        setInForm((prev) => ({ ...prev, unit_price: price, total_price: Number(prev.quantity) * price }));
+                      }}
+                      placeholder="0"
+                      className="w-full rounded-xl border border-slate-300 py-1.5 pl-8 pr-2.5 text-xs font-bold text-slate-800 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Total Harga (Rp) <span className="text-slate-500 font-normal">(Otomatis: Qty × Harga)</span>
+                  </label>
+                  <div className="h-8 px-3 flex items-center justify-between rounded-xl bg-amber-50/80 border border-amber-300 text-xs font-black text-blue-950">
+                    <span>Rp {(Number(inForm.quantity || 0) * Number(inForm.unit_price || 0)).toLocaleString('id-ID')}</span>
+                    <span className="text-[10px] font-bold text-slate-500">({inForm.quantity} {inForm.unit_label})</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Row 5: Foto Bukti & TTD Digital & Tombol */}
               <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                 {/* Foto Bukti */}
@@ -980,8 +1054,8 @@ export default function BmhpHubPage() {
                 </div>
               </div>
 
-              {/* Row 4: Jumlah Pengambilan & Keperluan / Uraian */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {/* Row 4: Jumlah Pengambilan, Unit Pemakai (Instalasi CSSD), dan Keperluan */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
                     Jumlah Pengambilan <span className="text-rose-500">*</span>
@@ -1014,6 +1088,36 @@ export default function BmhpHubPage() {
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Unit / Uraian Pemakai <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Building2 size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <select
+                      value={outForm.unit_id || (bmhpUnits[0]?.id ?? '')}
+                      onChange={(e) => {
+                        const uid = Number(e.target.value);
+                        const match = bmhpUnits.find((u) => u.id === uid);
+                        setOutForm((prev) => ({ ...prev, unit_id: uid, unit_name: match?.name || 'Instalasi CSSD' }));
+                      }}
+                      className="w-full rounded-xl border border-slate-300 py-1.5 pl-7 pr-2.5 text-xs font-bold text-slate-800 bg-slate-50"
+                      required
+                    >
+                      {bmhpUnits.length > 0 ? (
+                        bmhpUnits.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="cssd">Instalasi CSSD</option>
+                      )}
+                    </select>
+                  </div>
+                  <p className="mt-0.5 text-[9px] text-slate-500">Kebutuhan internal CSSD</p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
                     Keperluan / Uraian <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
@@ -1042,6 +1146,9 @@ export default function BmhpHubPage() {
                       onChange={handleOutOfficerChange}
                       className="w-full rounded-xl border border-slate-300 py-1.5 pl-7 pr-2.5 text-xs font-bold text-slate-800"
                     >
+                      {user?.name && !['Resti', 'Alvin'].includes(user.name) ? (
+                        <option value={user.name}>{user.name} (Saya)</option>
+                      ) : null}
                       <option value="Resti">Resti</option>
                       <option value="Alvin">Alvin</option>
                       {officers.map((o) => (
@@ -1315,48 +1422,54 @@ export default function BmhpHubPage() {
             <div className="flex items-center gap-1.5 ml-2">
               <div className="rounded-xl border border-sky-300 bg-[#E0F2FE] px-3 py-1 text-center">
                 <span className="block text-[9px] font-bold text-sky-800 uppercase">Stok Awal</span>
-                <span className="text-xs font-black text-sky-900">{stockCardData.summary.initial_stock} Rol</span>
+                <span className="text-xs font-black text-sky-900">{stockCardData.summary.initial_stock} {selectedItem?.unit_label || 'Rol'}</span>
               </div>
               <div className="rounded-xl border border-emerald-300 bg-[#DCFCE7] px-3 py-1 text-center">
-                <span className="block text-[9px] font-bold text-emerald-800 uppercase">Total Masuk</span>
-                <span className="text-xs font-black text-emerald-900">{stockCardData.summary.total_in} Rol</span>
+                <span className="block text-[9px] font-bold text-emerald-800 uppercase">Total Barang Masuk</span>
+                <span className="text-xs font-black text-emerald-900">{stockCardData.summary.total_in} {selectedItem?.unit_label || 'Rol'}</span>
               </div>
               <div className="rounded-xl border border-rose-300 bg-[#FEE2E2] px-3 py-1 text-center">
-                <span className="block text-[9px] font-bold text-rose-800 uppercase">Total Keluar</span>
-                <span className="text-xs font-black text-rose-900">{stockCardData.summary.total_out} Rol</span>
+                <span className="block text-[9px] font-bold text-rose-800 uppercase">Total Barang Keluar</span>
+                <span className="text-xs font-black text-rose-900">{stockCardData.summary.total_out} {selectedItem?.unit_label || 'Rol'}</span>
               </div>
               {/* Highlighted Sisa Stok Card */}
               <div className="rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-amber-200 px-4 py-1 text-center shadow-sm">
                 <span className="block text-[9px] font-black text-slate-800 uppercase">Sisa Stok</span>
-                <span className="text-sm font-black text-blue-900">{stockCardData.summary.current_stock} Rol</span>
+                <span className="text-sm font-black text-blue-900">{stockCardData.summary.current_stock} {selectedItem?.unit_label || 'Rol'}</span>
               </div>
             </div>
           </div>
 
-          {/* Export Buttons */}
-          <div className="flex items-center gap-1.5 print:hidden">
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm"
-            >
-              <Printer size={13} className="text-slate-500" />
-              <span>Cetak</span>
-            </button>
-            <button
-              onClick={exportStockCardCsv}
-              className="flex items-center gap-1 rounded-xl border border-emerald-500 bg-white px-3 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-50 shadow-sm"
-            >
-              <FileSpreadsheet size={13} className="text-emerald-600" />
-              <span>Excel</span>
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1 rounded-xl border border-rose-400 bg-white px-3 py-1 text-xs font-bold text-rose-700 hover:bg-rose-50 shadow-sm"
-            >
-              <FileText size={13} className="text-rose-600" />
-              <span>PDF</span>
-            </button>
-          </div>
+          {/* Export Buttons: Dibatasi Khusus Admin / Kepala Instalasi */}
+          {isAdmin ? (
+            <div className="flex items-center gap-1.5 print:hidden">
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm"
+              >
+                <Printer size={13} className="text-slate-500" />
+                <span>Cetak</span>
+              </button>
+              <button
+                onClick={exportStockCardCsv}
+                className="flex items-center gap-1 rounded-xl border border-emerald-500 bg-white px-3 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-50 shadow-sm"
+              >
+                <FileSpreadsheet size={13} className="text-emerald-600" />
+                <span>Excel</span>
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-1 rounded-xl border border-rose-400 bg-white px-3 py-1 text-xs font-bold text-rose-700 hover:bg-rose-50 shadow-sm"
+              >
+                <FileText size={13} className="text-rose-600" />
+                <span>PDF</span>
+              </button>
+            </div>
+          ) : (
+            <div className="text-[11px] text-slate-500 italic print:hidden">
+              * Cetak & unduh laporan hanya untuk Admin / Kepala Instalasi
+            </div>
+          )}
         </div>
       </div>
 
@@ -1375,25 +1488,25 @@ export default function BmhpHubPage() {
                 Stok Keseluruhan BMHP
               </h3>
               <p className="text-[10px] text-blue-200">
-                Total stok fisik seluruh tahun anggaran dan sumber dana.
+                Total sisa stok fisik seluruh tahun anggaran dan sumber dana.
               </p>
             </div>
           </div>
 
-          {/* Center Box: Total Stok Fisik */}
+          {/* Center Box: Total Sisa Stok Fisik */}
           <div className="flex items-center gap-2 bg-white rounded-xl px-4 py-1.5 shadow-sm text-slate-900">
             <span className="text-[11px] font-bold text-slate-600">
-              Total Stok Fisik (Semua Kelompok):
+              Total Sisa Stok Fisik (Semua Kelompok):
             </span>
             <span className="text-lg font-black text-slate-900">
               {overallData.total_physical_stock} {overallData.unit_label}
             </span>
           </div>
 
-          {/* Right: Rincian per Kelompok Anggaran */}
+          {/* Right: Rincian Sisa Stok per Kelompok Anggaran */}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-[10px] font-bold text-blue-100 uppercase tracking-wide mr-1">
-              Rincian per Kelompok Anggaran:
+              Rincian Sisa Stok per Kelompok Anggaran:
             </span>
             {overallData.by_budget.map((b, idx) => (
               <div

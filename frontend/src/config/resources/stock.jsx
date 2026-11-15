@@ -86,7 +86,6 @@ export const BMHP_CATEGORIES = [
   'Kemasan Steril',
   'Indikator Kimia & Biologi',
   'Desinfektan & Pembersih',
-  'Kassa & Linen Steril',
   'APD & Perlindungan Diri',
   'Alat & Aksesoris',
   'Lainnya',
@@ -362,10 +361,12 @@ const transactionColumns = [
   { key: 'item_name', label: 'Nama BMHP', sortable: true, render: bold('item_name') },
   { key: 'type', label: 'Jenis', sortable: true, render: badge('type') },
   { key: 'quantity', label: 'Jumlah', sortable: true, render: qty('quantity', 'unit_label') },
+  { key: 'fiscal_year', label: 'Tahun', render: (r) => r.fiscal_year || '2026' },
+  { key: 'budget_source', label: 'Anggaran', render: (r) => r.budget_source || 'BLUD' },
   { key: 'batch_no', label: 'Batch', render: mono('batch_no') },
   { key: 'expiry_date', label: 'Expired', render: (r) => (r.expiry_date ? formatDate(r.expiry_date) : '-') },
   { key: 'unit_name', label: 'Unit Pemakai' },
-  { key: 'stock_after', label: 'Stok Akhir' },
+  { key: 'stock_after', label: 'Sisa Stok' },
   { key: 'officer', label: 'Petugas' },
 ];
 
@@ -377,7 +378,13 @@ const baseTransaction = {
   columns: transactionColumns,
 };
 
-const officerField = officerSelectField({ name: 'officer', label: 'Petugas', required: true, placeholder: 'Pilih petugas...' });
+const officerField = (defaultName = 'Alvin') => officerSelectField({
+  name: 'officer',
+  label: 'Petugas CSSD',
+  required: true,
+  placeholder: 'Pilih petugas...',
+  default: ({ user }) => user?.name || defaultName,
+});
 const dateField = { name: 'trx_date', label: 'Tanggal', type: 'date', required: true, default: todayISO };
 const notesField = { name: 'notes', label: 'Catatan', type: 'textarea', maxLength: 500 };
 
@@ -385,7 +392,7 @@ export const bmhpInConfig = {
   ...baseTransaction,
   key: 'bmhp-masuk',
   title: 'Barang Masuk BMHP',
-  subtitle: 'Scan barcode, input jumlah, nomor batch dan tanggal kedaluwarsa',
+  subtitle: 'Scan barcode, input jumlah, nomor batch, tanggal kedaluwarsa, anggaran, dan harga satuan',
   icon: ArrowDownToLine,
   fixedParams: { type: 'MASUK' },
   fixedBody: { type: 'MASUK' },
@@ -394,10 +401,32 @@ export const bmhpInConfig = {
     fields: [
       bmhpScanField,
       bmhpItemField,
-      { name: 'quantity', label: 'Jumlah masuk', type: 'number', required: true, min: 1, default: 1 },
-      { name: 'batch_no', label: 'No. batch / lot', maxLength: 50, placeholder: 'mis. LOT-202611-01' },
-      { name: 'expiry_date', label: 'Tanggal expired', type: 'date', help: 'Tanggal kedaluwarsa batch ini. Otomatis memperbarui data master BMHP.' },
-      officerField,
+      { name: 'quantity', label: 'Jumlah Masuk *', type: 'number', required: true, min: 1, default: 1 },
+      { name: 'unit_price', label: 'Harga Satuan (Rp)', type: 'number', min: 0, default: 0, placeholder: 'mis. 50000' },
+      {
+        name: 'total_price',
+        label: 'Total Harga (Rp)',
+        type: 'custom',
+        render: ({ values }) => {
+          const qtyVal = Number(values?.quantity || 0);
+          const priceVal = Number(values?.unit_price || 0);
+          const total = qtyVal * priceVal;
+          return (
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">Total Harga (Rp)</label>
+              <div className="h-10 px-3 flex items-center rounded-xl bg-slate-100 border border-slate-200 text-sm font-black text-slate-900">
+                Rp {total.toLocaleString('id-ID')}
+              </div>
+              <p className="text-[10px] text-slate-500">Dihitung otomatis: Jumlah × Harga Satuan</p>
+            </div>
+          );
+        },
+      },
+      { name: 'batch_no', label: 'No. Batch / Lot *', required: true, maxLength: 50, placeholder: 'mis. BATCH-001' },
+      { name: 'expiry_date', label: 'Tanggal Expired *', type: 'date', required: true, help: 'Tanggal kedaluwarsa batch ini.' },
+      { name: 'fiscal_year', label: 'Tahun Anggaran *', type: 'select', required: true, options: ['2026', '2025', '2024'], default: '2026' },
+      { name: 'budget_source', label: 'Sumber Anggaran *', type: 'select', required: true, options: ['BLUD', 'APBD', 'BOK', 'Lainnya'], default: 'BLUD' },
+      officerField('Alvin'),
       dateField,
       notesField,
     ],
@@ -408,7 +437,7 @@ export const bmhpOutConfig = {
   ...baseTransaction,
   key: 'bmhp-keluar',
   title: 'Pengambilan BMHP',
-  subtitle: 'Scan barcode, input jumlah dan unit pemakai',
+  subtitle: 'Pilih kelompok stok (tahun, anggaran, batch) dan unit pemakai internal Instalasi CSSD',
   icon: ArrowUpFromLine,
   fixedParams: { type: 'KELUAR' },
   fixedBody: { type: 'KELUAR' },
@@ -417,19 +446,41 @@ export const bmhpOutConfig = {
     fields: [
       bmhpScanField,
       bmhpItemField,
-      { name: 'quantity', label: 'Jumlah diambil', type: 'number', required: true, min: 1, default: 1 },
       {
-        type: 'remote-select', name: 'unit_id', label: 'Unit pemakai', placeholder: 'Pilih unit (opsional)...',
-        optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS, optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+        type: 'remote-select',
+        name: 'batch_id',
+        label: 'Kelompok Stok (Tahun, Anggaran, Batch & Sisa) *',
+        required: true,
+        span: 2,
+        placeholder: 'Pilih kelompok stok...',
+        disabledPlaceholder: 'Pilih BMHP terlebih dahulu untuk melihat kelompok stok...',
+        emptyText: 'Tidak ada batch dengan sisa stok tersedia untuk barang ini',
+        enabledWhen: (values) => Boolean(values?.bmhp_item_id),
+        optionsEndpoint: API_ENDPOINTS.BMHP_ITEMS.BATCHES,
+        optionsParams: (values) => ({ bmhp_item_id: values?.bmhp_item_id, only_available: 'true' }),
+        optionLabel: (b) => `Tahun ${b.fiscal_year} • ${b.budget_source} • Batch: ${b.batch_no} • ED: ${b.expiry_date ? formatDate(b.expiry_date) : '-'} • Sisa: ${b.stock} ${b.unit_label || ''}`,
       },
-      officerField,
+      { name: 'quantity', label: 'Jumlah Diambil *', type: 'number', required: true, min: 1, default: 1 },
+      {
+        type: 'remote-select',
+        name: 'unit_id',
+        label: 'Unit / Uraian Pemakai *',
+        required: true,
+        placeholder: 'Pilih unit pemakai...',
+        emptyText: 'Instalasi CSSD',
+        optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS,
+        optionsParams: { is_active: 1, for_bmhp: 1 },
+        autoFillOnMatch: true,
+        help: 'Pilihan unit pemakai BMHP dikhususkan untuk internal Instalasi CSSD.',
+      },
+      officerField('Resti'),
       dateField,
       notesField,
     ],
   },
 };
 
-/** Laporan mutasi BMHP (masuk, keluar, sisa stok). */
+/** Laporan mutasi BMHP (masuk, keluar, sisa stok). Hanya untuk Admin / Kepala Instalasi. */
 export const bmhpMutationConfig = {
   ...baseTransaction,
   key: 'laporan-bmhp',
@@ -438,5 +489,6 @@ export const bmhpMutationConfig = {
   icon: ClipboardList,
   readOnly: true,
   report: true,
+  adminOnly: true,
   filters: [{ name: 'type', label: 'Jenis', options: [{ value: 'MASUK', label: 'Masuk' }, { value: 'KELUAR', label: 'Keluar' }] }],
 };

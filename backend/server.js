@@ -806,6 +806,15 @@ router.get('/lookups/units', auth, wrap(async (req, res) => {
     );
     return res.json({ success: true, data: rows });
   }
+
+  // Khusus form BMHP: Hanya menampilkan unit internal 'Instalasi CSSD' sesuai SOP internal CSSD
+  if (req.query.for_bmhp === '1' || req.query.for_bmhp === 'true') {
+    const [rows] = await pool.query(
+      `SELECT id, code, name FROM units WHERE is_active = 1 AND (code = 'CSSD' OR name LIKE '%CSSD%') ORDER BY ${sortCol} ${order} LIMIT 10`
+    );
+    return res.json({ success: true, data: rows });
+  }
+
   const [rows] = await pool.query(
     `SELECT id, code, name FROM units WHERE is_active = 1 ORDER BY ${sortCol} ${order} LIMIT 100`
   );
@@ -2422,7 +2431,23 @@ registerCrud({
   defaultSort: 'id',
   filters: { type: 't.type', bmhp_item_id: 't.bmhp_item_id', unit_id: 't.unit_id' },
   dateColumn: 't.trx_date',
-  exportColumns: [['trx_date', 'Tanggal'], ['type', 'Jenis'], ['item_code', 'Kode'], ['item_name', 'Nama BMHP'], ['quantity', 'Jumlah'], ['unit_label', 'Satuan'], ['batch_no', 'Batch'], ['expiry_date', 'Tanggal Expired'], ['unit_name', 'Unit Pemakai'], ['stock_after', 'Stok Akhir'], ['officer', 'Petugas']],
+  exportColumns: [
+    ['trx_date', 'Tanggal'],
+    ['type', 'Jenis'],
+    ['item_code', 'Kode'],
+    ['item_name', 'Nama BMHP'],
+    ['quantity', 'Jumlah'],
+    ['unit_label', 'Satuan'],
+    ['fiscal_year', 'Tahun Anggaran'],
+    ['budget_source', 'Sumber Anggaran'],
+    ['batch_no', 'Batch'],
+    ['expiry_date', 'Tanggal Expired'],
+    ['unit_name', 'Unit Pemakai'],
+    ['unit_price', 'Harga Satuan'],
+    ['total_price', 'Total Harga'],
+    ['stock_after', 'Sisa Stok'],
+    ['officer', 'Petugas']
+  ],
   roles: { read: ['admin', 'petugas'], write: ['admin', 'petugas'], remove: ['admin', 'petugas'] },
   noUpdate: true,
   noDelete: true,
@@ -2430,37 +2455,124 @@ registerCrud({
     field('bmhp_item_id', 'int', { required: true, min: 1, label: 'BMHP' }),
     field('type', 'enum', { values: ['MASUK', 'KELUAR'], required: true, label: 'Jenis transaksi' }),
     field('quantity', 'int', { required: true, min: 1, label: 'Jumlah' }),
+    field('unit_price', 'number', { label: 'Harga Satuan' }),
+    field('total_price', 'number', { label: 'Total Harga' }),
+    field('fiscal_year', 'string', { label: 'Tahun Anggaran', max: 10 }),
+    field('budget_source', 'string', { label: 'Sumber Anggaran', max: 50 }),
+    field('batch_id', 'int', { label: 'Kelompok Batch' }),
     field('batch_no', 'string', { label: 'Batch', max: 50 }),
     field('expiry_date', 'date', { label: 'Tanggal expired' }),
     field('unit_id', 'int', { min: 1, label: 'Unit pemakai' }),
+    field('unit_name', 'string', { label: 'Nama Unit', max: 100 }),
     field('officer', 'string', { required: true, label: 'Petugas', max: 100 }),
     field('trx_date', 'date', { default: todayStr, label: 'Tanggal' }),
+    field('trx_time', 'string', { label: 'Jam' }),
     field('notes', 'string', { label: 'Catatan', max: 500 }),
   ],
   async beforeCreate(conn, data) {
     const [[item]] = await conn.query('SELECT * FROM bmhp_items WHERE id = ? AND is_active = 1 FOR UPDATE', [data.bmhp_item_id]);
     if (!item) throw new HttpError(404, 'BMHP tidak ditemukan atau tidak aktif', { bmhp_item_id: 'BMHP tidak valid' });
-    const after = data.type === 'MASUK' ? item.stock + data.quantity : item.stock - data.quantity;
-    if (after < 0) throw new HttpError(422, `Stok tidak cukup (tersedia ${item.stock} ${item.unit_label})`, { quantity: `Stok tersedia ${item.stock}` });
-    data.stock_after = after;
+
+    data.unit_price = parseFloat(data.unit_price) || 0;
+    data.total_price = data.unit_price > 0 ? (data.quantity * data.unit_price) : (parseFloat(data.total_price) || 0);
+
+    if (data.type === 'MASUK') {
+      data.fiscal_year = data.fiscal_year || '2026';
+      data.budget_source = data.budget_source || 'BLUD';
+      data.batch_no = data.batch_no || item.batch_no || 'BATCH-001';
+      data.unit_name = 'Instalasi CSSD';
+      data.stock_after = item.stock + data.quantity;
+    } else {
+      // KELUAR: Resolusi Unit Pemakai internal Instalasi CSSD
+      if (data.unit_id) {
+        const [[u]] = await conn.query('SELECT id, name FROM units WHERE id = ?', [data.unit_id]);
+        if (u) {
+          data.unit_id = u.id;
+          data.unit_name = u.name;
+        } else {
+          data.unit_name = 'Instalasi CSSD';
+        }
+      } else {
+        const [[cssdUnit]] = await conn.query("SELECT id, name FROM units WHERE code = 'CSSD' OR name LIKE '%CSSD%' LIMIT 1");
+        if (cssdUnit) {
+          data.unit_id = cssdUnit.id;
+          data.unit_name = cssdUnit.name;
+        } else {
+          data.unit_name = 'Instalasi CSSD';
+        }
+      }
+
+      // Resolusi Kelompok Batch
+      let targetBatch = null;
+      if (data.batch_id) {
+        const [[b]] = await conn.query('SELECT * FROM bmhp_batches WHERE id = ? FOR UPDATE', [data.batch_id]);
+        if (!b) throw new HttpError(404, 'Kelompok stok batch tidak ditemukan', { batch_id: 'Batch tidak ditemukan' });
+        targetBatch = b;
+      } else {
+        const [[b]] = await conn.query('SELECT * FROM bmhp_batches WHERE bmhp_item_id = ? AND stock >= ? ORDER BY expiry_date ASC, id ASC LIMIT 1 FOR UPDATE', [data.bmhp_item_id, data.quantity]);
+        targetBatch = b;
+      }
+
+      if (targetBatch) {
+        if (targetBatch.stock < data.quantity) {
+          throw new HttpError(422, `Sisa stok pada kelompok ${targetBatch.fiscal_year} - ${targetBatch.budget_source} (${targetBatch.batch_no}) tidak mencukupi (tersedia: ${targetBatch.stock})`, {
+            quantity: `Stok kelompok hanya ${targetBatch.stock}`,
+          });
+        }
+        data.batch_id = targetBatch.id;
+        data.fiscal_year = targetBatch.fiscal_year;
+        data.budget_source = targetBatch.budget_source;
+        data.batch_no = targetBatch.batch_no;
+        data.expiry_date = targetBatch.expiry_date;
+        data.batch_stock_after = targetBatch.stock - data.quantity;
+        data.stock_after = targetBatch.stock - data.quantity;
+      } else {
+        if (item.stock < data.quantity) {
+          throw new HttpError(422, `Sisa stok tidak mencukupi (tersedia: ${item.stock})`, { quantity: `Sisa stok: ${item.stock}` });
+        }
+        data.stock_after = item.stock - data.quantity;
+      }
+    }
   },
   async afterCreate(conn, id, data) {
-    await conn.query('UPDATE bmhp_items SET stock = ? WHERE id = ?', [data.stock_after, data.bmhp_item_id]);
-    if (data.type === 'MASUK') {
-      const updates = [];
-      const params = [];
-      if (data.batch_no) {
-        updates.push('batch_no = ?');
-        params.push(data.batch_no);
+    if (data.type === 'KELUAR') {
+      if (data.batch_id) {
+        await conn.query('UPDATE bmhp_batches SET stock = stock - ?, updated_at = NOW() WHERE id = ?', [data.quantity, data.batch_id]);
       }
-      if (data.expiry_date) {
-        updates.push('expiry_date = ?');
-        params.push(data.expiry_date);
+      const [[stockSum]] = await conn.query('SELECT COALESCE(SUM(stock), 0) AS total FROM bmhp_batches WHERE bmhp_item_id = ?', [data.bmhp_item_id]);
+      const totalPhysicalStock = Number(stockSum?.total !== undefined ? stockSum.total : (data.stock_after || 0));
+      await conn.query('UPDATE bmhp_items SET stock = ? WHERE id = ?', [totalPhysicalStock, data.bmhp_item_id]);
+    } else if (data.type === 'MASUK') {
+      const [existing] = await conn.query(`
+        SELECT * FROM bmhp_batches 
+        WHERE bmhp_item_id = ? AND fiscal_year = ? AND budget_source = ? AND batch_no = ?
+        LIMIT 1
+      `, [data.bmhp_item_id, data.fiscal_year, data.budget_source, data.batch_no]);
+
+      let batchId;
+      if (existing.length > 0) {
+        batchId = existing[0].id;
+        await conn.query(`
+          UPDATE bmhp_batches 
+          SET stock = stock + ?, expiry_date = COALESCE(?, expiry_date), unit_price = COALESCE(?, unit_price), updated_at = NOW()
+          WHERE id = ?
+        `, [data.quantity, data.expiry_date || null, data.unit_price || null, batchId]);
+      } else {
+        const [bRes] = await conn.query(`
+          INSERT INTO bmhp_batches (bmhp_item_id, fiscal_year, budget_source, batch_no, expiry_date, initial_stock, stock, unit_price)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [data.bmhp_item_id, data.fiscal_year, data.budget_source, data.batch_no, data.expiry_date || null, data.quantity, data.quantity, data.unit_price || 0]);
+        batchId = bRes.insertId;
       }
-      if (updates.length) {
-        params.push(data.bmhp_item_id);
-        await conn.query(`UPDATE bmhp_items SET ${updates.join(', ')} WHERE id = ?`, params);
-      }
+      await conn.query('UPDATE bmhp_transactions SET batch_id = ? WHERE id = ?', [batchId, id]);
+
+      const [[stockSum]] = await conn.query('SELECT COALESCE(SUM(stock), 0) AS total FROM bmhp_batches WHERE bmhp_item_id = ?', [data.bmhp_item_id]);
+      const totalPhysicalStock = Number(stockSum?.total || data.quantity);
+      await conn.query(`
+        UPDATE bmhp_items 
+        SET stock = ?, batch_no = ?, expiry_date = COALESCE(?, expiry_date)
+        WHERE id = ?
+      `, [totalPhysicalStock, data.batch_no, data.expiry_date || null, data.bmhp_item_id]);
     }
   },
 });
@@ -3607,6 +3719,8 @@ router.post('/bmhp-in', auth, allow('admin', 'petugas'), wrap(async (req, res) =
   const proofImage = body.proof_image || null;
   const officerSignature = body.officer_signature || null;
   const notes = sanitizeText(body.notes) || 'Barang Masuk - Pembelian';
+  const unitPrice = parseFloat(body.unit_price) || 0;
+  const totalPrice = unitPrice > 0 ? (qty * unitPrice) : (parseFloat(body.total_price) || 0);
 
   let resultData = null;
 
@@ -3650,15 +3764,15 @@ router.post('/bmhp-in', auth, allow('admin', 'petugas'), wrap(async (req, res) =
       stockAfterBatch = batchRow.stock + qty;
       await conn.query(`
         UPDATE bmhp_batches 
-        SET stock = ?, expiry_date = COALESCE(?, expiry_date), updated_at = NOW()
+        SET stock = ?, expiry_date = COALESCE(?, expiry_date), unit_price = COALESCE(?, unit_price), updated_at = NOW()
         WHERE id = ?
-      `, [stockAfterBatch, expiryDate, batchId]);
+      `, [stockAfterBatch, expiryDate, unitPrice || null, batchId]);
     } else {
       stockAfterBatch = qty;
       const [bRes] = await conn.query(`
-        INSERT INTO bmhp_batches (bmhp_item_id, fiscal_year, budget_source, batch_no, expiry_date, initial_stock, stock)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [itemId, fiscalYear, budgetSource, batchNo, expiryDate, qty, qty]);
+        INSERT INTO bmhp_batches (bmhp_item_id, fiscal_year, budget_source, batch_no, expiry_date, initial_stock, stock, unit_price)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [itemId, fiscalYear, budgetSource, batchNo, expiryDate, qty, qty, unitPrice]);
       batchId = bRes.insertId;
     }
 
@@ -3675,10 +3789,11 @@ router.post('/bmhp-in', auth, allow('admin', 'petugas'), wrap(async (req, res) =
     // 4. Catat transaksi di bmhp_transactions
     const [txRes] = await conn.query(`
       INSERT INTO bmhp_transactions
-      (bmhp_item_id, type, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_name, officer, trx_date, trx_time, purpose, proof_image, officer_signature, notes, stock_after)
-      VALUES (?, 'MASUK', ?, ?, ?, ?, ?, ?, 'Instalasi CSSD', ?, ?, ?, ?, ?, ?, ?, ?)
+      (bmhp_item_id, type, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_name, unit_price, total_price, officer, trx_date, trx_time, purpose, proof_image, officer_signature, notes, stock_after)
+      VALUES (?, 'MASUK', ?, ?, ?, ?, ?, ?, 'Instalasi CSSD', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       itemId, qty, fiscalYear, budgetSource, batchId, batchNo, expiryDate,
+      unitPrice, totalPrice,
       officer, trxDate, trxTime, 'Barang Masuk - Pembelian', proofImage, officerSignature, notes, stockAfterBatch
     ]);
 
@@ -3688,6 +3803,8 @@ router.post('/bmhp-in', auth, allow('admin', 'petugas'), wrap(async (req, res) =
       batch_id: batchId,
       batch_stock: stockAfterBatch,
       total_item_stock: totalPhysicalStock,
+      unit_price: unitPrice,
+      total_price: totalPrice,
     };
   });
 
@@ -3716,10 +3833,17 @@ router.post('/bmhp-out', auth, allow('admin', 'petugas'), wrap(async (req, res) 
   const trxDate = body.trx_date ? String(body.trx_date).slice(0, 10) : todayStr();
   const trxTime = sanitizeText(body.trx_time) || `${nowDateTimeStr().slice(11, 16)} WIB`;
   const officerSignature = body.officer_signature || null;
+  const unitId = body.unit_id ? Number(body.unit_id) : null;
+  let unitName = 'Instalasi CSSD';
 
   let resultData = null;
 
   await withTx(async (conn) => {
+    if (unitId) {
+      const [[uRow]] = await conn.query('SELECT name FROM units WHERE id = ?', [unitId]);
+      if (uRow?.name) unitName = uRow.name;
+    }
+
     // 1. Ambil data batch dan kunci untuk update
     const [[batch]] = await conn.query('SELECT b.*, i.name AS item_name, i.unit_label FROM bmhp_batches b JOIN bmhp_items i ON i.id = b.bmhp_item_id WHERE b.id = ? FOR UPDATE', [batchId]);
     if (!batch) {
@@ -3745,11 +3869,11 @@ router.post('/bmhp-out', auth, allow('admin', 'petugas'), wrap(async (req, res) 
     // 4. Catat transaksi KELUAR di bmhp_transactions
     const [txRes] = await conn.query(`
       INSERT INTO bmhp_transactions
-      (bmhp_item_id, type, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_name, officer, trx_date, trx_time, purpose, officer_signature, notes, stock_after)
-      VALUES (?, 'KELUAR', ?, ?, ?, ?, ?, ?, 'Instalasi CSSD', ?, ?, ?, ?, ?, ?, ?)
+      (bmhp_item_id, type, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_id, unit_name, officer, trx_date, trx_time, purpose, officer_signature, notes, stock_after)
+      VALUES (?, 'KELUAR', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       batch.bmhp_item_id, qty, batch.fiscal_year, batch.budget_source, batch.id, batch.batch_no, batch.expiry_date,
-      officer, trxDate, trxTime, purpose, officerSignature, purpose, batchStockAfter
+      unitId, unitName, officer, trxDate, trxTime, purpose, officerSignature, purpose, batchStockAfter
     ]);
 
     resultData = {
@@ -5779,6 +5903,37 @@ async function ensureBmhpBatchesAndTables(target) {
     await addTxCol("officer_signature LONGTEXT DEFAULT NULL");
     await addTxCol("unit_name VARCHAR(100) DEFAULT 'Instalasi CSSD'");
     await addTxCol("trx_time VARCHAR(20) DEFAULT NULL");
+    await addTxCol("unit_price DECIMAL(15,2) DEFAULT 0");
+    await addTxCol("total_price DECIMAL(15,2) DEFAULT 0");
+
+    try {
+      await db.query("ALTER TABLE bmhp_batches ADD COLUMN unit_price DECIMAL(15,2) DEFAULT 0");
+    } catch (err) {
+      if (err.errno !== 1060 && !err.message.includes('Duplicate column')) {
+        // ignore
+      }
+    }
+
+    // Pastikan master data unit memiliki 'Instalasi CSSD'
+    try {
+      await db.query(`
+        INSERT INTO units (code, name, pic_name, is_active)
+        SELECT 'CSSD', 'Instalasi CSSD', 'Kepala Instalasi CSSD', 1
+        WHERE NOT EXISTS (SELECT 1 FROM units WHERE code = 'CSSD' OR name LIKE '%CSSD%')
+      `);
+    } catch (uErr) {
+      // ignore
+    }
+
+    // Nonaktifkan Kassa & Linen dari daftar BMHP jika ada sisa data lama
+    try {
+      await db.query(`
+        UPDATE bmhp_items SET is_active = 0 
+        WHERE category LIKE '%Kassa%' OR category LIKE '%Linen%' OR name LIKE '%Kassa%' OR name LIKE '%Linen%'
+      `);
+    } catch (kErr) {
+      // ignore
+    }
 
     // Seed sample item from mockup: Sterilization Flat Roll Pouch 75mm x 200m
     try {
