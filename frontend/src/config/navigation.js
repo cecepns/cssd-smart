@@ -1,6 +1,8 @@
 import {
   AlertOctagon,
   Archive,
+  ArrowDownToLine,
+  ArrowUpFromLine,
   BookOpen,
   Boxes,
   Building2,
@@ -61,7 +63,17 @@ export const NAV_SECTIONS = [
       { label: 'Verifikasi Sterilisasi', to: ROUTES.VERIFICATIONS, icon: ShieldCheck, adminOnly: true },
       { label: 'Log Mesin Washer & Steam', to: ROUTES.MACHINE_LOGS, icon: Cpu, adminOnly: true },
       { label: 'Log Waktu Pengerjaan', to: ROUTES.PROCESS_TIMINGS, icon: Clock, adminOnly: true },
-      { label: 'Manajemen Stok BMHP', to: ROUTES.BMHP, icon: Archive, adminOnly: true },
+    ],
+  },
+  {
+    title: 'Manajemen BMHP',
+    items: [
+      { label: 'Manajemen BMHP Terpadu', to: ROUTES.BMHP, icon: Archive, adminOnly: true },
+      { label: 'Barang Masuk BMHP', to: ROUTES.BMHP_IN, icon: ArrowDownToLine, adminOnly: true },
+      { label: 'Pengambilan BMHP', to: ROUTES.BMHP_OUT, icon: ArrowUpFromLine, adminOnly: true },
+      { label: 'Kartu Stok BMHP', to: ROUTES.BMHP_STOCK_CARD, icon: ClipboardList, adminOnly: true },
+      { label: 'Stok Keseluruhan BMHP', to: ROUTES.BMHP_STOCK, icon: Layers, adminOnly: true },
+      { label: 'Laporan BMHP', to: ROUTES.BMHP_REPORT, icon: FileText, adminOnly: true },
     ],
   },
   {

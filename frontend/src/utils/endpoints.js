@@ -94,6 +94,11 @@ export const API_ENDPOINTS = {
   BMHP_ITEMS: {
     ...crud('/bmhp-items'),
     SUMMARY: '/bmhp-summary',
+    BATCHES: '/bmhp-batches',
+    IN: '/bmhp-in',
+    OUT: '/bmhp-out',
+    STOCK_CARD: '/bmhp-stock-card',
+    OVERALL_STOCK: '/bmhp-overall-stock',
   },
   BMHP_TRANSACTIONS: crud('/bmhp-transactions'),
 

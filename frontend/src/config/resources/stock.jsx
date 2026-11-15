@@ -74,11 +74,12 @@ export const quarantinesConfig = {
 
 /* ---------------------------------- BMHP ---------------------------------- */
 export const BMHP_TABS = [
-  { label: 'Ringkasan', to: ROUTES.BMHP },
+  { label: 'Manajemen Terpadu', to: ROUTES.BMHP, icon: Archive },
   { label: 'Barang Masuk', to: ROUTES.BMHP_IN, icon: ArrowDownToLine },
   { label: 'Pengambilan', to: ROUTES.BMHP_OUT, icon: ArrowUpFromLine },
-  { label: 'Stok BMHP', to: ROUTES.BMHP_STOCK, icon: Archive },
-  { label: 'Laporan', to: ROUTES.BMHP_REPORT, icon: ClipboardList, adminOnly: true },
+  { label: 'Kartu Stok', to: ROUTES.BMHP_STOCK_CARD, icon: ClipboardList },
+  { label: 'Stok Keseluruhan', to: ROUTES.BMHP_STOCK, icon: Layers },
+  { label: 'Laporan BMHP', to: ROUTES.BMHP_REPORT, icon: FileText, adminOnly: true },
 ];
 
 export const BMHP_CATEGORIES = [

@@ -1027,15 +1027,34 @@ router.post('/dirty-receipts', auth, allow('admin', 'petugas', 'unit'), wrap(asy
 
       const itemsDetailStr = checklist.length ? JSON.stringify(checklist) : null;
 
-      const [insertRes] = await conn.query(`
-        INSERT INTO dirty_receipts
-        (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
-         sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Diterima', ?)
-      `, [
-        barcode, receiptDate, ts.started_at, ts.completed_at, unitId, itemId, itemName, qty, unitLabel,
-        senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, itemNotes || null, itemsDetailStr, checklistStatus, req.user.id
-      ]);
+      let insertRes;
+      try {
+        [insertRes] = await conn.query(`
+          INSERT INTO dirty_receipts
+          (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
+           sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Diterima', ?)
+        `, [
+          barcode, receiptDate, ts.started_at, ts.completed_at, unitId, itemId, itemName, qty, unitLabel,
+          senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, itemNotes || null, itemsDetailStr, checklistStatus, req.user.id
+        ]);
+      } catch (insertErr) {
+        if (insertErr && (insertErr.errno === 1054 || insertErr.code === 'ER_BAD_FIELD_ERROR')) {
+          console.warn('Auto-healing missing dirty_receipts columns and retrying INSERT...', insertErr.message);
+          await ensureDirtyReceiptsColumnsDirect(conn);
+          [insertRes] = await conn.query(`
+            INSERT INTO dirty_receipts
+            (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
+             sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Diterima', ?)
+          `, [
+            barcode, receiptDate, ts.started_at, ts.completed_at, unitId, itemId, itemName, qty, unitLabel,
+            senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, itemNotes || null, itemsDetailStr, checklistStatus, req.user.id
+          ]);
+        } else {
+          throw insertErr;
+        }
+      }
 
       const insertedId = insertRes.insertId;
       createdList.push({ id: insertedId, barcode, item_name: itemName, quantity: qty, unit_label: unitLabel, checklist_status: checklistStatus });
@@ -1101,15 +1120,34 @@ router.post('/dirty-receipts', auth, allow('admin', 'petugas', 'unit'), wrap(asy
       const extraNotes = [generalNotes, 'Alat Satuan Tambahan di luar isi set'].filter(Boolean).join(' • ');
       const extraDetailStr = JSON.stringify([{ instrument_name: extraName, quantity: extraQty, unit_label: extraUnitLabel, status: 'Lengkap' }]);
 
-      const [insertExtraRes] = await conn.query(`
-        INSERT INTO dirty_receipts
-        (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
-         sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
-        VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Lengkap', 1, 'Diterima', ?)
-      `, [
-        barcode, receiptDate, ts.started_at, ts.completed_at, unitId, `${extraName} (Alat Satuan)`, extraQty, extraUnitLabel,
-        senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, extraNotes, extraDetailStr, req.user.id
-      ]);
+      let insertExtraRes;
+      try {
+        [insertExtraRes] = await conn.query(`
+          INSERT INTO dirty_receipts
+          (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
+           sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
+          VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Lengkap', 1, 'Diterima', ?)
+        `, [
+          barcode, receiptDate, ts.started_at, ts.completed_at, unitId, `${extraName} (Alat Satuan)`, extraQty, extraUnitLabel,
+          senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, extraNotes, extraDetailStr, req.user.id
+        ]);
+      } catch (extraErr) {
+        if (extraErr && (extraErr.errno === 1054 || extraErr.code === 'ER_BAD_FIELD_ERROR')) {
+          console.warn('Auto-healing missing dirty_receipts columns on extra items and retrying INSERT...', extraErr.message);
+          await ensureDirtyReceiptsColumnsDirect(conn);
+          [insertExtraRes] = await conn.query(`
+            INSERT INTO dirty_receipts
+            (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
+             sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
+            VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Lengkap', 1, 'Diterima', ?)
+          `, [
+            barcode, receiptDate, ts.started_at, ts.completed_at, unitId, `${extraName} (Alat Satuan)`, extraQty, extraUnitLabel,
+            senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, extraNotes, extraDetailStr, req.user.id
+          ]);
+        } else {
+          throw extraErr;
+        }
+      }
 
       const insertedExtraId = insertExtraRes.insertId;
       createdList.push({ id: insertedExtraId, barcode, item_name: `${extraName} (Alat Satuan)`, quantity: extraQty, unit_label: extraUnitLabel, checklist_status: 'Lengkap' });
@@ -3501,6 +3539,433 @@ router.get('/bmhp-summary', auth, allow('admin', 'petugas'), wrap(async (req, re
   res.json({ success: true, data: summary });
 }));
 
+// ---------- BMHP: Daftar Batch & Kelompok Anggaran ----------
+router.get('/bmhp-batches', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const { bmhp_item_id, fiscal_year, budget_source, batch_no, only_available, search } = req.query;
+  let sql = `
+    SELECT b.*, i.name AS item_name, i.code AS item_code, i.barcode, i.unit_label, i.category
+    FROM bmhp_batches b
+    JOIN bmhp_items i ON i.id = b.bmhp_item_id
+    WHERE 1=1
+  `;
+  const params = [];
+
+  if (bmhp_item_id) {
+    sql += ' AND b.bmhp_item_id = ?';
+    params.push(Number(bmhp_item_id));
+  }
+  if (fiscal_year && fiscal_year !== 'Semua') {
+    sql += ' AND b.fiscal_year = ?';
+    params.push(fiscal_year);
+  }
+  if (budget_source && budget_source !== 'Semua') {
+    sql += ' AND b.budget_source = ?';
+    params.push(budget_source);
+  }
+  if (batch_no && batch_no !== 'Semua') {
+    sql += ' AND b.batch_no = ?';
+    params.push(batch_no);
+  }
+  if (only_available === 'true' || only_available === '1') {
+    sql += ' AND b.stock > 0';
+  }
+  if (search) {
+    sql += ' AND (i.name LIKE ? OR i.code LIKE ? OR b.batch_no LIKE ?)';
+    const term = `%${search.trim()}%`;
+    params.push(term, term, term);
+  }
+
+  sql += ' ORDER BY b.expiry_date ASC, b.id ASC';
+  const [rows] = await pool.query(sql, params);
+  res.json({ success: true, data: rows });
+}));
+
+// ---------- BMHP: Barang Masuk (Otomatis Tambah Stok Sesuai Kelompok) ----------
+router.post('/bmhp-in', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const body = req.body || {};
+  const qty = parseInt(body.quantity, 10);
+  if (!qty || qty <= 0) {
+    throw new HttpError(422, 'Jumlah barang masuk wajib angka positif', { quantity: 'Jumlah tidak valid' });
+  }
+
+  const itemName = sanitizeText(body.item_name || body.name);
+  if (!itemName) {
+    throw new HttpError(422, 'Nama barang BMHP wajib diisi', { item_name: 'Nama barang wajib diisi' });
+  }
+
+  const batchNo = sanitizeText(body.batch_no) || 'BATCH-001';
+  const fiscalYear = sanitizeText(body.fiscal_year) || '2026';
+  const budgetSource = sanitizeText(body.budget_source) || 'BLUD';
+  const expiryDate = body.expiry_date ? String(body.expiry_date).slice(0, 10) : null;
+  const trxDate = body.trx_date ? String(body.trx_date).slice(0, 10) : todayStr();
+  const trxTime = sanitizeText(body.trx_time) || `${nowDateTimeStr().slice(11, 16)} WIB`;
+  const officer = sanitizeText(body.officer) || req.user.name || 'Petugas CSSD';
+  const unitLabel = sanitizeText(body.unit_label) || 'pcs';
+  const category = sanitizeText(body.category) || 'Kemasan Steril';
+  const itemCode = sanitizeText(body.item_code || body.code || body.barcode) || null;
+  const proofImage = body.proof_image || null;
+  const officerSignature = body.officer_signature || null;
+  const notes = sanitizeText(body.notes) || 'Barang Masuk - Pembelian';
+
+  let resultData = null;
+
+  await withTx(async (conn) => {
+    // 1. Cari atau buat bmhp_items
+    let itemId = body.bmhp_item_id ? Number(body.bmhp_item_id) : null;
+    let itemRow = null;
+    if (itemId) {
+      [[itemRow]] = await conn.query('SELECT * FROM bmhp_items WHERE id = ? FOR UPDATE', [itemId]);
+    }
+    if (!itemRow && itemCode) {
+      [[itemRow]] = await conn.query('SELECT * FROM bmhp_items WHERE code = ? OR barcode = ? LIMIT 1 FOR UPDATE', [itemCode, itemCode]);
+      if (itemRow) itemId = itemRow.id;
+    }
+    if (!itemRow) {
+      [[itemRow]] = await conn.query('SELECT * FROM bmhp_items WHERE name = ? LIMIT 1 FOR UPDATE', [itemName]);
+      if (itemRow) itemId = itemRow.id;
+    }
+
+    if (!itemRow) {
+      const generatedCode = itemCode || `BMHP-${Date.now().toString().slice(-6)}`;
+      const [newRes] = await conn.query(`
+        INSERT INTO bmhp_items (code, barcode, name, category, unit_label, stock, min_stock, batch_no, expiry_date, is_active)
+        VALUES (?, ?, ?, ?, ?, 0, 10, ?, ?, 1)
+      `, [generatedCode, generatedCode, itemName, category, unitLabel, batchNo, expiryDate]);
+      itemId = newRes.insertId;
+      [[itemRow]] = await conn.query('SELECT * FROM bmhp_items WHERE id = ?', [itemId]);
+    }
+
+    // 2. Cari atau buat batch di bmhp_batches
+    let [[batchRow]] = await conn.query(`
+      SELECT * FROM bmhp_batches 
+      WHERE bmhp_item_id = ? AND fiscal_year = ? AND budget_source = ? AND batch_no = ?
+      LIMIT 1 FOR UPDATE
+    `, [itemId, fiscalYear, budgetSource, batchNo]);
+
+    let batchId;
+    let stockAfterBatch;
+    if (batchRow) {
+      batchId = batchRow.id;
+      stockAfterBatch = batchRow.stock + qty;
+      await conn.query(`
+        UPDATE bmhp_batches 
+        SET stock = ?, expiry_date = COALESCE(?, expiry_date), updated_at = NOW()
+        WHERE id = ?
+      `, [stockAfterBatch, expiryDate, batchId]);
+    } else {
+      stockAfterBatch = qty;
+      const [bRes] = await conn.query(`
+        INSERT INTO bmhp_batches (bmhp_item_id, fiscal_year, budget_source, batch_no, expiry_date, initial_stock, stock)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [itemId, fiscalYear, budgetSource, batchNo, expiryDate, qty, qty]);
+      batchId = bRes.insertId;
+    }
+
+    // 3. Update total stok di bmhp_items
+    const [[stockSum]] = await conn.query('SELECT COALESCE(SUM(stock), 0) AS total FROM bmhp_batches WHERE bmhp_item_id = ?', [itemId]);
+    const totalPhysicalStock = Number(stockSum?.total || 0);
+
+    await conn.query(`
+      UPDATE bmhp_items 
+      SET stock = ?, batch_no = ?, expiry_date = COALESCE(?, expiry_date)
+      WHERE id = ?
+    `, [totalPhysicalStock, batchNo, expiryDate, itemId]);
+
+    // 4. Catat transaksi di bmhp_transactions
+    const [txRes] = await conn.query(`
+      INSERT INTO bmhp_transactions
+      (bmhp_item_id, type, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_name, officer, trx_date, trx_time, purpose, proof_image, officer_signature, notes, stock_after)
+      VALUES (?, 'MASUK', ?, ?, ?, ?, ?, ?, 'Instalasi CSSD', ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      itemId, qty, fiscalYear, budgetSource, batchId, batchNo, expiryDate,
+      officer, trxDate, trxTime, 'Barang Masuk - Pembelian', proofImage, officerSignature, notes, stockAfterBatch
+    ]);
+
+    resultData = {
+      transaction_id: txRes.insertId,
+      bmhp_item_id: itemId,
+      batch_id: batchId,
+      batch_stock: stockAfterBatch,
+      total_item_stock: totalPhysicalStock,
+    };
+  });
+
+  res.json({
+    success: true,
+    message: 'Barang masuk BMHP berhasil disimpan dan stok otomatis bertambah',
+    data: resultData,
+  });
+}));
+
+// ---------- BMHP: Pengambilan BMHP (Otomatis Kurang dari Kelompok Dipilih) ----------
+router.post('/bmhp-out', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const body = req.body || {};
+  const qty = parseInt(body.quantity, 10);
+  if (!qty || qty <= 0) {
+    throw new HttpError(422, 'Jumlah pengambilan wajib angka positif', { quantity: 'Jumlah tidak valid' });
+  }
+
+  const batchId = body.batch_id ? Number(body.batch_id) : null;
+  if (!batchId) {
+    throw new HttpError(422, 'Silakan pilih kelompok stok (batch & anggaran) yang akan diambil', { batch_id: 'Kelompok stok wajib dipilih' });
+  }
+
+  const purpose = sanitizeText(body.purpose || body.notes) || 'Untuk pengemasan set instrumen';
+  const officer = sanitizeText(body.officer) || req.user.name || 'Petugas CSSD';
+  const trxDate = body.trx_date ? String(body.trx_date).slice(0, 10) : todayStr();
+  const trxTime = sanitizeText(body.trx_time) || `${nowDateTimeStr().slice(11, 16)} WIB`;
+  const officerSignature = body.officer_signature || null;
+
+  let resultData = null;
+
+  await withTx(async (conn) => {
+    // 1. Ambil data batch dan kunci untuk update
+    const [[batch]] = await conn.query('SELECT b.*, i.name AS item_name, i.unit_label FROM bmhp_batches b JOIN bmhp_items i ON i.id = b.bmhp_item_id WHERE b.id = ? FOR UPDATE', [batchId]);
+    if (!batch) {
+      throw new HttpError(404, 'Kelompok stok batch tidak ditemukan', { batch_id: 'Batch tidak ditemukan' });
+    }
+
+    if (batch.stock < qty) {
+      throw new HttpError(422, `Stok pada kelompok ${batch.fiscal_year} - ${batch.budget_source} (${batch.batch_no}) tidak mencukupi (tersedia: ${batch.stock} ${batch.unit_label})`, {
+        quantity: `Stok tersedia hanya ${batch.stock} ${batch.unit_label}`,
+      });
+    }
+
+    // 2. Kurangi stok batch
+    const batchStockAfter = batch.stock - qty;
+    await conn.query('UPDATE bmhp_batches SET stock = ?, updated_at = NOW() WHERE id = ?', [batchStockAfter, batchId]);
+
+    // 3. Update total stok di bmhp_items
+    const [[stockSum]] = await conn.query('SELECT COALESCE(SUM(stock), 0) AS total FROM bmhp_batches WHERE bmhp_item_id = ?', [batch.bmhp_item_id]);
+    const totalPhysicalStock = Number(stockSum?.total || 0);
+
+    await conn.query('UPDATE bmhp_items SET stock = ? WHERE id = ?', [totalPhysicalStock, batch.bmhp_item_id]);
+
+    // 4. Catat transaksi KELUAR di bmhp_transactions
+    const [txRes] = await conn.query(`
+      INSERT INTO bmhp_transactions
+      (bmhp_item_id, type, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_name, officer, trx_date, trx_time, purpose, officer_signature, notes, stock_after)
+      VALUES (?, 'KELUAR', ?, ?, ?, ?, ?, ?, 'Instalasi CSSD', ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      batch.bmhp_item_id, qty, batch.fiscal_year, batch.budget_source, batch.id, batch.batch_no, batch.expiry_date,
+      officer, trxDate, trxTime, purpose, officerSignature, purpose, batchStockAfter
+    ]);
+
+    resultData = {
+      transaction_id: txRes.insertId,
+      bmhp_item_id: batch.bmhp_item_id,
+      batch_id: batch.id,
+      batch_stock: batchStockAfter,
+      total_item_stock: totalPhysicalStock,
+    };
+  });
+
+  res.json({
+    success: true,
+    message: 'Pengambilan BMHP berhasil disimpan dan stok kelompok otomatis berkurang',
+    data: resultData,
+  });
+}));
+
+// ---------- BMHP: Kartu Stok (Riwayat Masuk, Keluar, dan Sisa Stok per Kelompok) ----------
+router.get('/bmhp-stock-card', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  let { bmhp_item_id, fiscal_year, budget_source, batch_no, start_date, end_date } = req.query;
+
+  // Jika item tidak diisi, ambil item aktif pertama
+  if (!bmhp_item_id) {
+    const [[firstItem]] = await pool.query('SELECT id FROM bmhp_items WHERE is_active = 1 ORDER BY id ASC LIMIT 1');
+    bmhp_item_id = firstItem?.id;
+  }
+
+  if (!bmhp_item_id) {
+    return res.json({ success: true, data: { item: null, rows: [], summary: { initial_stock: 0, total_in: 0, total_out: 0, current_stock: 0 } } });
+  }
+
+  const [[item]] = await pool.query('SELECT * FROM bmhp_items WHERE id = ?', [bmhp_item_id]);
+  if (!item) throw new HttpError(404, 'Barang BMHP tidak ditemukan');
+
+  // Filter kondisi
+  const whereClauses = ['t.bmhp_item_id = ?'];
+  const params = [bmhp_item_id];
+
+  if (fiscal_year && fiscal_year !== 'Semua') {
+    whereClauses.push('t.fiscal_year = ?');
+    params.push(fiscal_year);
+  }
+  if (budget_source && budget_source !== 'Semua') {
+    whereClauses.push('t.budget_source = ?');
+    params.push(budget_source);
+  }
+  if (batch_no && batch_no !== 'Semua') {
+    whereClauses.push('t.batch_no = ?');
+    params.push(batch_no);
+  }
+
+  // Hitung Stok Awal sebelum periode start_date jika ada start_date
+  let initialStock = 0;
+  if (start_date) {
+    const preWhere = [...whereClauses, 't.trx_date < ?'];
+    const preParams = [...params, start_date];
+    const [[preRes]] = await pool.query(`
+      SELECT 
+        COALESCE(SUM(CASE WHEN t.type = 'MASUK' THEN t.quantity ELSE 0 END), 0) AS pre_in,
+        COALESCE(SUM(CASE WHEN t.type = 'KELUAR' THEN t.quantity ELSE 0 END), 0) AS pre_out
+      FROM bmhp_transactions t
+      WHERE ${preWhere.join(' AND ')}
+    `, preParams);
+    initialStock = (preRes?.pre_in || 0) - (preRes?.pre_out || 0);
+  }
+
+  // Ambil transaksi dalam periode
+  const periodWhere = [...whereClauses];
+  const periodParams = [...params];
+  if (start_date) {
+    periodWhere.push('t.trx_date >= ?');
+    periodParams.push(start_date);
+  }
+  if (end_date) {
+    periodWhere.push('t.trx_date <= ?');
+    periodParams.push(end_date);
+  }
+
+  const [txRows] = await pool.query(`
+    SELECT t.*, b.initial_stock AS batch_initial
+    FROM bmhp_transactions t
+    LEFT JOIN bmhp_batches b ON b.id = t.batch_id
+    WHERE ${periodWhere.join(' AND ')}
+    ORDER BY t.trx_date ASC, t.id ASC
+  `, periodParams);
+
+  let running = Math.max(initialStock, 0);
+  let totalIn = 0;
+  let totalOut = 0;
+
+  const rows = [];
+  if (start_date && initialStock > 0) {
+    rows.push({
+      id: 'stok-awal',
+      trx_date: start_date,
+      type_label: 'Stok Awal',
+      type: 'INITIAL',
+      fiscal_year: fiscal_year !== 'Semua' ? fiscal_year : (txRows[0]?.fiscal_year || '2026'),
+      budget_source: budget_source !== 'Semua' ? budget_source : (txRows[0]?.budget_source || 'BLUD'),
+      batch_no: batch_no !== 'Semua' ? batch_no : (txRows[0]?.batch_no || '-'),
+      expiry_date: txRows[0]?.expiry_date || null,
+      qty_in: null,
+      qty_out: null,
+      balance: running,
+      officer: '-',
+      signature: null,
+    });
+  }
+
+  for (let i = 0; i < txRows.length; i++) {
+    const tx = txRows[i];
+    const qty = Number(tx.quantity);
+    let qtyIn = null;
+    let qtyOut = null;
+    let typeLabel = tx.notes || (tx.type === 'MASUK' ? 'Barang Masuk - Pembelian' : 'Pengambilan BMHP');
+
+    if (tx.type === 'MASUK') {
+      running += qty;
+      totalIn += qty;
+      qtyIn = qty;
+    } else {
+      running -= qty;
+      totalOut += qty;
+      qtyOut = qty;
+    }
+
+    rows.push({
+      id: tx.id,
+      trx_date: tx.trx_date,
+      trx_time: tx.trx_time,
+      type_label: typeLabel,
+      type: tx.type,
+      fiscal_year: tx.fiscal_year || '2026',
+      budget_source: tx.budget_source || 'BLUD',
+      batch_no: tx.batch_no || '-',
+      expiry_date: tx.expiry_date,
+      qty_in: qtyIn,
+      qty_out: qtyOut,
+      balance: running,
+      officer: tx.officer,
+      signature: tx.officer_signature,
+    });
+  }
+
+  res.json({
+    success: true,
+    data: {
+      item,
+      unit_label: item.unit_label,
+      filter: { bmhp_item_id, fiscal_year, budget_source, batch_no, start_date, end_date },
+      rows,
+      summary: {
+        initial_stock: initialStock,
+        total_in: totalIn,
+        total_out: totalOut,
+        current_stock: running,
+      },
+    },
+  });
+}));
+
+// ---------- BMHP: Stok Keseluruhan (Total Fisik & Rincian per Kelompok Anggaran) ----------
+router.get('/bmhp-overall-stock', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const { bmhp_item_id } = req.query;
+
+  let itemId = bmhp_item_id ? Number(bmhp_item_id) : null;
+  if (!itemId) {
+    const [[firstItem]] = await pool.query('SELECT id FROM bmhp_items WHERE is_active = 1 ORDER BY id ASC LIMIT 1');
+    itemId = firstItem?.id;
+  }
+
+  let item = null;
+  let totalPhysicalStock = 0;
+  let byBudget = [];
+  let batches = [];
+
+  if (itemId) {
+    [[item]] = await pool.query('SELECT * FROM bmhp_items WHERE id = ?', [itemId]);
+    if (item) {
+      const [bRows] = await pool.query('SELECT * FROM bmhp_batches WHERE bmhp_item_id = ? ORDER BY fiscal_year DESC, budget_source ASC, batch_no ASC', [itemId]);
+      batches = bRows;
+      totalPhysicalStock = bRows.reduce((sum, b) => sum + Number(b.stock), 0);
+
+      const [groupRows] = await pool.query(`
+        SELECT fiscal_year, budget_source, SUM(stock) AS total_stock
+        FROM bmhp_batches
+        WHERE bmhp_item_id = ?
+        GROUP BY fiscal_year, budget_source
+        ORDER BY fiscal_year DESC, budget_source ASC
+      `, [itemId]);
+
+      byBudget = groupRows.map((g) => ({
+        fiscal_year: g.fiscal_year,
+        budget_source: g.budget_source,
+        label: `${g.fiscal_year} - ${g.budget_source}`,
+        total: Number(g.total_stock),
+      }));
+    }
+  }
+
+  // Juga sertakan daftar semua item untuk selector
+  const [allItems] = await pool.query('SELECT id, code, barcode, name, category, unit_label, stock FROM bmhp_items WHERE is_active = 1 ORDER BY name ASC');
+
+  res.json({
+    success: true,
+    data: {
+      selected_item: item,
+      total_physical_stock: totalPhysicalStock,
+      unit_label: item?.unit_label || 'Rol',
+      by_budget: byBudget,
+      batches,
+      all_items: allItems,
+    },
+  });
+}));
+
 // ---------- Dashboard ----------
 router.get('/dashboard', auth, wrap(async (req, res) => {
   const isUnit = req.user.role === 'unit';
@@ -5251,6 +5716,133 @@ async function ensureBmhpColumns() {
   }
 }
 
+async function ensureDirtyReceiptsColumnsDirect(target) {
+  const db = target || pool;
+  const cols = [
+    'confirmed_at DATETIME DEFAULT NULL',
+    'confirmed_by VARCHAR(100) DEFAULT NULL',
+    'items_detail LONGTEXT DEFAULT NULL',
+    'extra_items LONGTEXT DEFAULT NULL',
+    "checklist_status ENUM('Lengkap', 'Tidak Lengkap', 'Ada Kerusakan') DEFAULT 'Lengkap'",
+    'started_at DATETIME DEFAULT NULL',
+    'completed_at DATETIME DEFAULT NULL',
+    "unit_label VARCHAR(50) NOT NULL DEFAULT 'Set'",
+  ];
+  for (const c of cols) {
+    try {
+      await db.query(`ALTER TABLE dirty_receipts ADD COLUMN ${c}`);
+    } catch (err) {
+      if (err.errno !== 1060 && !err.message.includes('Duplicate column')) {
+        // Abaikan duplicate
+      }
+    }
+  }
+}
+
+async function ensureBmhpBatchesAndTables(target) {
+  const db = target || pool;
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS bmhp_batches (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        bmhp_item_id INT UNSIGNED NOT NULL,
+        fiscal_year VARCHAR(10) NOT NULL DEFAULT '2026',
+        budget_source VARCHAR(50) NOT NULL DEFAULT 'BLUD',
+        batch_no VARCHAR(50) NOT NULL,
+        expiry_date DATE DEFAULT NULL,
+        initial_stock INT NOT NULL DEFAULT 0,
+        stock INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_batch_item (bmhp_item_id),
+        KEY idx_batch_group (bmhp_item_id, fiscal_year, budget_source, batch_no)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    const addTxCol = async (colDef) => {
+      try {
+        await db.query(`ALTER TABLE bmhp_transactions ADD COLUMN ${colDef}`);
+      } catch (err) {
+        if (err.errno !== 1060 && !err.message.includes('Duplicate column')) {
+          // ignore duplicate
+        }
+      }
+    };
+
+    await addTxCol("fiscal_year VARCHAR(10) DEFAULT '2026'");
+    await addTxCol("budget_source VARCHAR(50) DEFAULT 'BLUD'");
+    await addTxCol("batch_id INT UNSIGNED DEFAULT NULL");
+    await addTxCol("purpose VARCHAR(255) DEFAULT NULL");
+    await addTxCol("proof_image LONGTEXT DEFAULT NULL");
+    await addTxCol("officer_signature LONGTEXT DEFAULT NULL");
+    await addTxCol("unit_name VARCHAR(100) DEFAULT 'Instalasi CSSD'");
+    await addTxCol("trx_time VARCHAR(20) DEFAULT NULL");
+
+    // Seed sample item from mockup: Sterilization Flat Roll Pouch 75mm x 200m
+    try {
+      const [[existingPouch]] = await db.query(`SELECT * FROM bmhp_items WHERE code = 'BMHP-POUCH-01' OR name LIKE '%Flat Roll Pouch%' LIMIT 1`);
+      let pId;
+      if (!existingPouch) {
+        const [iRes] = await db.query(`
+          INSERT INTO bmhp_items (code, barcode, name, category, item_type, specification, unit_label, package_volume, initial_stock, stock, min_stock, batch_no, expiry_date, is_active)
+          VALUES ('BMHP-POUCH-01', 'BMHP-POUCH-01', 'Sterilization Flat Roll Pouch 75mm x 200m', 'Kemasan Steril', 'Pouch Roll', '75mm x 200m Film/Paper', 'Rol', '1 Rol = 200 Meter', 280, 280, 30, 'BATCH-001', '2029-04-30', 1)
+        `);
+        pId = iRes.insertId;
+      } else {
+        pId = existingPouch.id;
+      }
+
+      const [bRows] = await db.query('SELECT * FROM bmhp_batches WHERE bmhp_item_id = ?', [pId]);
+      if (bRows.length === 0) {
+        const [b1] = await db.query(`
+          INSERT INTO bmhp_batches (bmhp_item_id, fiscal_year, budget_source, batch_no, expiry_date, initial_stock, stock)
+          VALUES (?, '2026', 'BLUD', 'BATCH-001', '2029-04-30', 100, 140)
+        `, [pId]);
+        await db.query(`
+          INSERT INTO bmhp_batches (bmhp_item_id, fiscal_year, budget_source, batch_no, expiry_date, initial_stock, stock)
+          VALUES (?, '2026', 'APBD', 'BATCH-002', '2029-06-30', 100, 100)
+        `, [pId]);
+        await db.query(`
+          INSERT INTO bmhp_batches (bmhp_item_id, fiscal_year, budget_source, batch_no, expiry_date, initial_stock, stock)
+          VALUES (?, '2025', 'BLUD', 'BATCH-010', '2028-12-31', 40, 40)
+        `, [pId]);
+
+        await db.query(`
+          INSERT INTO bmhp_transactions (bmhp_item_id, type, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_name, officer, trx_date, trx_time, purpose, notes, stock_after)
+          VALUES (?, 'MASUK', 100, '2026', 'BLUD', ?, 'BATCH-001', '2029-04-30', 'Instalasi CSSD', 'Alvin', '2026-01-01', '08:00 WIB', 'Stok Awal', 'Stok Awal', 100)
+        `, [pId, b1.insertId]);
+        await db.query(`
+          INSERT INTO bmhp_transactions (bmhp_item_id, type, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_name, officer, trx_date, trx_time, purpose, notes, stock_after)
+          VALUES (?, 'MASUK', 50, '2026', 'BLUD', ?, 'BATCH-001', '2029-04-30', 'Instalasi CSSD', 'Alvin', '2026-11-13', '09:30 WIB', 'Barang Masuk - Pembelian', 'Barang Masuk - Pembelian', 150)
+        `, [pId, b1.insertId]);
+        await db.query(`
+          INSERT INTO bmhp_transactions (bmhp_item_id, type, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_name, officer, trx_date, trx_time, purpose, notes, stock_after)
+          VALUES (?, 'KELUAR', 10, '2026', 'BLUD', ?, 'BATCH-001', '2029-04-30', 'Instalasi CSSD', 'Resti', '2026-11-13', '15:10 WIB', 'Untuk pengemasan set instrumen', 'Pengambilan BMHP', 140)
+        `, [pId, b1.insertId]);
+
+        await db.query('UPDATE bmhp_items SET stock = 280 WHERE id = ?', [pId]);
+      }
+
+      // Pastikan item BMHP lain yang memiliki stock > 0 juga memiliki minimal 1 batch jika belum ada
+      const [otherItems] = await db.query('SELECT * FROM bmhp_items WHERE is_active = 1 AND id != ?', [pId]);
+      for (const it of otherItems) {
+        const [itBatches] = await db.query('SELECT id FROM bmhp_batches WHERE bmhp_item_id = ? LIMIT 1', [it.id]);
+        if (itBatches.length === 0 && it.stock > 0) {
+          await db.query(`
+            INSERT INTO bmhp_batches (bmhp_item_id, fiscal_year, budget_source, batch_no, expiry_date, initial_stock, stock)
+            VALUES (?, '2026', 'BLUD', ?, ?, ?, ?)
+          `, [it.id, it.batch_no || 'BATCH-001', it.expiry_date || null, it.stock, it.stock]);
+        }
+      }
+    } catch (sErr) {
+      console.warn('ensureBmhpBatches notice:', sErr.message);
+    }
+  } catch (err) {
+    console.error('ensureBmhpBatchesAndTables notice:', err.message);
+  }
+}
+
 async function ensureItemUnitsTable() {
   try {
     await pool.query(`
@@ -5627,22 +6219,43 @@ async function ensureNewFeatureTables() {
   }
 }
 
+// Auto-run schema initialization immediately upon module load for environments like Phusion Passenger/cPanel
+let initPromise = null;
+function runInitMigrations() {
+  if (!initPromise) {
+    initPromise = (async () => {
+      try {
+        await pool.query('SELECT 1');
+        await ensureDirtyReceiptsColumnsDirect(pool);
+        await ensureAdmin();
+        await ensureOfficersTable();
+        await ensureInstrumentSetsTable();
+        await ensureDiscrepancyTable();
+        await ensureCategoryMigration();
+        await ensurePackagingMaterialsTable();
+        await ensureMachineTypeMigration();
+        await ensureBmhpColumns();
+        await ensureBmhpBatchesAndTables(pool);
+        await ensureItemUnitsTable();
+        await ensureDttTables();
+        await ensureAppSchemaUpdates();
+        await ensureStandardSetItems();
+        await ensureNewFeatureTables();
+        console.log('Database schema initialization completed successfully.');
+      } catch (err) {
+        console.warn('Initialization warning:', err.message);
+      }
+    })();
+  }
+  return initPromise;
+}
+
+// Inisialisasi dijalankan otomatis saat module dimuat
+runInitMigrations();
+
 async function start() {
   try {
-    await pool.query('SELECT 1');
-    await ensureAdmin();
-    await ensureOfficersTable();
-    await ensureInstrumentSetsTable();
-    await ensureDiscrepancyTable();
-    await ensureCategoryMigration();
-    await ensurePackagingMaterialsTable();
-    await ensureMachineTypeMigration();
-    await ensureBmhpColumns();
-    await ensureItemUnitsTable();
-    await ensureDttTables();
-    await ensureAppSchemaUpdates();
-    await ensureStandardSetItems();
-    await ensureNewFeatureTables();
+    await runInitMigrations();
   } catch (err) {
     console.error('Gagal terhubung ke database. Pastikan MySQL berjalan dan sql/database.sql sudah diimport.');
     console.error(err.message);

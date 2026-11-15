@@ -247,6 +247,11 @@ CREATE TABLE `dirty_receipts` (
   `sender_signature` VARCHAR(255) DEFAULT NULL,
   `receiver_name` VARCHAR(100) NOT NULL,
   `receiver_signature` VARCHAR(255) DEFAULT NULL,
+  `confirmed_at` DATETIME DEFAULT NULL,
+  `confirmed_by` VARCHAR(100) DEFAULT NULL,
+  `items_detail` LONGTEXT DEFAULT NULL,
+  `extra_items` LONGTEXT DEFAULT NULL,
+  `checklist_status` ENUM('Lengkap', 'Tidak Lengkap', 'Ada Kerusakan') DEFAULT 'Lengkap',
   `notes` VARCHAR(500) DEFAULT NULL,
   `stage` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `status` ENUM('Diterima','Proses','Selesai','Karantina') NOT NULL DEFAULT 'Diterima',
@@ -656,21 +661,48 @@ CREATE TABLE `bmhp_items` (
   UNIQUE KEY `uq_bmhp_barcode` (`barcode`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE `bmhp_batches` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `bmhp_item_id` INT UNSIGNED NOT NULL,
+  `fiscal_year` VARCHAR(10) NOT NULL DEFAULT '2026',
+  `budget_source` VARCHAR(50) NOT NULL DEFAULT 'BLUD',
+  `batch_no` VARCHAR(50) NOT NULL,
+  `expiry_date` DATE DEFAULT NULL,
+  `initial_stock` INT NOT NULL DEFAULT 0,
+  `stock` INT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_batch_item` (`bmhp_item_id`),
+  KEY `idx_batch_group` (`bmhp_item_id`, `fiscal_year`, `budget_source`, `batch_no`),
+  CONSTRAINT `fk_bmhp_batches_item` FOREIGN KEY (`bmhp_item_id`) REFERENCES `bmhp_items` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE `bmhp_transactions` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `bmhp_item_id` INT UNSIGNED NOT NULL,
   `type` ENUM('MASUK','KELUAR') NOT NULL,
   `quantity` INT UNSIGNED NOT NULL,
+  `fiscal_year` VARCHAR(10) DEFAULT '2026',
+  `budget_source` VARCHAR(50) DEFAULT 'BLUD',
+  `batch_id` INT UNSIGNED DEFAULT NULL,
   `batch_no` VARCHAR(50) DEFAULT NULL,
   `expiry_date` DATE DEFAULT NULL,
   `unit_id` INT UNSIGNED DEFAULT NULL,
+  `unit_name` VARCHAR(100) DEFAULT 'Instalasi CSSD',
   `officer` VARCHAR(100) NOT NULL,
   `trx_date` DATE NOT NULL,
+  `trx_time` VARCHAR(20) DEFAULT NULL,
+  `purpose` VARCHAR(255) DEFAULT NULL,
+  `proof_image` LONGTEXT DEFAULT NULL,
+  `officer_signature` LONGTEXT DEFAULT NULL,
   `notes` VARCHAR(500) DEFAULT NULL,
   `stock_after` INT NOT NULL DEFAULT 0,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_bmhp_trx_date` (`trx_date`),
+  KEY `idx_bmhp_trx_item` (`bmhp_item_id`),
+  KEY `idx_bmhp_trx_batch` (`batch_id`),
   CONSTRAINT `fk_bmhp_trx_item` FOREIGN KEY (`bmhp_item_id`) REFERENCES `bmhp_items` (`id`),
   CONSTRAINT `fk_bmhp_trx_unit` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
