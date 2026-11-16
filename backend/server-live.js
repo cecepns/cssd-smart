@@ -2049,8 +2049,8 @@ registerCrud({
 registerCrud({
   path: 'distributions',
   table: 'distributions',
-  from: 'distributions t JOIN sterile_stock s ON s.id = t.stock_id JOIN units u ON u.id = t.unit_id',
-  select: `t.*, s.item_name, s.category, s.batch_no, s.unit_label, u.name AS unit_name,
+  from: 'distributions t LEFT JOIN sterile_stock s ON s.id = t.stock_id LEFT JOIN units u ON u.id = t.unit_id',
+  select: `t.*, COALESCE(t.gauze_type, s.item_name, 'Kasa Steril') AS item_name, COALESCE(s.category, IF(t.type = 'KASA', 'Kasa Steril', 'Alat Satuan')) AS category, s.batch_no, COALESCE(s.unit_label, IF(t.type = 'KASA', 'pouch', 'set')) AS unit_label, u.name AS unit_name,
     GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(t.started_at, t.created_at), COALESCE(t.completed_at, t.created_at)), 0) AS process_seconds,
     GREATEST(TIMESTAMPDIFF(SECOND, COALESCE(s.started_at, s.created_at), COALESCE(t.started_at, t.created_at)), 0) AS wait_seconds`,
   search: ['t.barcode', 's.item_name', 't.gauze_type', 'u.name', 't.officer', 't.receiver_name'],
@@ -2069,28 +2069,30 @@ registerCrud({
   roles: { read: ['admin', 'petugas', 'unit'], write: ['admin', 'petugas', 'unit'], remove: ['admin', 'petugas'] },
   fields: [
     field('type', 'enum', { values: ['ALAT', 'KASA'], required: true, label: 'Jenis distribusi' }),
-    field('barcode', 'string', { required: true, label: 'Barcode', max: 50 }),
+    field('barcode', 'string', { label: 'Barcode', max: 50 }),
     field('unit_id', 'int', { required: true, min: 1, label: 'Unit tujuan' }),
     field('quantity', 'int', { required: true, min: 1, label: 'Jumlah' }),
     field('gauze_type', 'string', { label: 'Jenis Kasa', max: 100 }),
     field('officer', 'string', { required: true, label: 'Petugas CSSD', max: 100 }),
     field('officer_signature', 'path', { label: 'TTD Petugas CSSD' }),
-    field('receiver_name', 'string', { label: 'Penerima di unit', max: 100 }),
+    field('receiver_name', 'string', { required: true, label: 'Penerima di unit', max: 100 }),
     field('receiver_signature', 'path', { label: 'TTD Penerima (Unit)' }),
     field('dist_date', 'date', { default: todayStr, label: 'Tanggal' }),
     field('notes', 'string', { label: 'Catatan', max: 500 }),
   ],
   async beforeDelete(conn, existing) {
-    const [[otherDists]] = await conn.query('SELECT COUNT(*) AS cnt FROM distributions WHERE stock_id = ? AND id != ?', [existing.stock_id, existing.id]);
-    // Kembalikan jumlah stok yang sudah didistribusikan ke sterile_stock
-    await conn.query(
-      `UPDATE sterile_stock SET quantity = quantity + ?, status = 'Tersedia'${otherDists.cnt === 0 ? ', completed_at = NULL' : ''} WHERE id = ?`,
-      [existing.quantity, existing.stock_id]
-    );
-    // Jika packaging berstatus 'Terdistribusi', kembalikan ke 'Lulus'
-    const [[stk]] = await conn.query('SELECT packaging_id FROM sterile_stock WHERE id = ?', [existing.stock_id]);
-    if (stk?.packaging_id) {
-      await conn.query("UPDATE packagings SET status = 'Lulus' WHERE id = ?", [stk.packaging_id]);
+    if (existing.stock_id) {
+      const [[otherDists]] = await conn.query('SELECT COUNT(*) AS cnt FROM distributions WHERE stock_id = ? AND id != ?', [existing.stock_id, existing.id]);
+      // Kembalikan jumlah stok yang sudah didistribusikan ke sterile_stock
+      await conn.query(
+        `UPDATE sterile_stock SET quantity = quantity + ?, status = 'Tersedia'${otherDists.cnt === 0 ? ', completed_at = NULL' : ''} WHERE id = ?`,
+        [existing.quantity, existing.stock_id]
+      );
+      // Jika packaging berstatus 'Terdistribusi', kembalikan ke 'Lulus'
+      const [[stk]] = await conn.query('SELECT packaging_id FROM sterile_stock WHERE id = ?', [existing.stock_id]);
+      if (stk?.packaging_id) {
+        await conn.query("UPDATE packagings SET status = 'Lulus' WHERE id = ?", [stk.packaging_id]);
+      }
     }
   },
   async beforeUpdate(conn, data, ctx, existing) {
@@ -2103,22 +2105,82 @@ registerCrud({
     }
     if (data.quantity !== undefined && data.quantity !== existing.quantity) {
       const diff = data.quantity - existing.quantity;
-      if (diff > 0) {
+      if (diff > 0 && existing.stock_id) {
         const [[stk]] = await conn.query('SELECT quantity FROM sterile_stock WHERE id = ?', [existing.stock_id]);
         if (!stk || stk.quantity < diff) {
           throw new HttpError(422, `Sisa stok tidak mencukupi untuk menambah jumlah (${stk?.quantity || 0} tersedia)`);
         }
+        await conn.query(
+          "UPDATE sterile_stock SET quantity = quantity - ?, status = IF(quantity <= 0, 'Terdistribusi', 'Tersedia') WHERE id = ?",
+          [diff, existing.stock_id]
+        );
       }
-      await conn.query(
-        "UPDATE sterile_stock SET quantity = quantity - ?, status = IF(quantity <= 0, 'Terdistribusi', 'Tersedia') WHERE id = ?",
-        [diff, existing.stock_id]
-      );
     }
   },
   async beforeCreate(conn, data, ctx) {
     if (ctx.user.role === 'unit') {
       if (!ctx.user.unit_id) throw new HttpError(403, 'Akun unit tidak terhubung ke unit rumah sakit');
       data.unit_id = ctx.user.unit_id;
+    }
+
+    const ts = resolveActionTimestamps(ctx.body);
+    data.started_at = ts.started_at;
+    data.completed_at = ts.completed_at;
+
+    // Alur Khusus: Distribusi KASA STERIL (Langsung dari CSSD ke Unit tanpa alat kotor)
+    if (data.type === 'KASA') {
+      data.gauze_type = data.gauze_type || ctx.body.item_name || 'Kasa Lipat Umum';
+      data.barcode = data.barcode || (await makeCode(conn, 'DK', data.dist_date));
+
+      let stock = null;
+      if (data.barcode && data.barcode.startsWith('KS-')) {
+        const [[found]] = await conn.query(
+          `SELECT * FROM sterile_stock WHERE barcode = ? AND status = 'Tersedia' LIMIT 1 FOR UPDATE`,
+          [data.barcode]
+        );
+        stock = found;
+      }
+      if (!stock) {
+        // Cari stok kasa steril yang tersedia berdasarkan jenis kasa (FIFO kadaluwarsa terdekat)
+        const [[foundByName]] = await conn.query(
+          `SELECT * FROM sterile_stock 
+           WHERE (item_name = ? OR item_name LIKE ?) AND category = 'Kasa Steril' AND status = 'Tersedia' AND quantity >= ?
+           ORDER BY expiry_date ASC, id ASC LIMIT 1 FOR UPDATE`,
+          [data.gauze_type, `%${data.gauze_type}%`, data.quantity || 1]
+        );
+        stock = foundByName;
+      }
+
+      if (!stock) {
+        // Jika belum ada stok terdaftar di sterile_stock, buat otomatis agar foreign key & ketertelusuran tetap valid
+        const distDate = data.dist_date || todayStr();
+        const batchNo = `BATCH-KS-${distDate.replace(/-/g, '')}`;
+        const autoStockBarcode = `KS-${distDate.replace(/-/g, '').slice(2)}-${pad(Math.floor(100 + Math.random() * 900))}`;
+        const [insertRes] = await conn.query(`
+          INSERT INTO sterile_stock (
+            barcode, category, item_name, batch_no, sterile_date, started_at, completed_at, expiry_date, unit_id, quantity, unit_label, officer, status
+          ) VALUES (?, 'Kasa Steril', ?, ?, ?, NOW(), NOW(), DATE_ADD(?, INTERVAL 30 DAY), ?, ?, 'pouch', ?, 'Terdistribusi')
+        `, [
+          autoStockBarcode,
+          data.gauze_type,
+          batchNo,
+          distDate,
+          distDate,
+          data.unit_id,
+          data.quantity || 1,
+          data.officer || 'Petugas CSSD'
+        ]);
+        data.stock_id = insertRes.insertId;
+      } else {
+        data.stock_id = stock.id;
+        ctx.stock = stock;
+      }
+      return;
+    }
+
+    // Alur Standar: Distribusi ALAT STERIL (Memakai scan barcode paket steril)
+    if (!data.barcode) {
+      throw new HttpError(422, 'Barcode paket alat steril wajib diisi atau di-scan', { barcode: 'Barcode wajib diisi' });
     }
     const [[stock]] = await conn.query(`
       SELECT s.*, p.receipt_id, r.barcode AS receipt_barcode, COALESCE(s.unit_id, r.unit_id) AS origin_unit_id, COALESCE(u.name, 'Instalasi CSSD') AS origin_unit_name
@@ -2139,13 +2201,9 @@ registerCrud({
     if (stock.status !== 'Tersedia' || stock.quantity < 1) throw new HttpError(409, 'Stok untuk barcode ini sudah habis', { barcode: 'Stok sudah habis' });
     if (stock.expiry_date < todayStr()) throw new HttpError(409, 'Alat sudah kedaluwarsa dan tidak boleh didistribusikan', { barcode: 'Alat kedaluwarsa' });
     const isGauze = stock.category === 'Kasa Steril';
-    if (data.type === 'KASA' && !isGauze) throw new HttpError(422, 'Barcode ini bukan kasa steril, gunakan menu Distribusi Alat Steril', { barcode: 'Bukan kasa steril' });
-    if (data.type === 'ALAT' && isGauze) throw new HttpError(422, 'Barcode ini adalah kasa steril, gunakan menu Distribusi Kasa Steril', { barcode: 'Ini kasa steril' });
+    if (isGauze) throw new HttpError(422, 'Barcode ini adalah kasa steril, gunakan menu Pengambilan Kasa Steril', { barcode: 'Ini kasa steril' });
     if (data.quantity > stock.quantity) throw new HttpError(422, `Jumlah melebihi stok tersedia (${stock.quantity})`, { quantity: `Maksimal ${stock.quantity}` });
 
-    const ts = resolveActionTimestamps(ctx.body);
-    data.started_at = ts.started_at;
-    data.completed_at = ts.completed_at;
     // Gunakan barcode resmi paket steril dan isi otomatis unit tujuan jika belum diisi
     data.barcode = stock.barcode;
     if (!data.unit_id && stock.origin_unit_id) {
@@ -2155,13 +2213,15 @@ registerCrud({
     ctx.stock = stock;
   },
   async afterCreate(conn, id, data, ctx) {
-    await conn.query(
-      "UPDATE sterile_stock SET quantity = quantity - ?, status = IF(quantity <= 0, 'Terdistribusi', status), completed_at = COALESCE(completed_at, ?) WHERE id = ?",
-      [data.quantity, data.started_at, ctx.stock.id]
-    );
-    if (ctx.stock.quantity - data.quantity <= 0) {
-      if (ctx.stock.packaging_id) {
-        await conn.query("UPDATE packagings SET status = 'Terdistribusi' WHERE id = ?", [ctx.stock.packaging_id]);
+    if (ctx.stock) {
+      await conn.query(
+        "UPDATE sterile_stock SET quantity = GREATEST(quantity - ?, 0), status = IF(quantity <= 0, 'Terdistribusi', status), completed_at = COALESCE(completed_at, ?) WHERE id = ?",
+        [data.quantity, data.started_at, ctx.stock.id]
+      );
+      if (ctx.stock.quantity - data.quantity <= 0) {
+        if (ctx.stock.packaging_id) {
+          await conn.query("UPDATE packagings SET status = 'Terdistribusi' WHERE id = ?", [ctx.stock.packaging_id]);
+        }
       }
     }
     const [[fresh]] = await conn.query(

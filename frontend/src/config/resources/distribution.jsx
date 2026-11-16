@@ -70,32 +70,33 @@ const renderSignatureCell = (key) => (r) => {
 const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
   key,
   title,
-  subtitle,
+  subtitle: subtitle || (gauze
+    ? 'Pencatatan serah terima kasa steril bersih & siap pakai dari CSSD ke unit'
+    : 'Alat steril siap diambil unit — pakai barcode'),
   icon,
   endpoint: API_ENDPOINTS.DISTRIBUTIONS,
   fixedParams: { type },
   fixedBody: { type },
-  searchPlaceholder: 'Cari barcode, nama, unit tujuan...',
-  createLabel: 'Distribusi Baru',
+  searchPlaceholder: gauze ? 'Cari jenis kasa, barcode, unit penerima...' : 'Cari barcode, nama, unit tujuan...',
+  createLabel: gauze ? 'Catat Pengambilan Kasa' : 'Distribusi Baru',
   dateFilter: true,
   timeFilter: true,
   filters: [{ name: 'unit_id', label: 'Unit Tujuan', optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS }],
   columns: [
-    { key: 'barcode', label: 'Barcode', sortable: true, render: mono('barcode') },
+    { key: 'barcode', label: gauze ? 'Barcode Bukti' : 'Barcode', sortable: true, render: mono('barcode') },
     { key: 'dist_date', label: 'Tanggal', sortable: true, render: date('dist_date') },
-    { key: 'started_at', label: 'Jam Proses', sortable: true, render: timeWindow },
+    { key: 'started_at', label: gauze ? 'Jam Pengambilan' : 'Jam Proses', sortable: true, render: timeWindow },
     { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     ...(gauze
       ? [{ key: 'gauze_type', label: 'Jenis Kasa', sortable: true, render: (r) => <b className="font-bold text-brand-700">{r.gauze_type || r.item_name}</b> }]
-      : [{ key: 'item_name', label: 'Alat', sortable: true, render: bold('item_name') }]),
-    { key: 'batch_no', label: 'Batch', render: mono('batch_no') },
+      : [{ key: 'item_name', label: 'Alat', sortable: true, render: bold('item_name') }, { key: 'batch_no', label: 'Batch', render: mono('batch_no') }]),
     { key: 'unit_name', label: 'Unit Tujuan', sortable: true },
     { key: 'quantity', label: 'Jumlah', sortable: true, render: qty() },
     { key: 'officer', label: 'Petugas CSSD' },
     { key: 'officer_signature', label: 'TTD CSSD', render: renderSignatureCell('officer_signature') },
     { key: 'receiver_name', label: 'Penerima Unit' },
     { key: 'receiver_signature', label: 'TTD Unit', render: renderSignatureCell('receiver_signature') },
-    { key: 'type', label: 'Jenis', render: badge('type') },
+    ...(!gauze ? [{ key: 'type', label: 'Jenis', render: badge('type') }] : []),
   ],
   canEdit: true,
   canDelete: true,
@@ -104,90 +105,148 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
   form: {
     size: 'lg',
     subtitle: gauze
-      ? 'Pilih jenis kasa, unit pengambil, dan tanda tangan langsung di layar HP petugas unit.'
+      ? 'Pilih jenis kasa steril, jumlah, unit penerima, serta tanda tangan serah terima.'
       : 'Pilih dari daftar set siap ambil atau scan barcode (ST-... / AK-...). Rincian set otomatis keluar.',
-    fields: [
-      {
-        name: '_set_selector',
-        type: 'custom',
-        span: 2,
-        render: ({ values, setValue, setValues }) => (
-          <SterileSetSelector values={values} setValue={setValue} setValues={setValues} gauze={gauze} />
-        ),
-      },
-      ...(gauze
-        ? [
-            {
-              name: 'gauze_type',
-              label: 'Pilihan Jenis Kasa Steril',
-              type: 'custom',
-              required: true,
-              span: 2,
-              render: ({ values, setValue }) => {
-                const current = values.gauze_type || '';
-                return (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-slate-600">Klik jenis kasa yang didistribusikan:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {GAUZE_TYPES.map((gt) => {
-                        const isSelected = current === gt;
-                        return (
-                          <button
-                            key={gt}
-                            type="button"
-                            onClick={() => {
-                              setValue('gauze_type', gt);
-                              if (!values.item_name) setValue('item_name', gt);
-                            }}
-                            className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                              isSelected
-                                ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700 ring-offset-1'
-                                : 'border border-slate-200 bg-slate-50 text-slate-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800'
-                            }`}
-                          >
-                            {gt}
-                          </button>
-                        );
-                      })}
-                    </div>
+    fields: gauze
+      ? [
+          {
+            name: 'gauze_type',
+            label: 'Pilihan Jenis Kasa Steril',
+            type: 'custom',
+            required: true,
+            span: 2,
+            render: ({ values, setValue }) => {
+              const current = values.gauze_type || values.item_name || '';
+              return (
+                <div className="space-y-2 rounded-2xl border border-brand-200/90 bg-brand-50/40 p-3.5 sm:p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-brand-900">
+                      Jenis Kasa Steril Siap Pakai <span className="text-rose-500">*</span>
+                    </span>
+                    <span className="text-[11px] font-medium text-slate-500">Klik pilihan di bawah</span>
                   </div>
-                );
-              },
+                  <div className="flex flex-wrap gap-2">
+                    {GAUZE_TYPES.map((gt) => {
+                      const isSelected = current === gt;
+                      return (
+                        <button
+                          key={gt}
+                          type="button"
+                          onClick={() => {
+                            setValue('gauze_type', gt);
+                            setValue('item_name', gt);
+                          }}
+                          className={`rounded-xl px-3.5 py-2 text-xs font-bold transition shadow-xs ${
+                            isSelected
+                              ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700 ring-offset-1'
+                              : 'border border-slate-200 bg-white text-slate-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800'
+                          }`}
+                        >
+                          {gt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <input
+                    type="text"
+                    value={values.gauze_type || ''}
+                    onChange={(e) => {
+                      setValue('gauze_type', e.target.value);
+                      setValue('item_name', e.target.value);
+                    }}
+                    placeholder="Atau ketik nama / ukuran jenis kasa lainnya..."
+                    className="input-base text-xs mt-2 bg-white"
+                  />
+                </div>
+              );
             },
-          ]
-        : []),
-      {
-        name: 'barcode',
-        label: 'Kode barcode paket steril',
-        type: 'barcode',
-        required: true,
-        placeholder: gauze ? 'Scan barcode kasa (KS-...)' : 'Scan barcode alat (ST-... / AS-... / AK-...)',
-        onScan: lookupStock(gauze),
-      },
-      {
-        type: 'remote-select',
-        name: 'unit_id',
-        label: 'Unit tujuan / pengambil',
-        required: true,
-        placeholder: 'Pilih unit...',
-        optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS,
-        optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
-        default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
-      },
-      { name: 'quantity', label: 'Jumlah', type: 'number', required: true, min: 1, default: 1 },
-      officerSelectField({
-        name: 'officer',
-        label: 'Petugas CSSD',
-        required: true,
-        placeholder: 'Pilih petugas CSSD...',
-        onSignatureField: 'officer_signature',
-      }),
-      { name: 'officer_signature', label: 'TTD Petugas CSSD (Otomatis)', type: 'signature' },
-      { name: 'receiver_name', label: 'Petugas Pengambil (Unit)', required: true, maxLength: 100, placeholder: 'Nama perawat / petugas unit' },
-      { name: 'receiver_signature', label: 'TTD Petugas Unit (Layar HP)', type: 'signature' },
-      { name: 'dist_date', label: 'Tanggal', type: 'date', required: true, default: todayISO },
-      { name: 'notes', label: 'Catatan', type: 'textarea', maxLength: 500, placeholder: 'Catatan tambahan...' },
-    ],
+          },
+          {
+            name: 'quantity',
+            label: 'Jumlah Pengambilan (Pouch / Bungkus)',
+            type: 'number',
+            required: true,
+            min: 1,
+            default: 1,
+          },
+          {
+            type: 'remote-select',
+            name: 'unit_id',
+            label: 'Unit Penerima / Pengambil',
+            required: true,
+            placeholder: 'Pilih unit ruangan...',
+            optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS,
+            optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+            default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
+          },
+          officerSelectField({
+            name: 'officer',
+            label: 'Petugas Penyerah (CSSD)',
+            required: true,
+            placeholder: 'Pilih petugas CSSD...',
+            onSignatureField: 'officer_signature',
+          }),
+          { name: 'officer_signature', label: 'TTD Petugas Penyerah (Otomatis / Layar)', type: 'signature' },
+          {
+            name: 'receiver_name',
+            label: 'Petugas Pengambil (Unit)',
+            required: true,
+            maxLength: 100,
+            placeholder: 'Nama perawat / petugas ruangan',
+            default: ({ user }) => (user?.role === 'unit' ? user.name : ''),
+          },
+          { name: 'receiver_signature', label: 'TTD Petugas Pengambil (Layar HP)', type: 'signature' },
+          { name: 'dist_date', label: 'Tanggal Pengambilan', type: 'date', required: true, default: todayISO },
+          {
+            name: 'barcode',
+            label: 'Kode Barcode (Opsional)',
+            type: 'text',
+            placeholder: 'Otomatis dibuat oleh sistem (mis. DK-...) jika dikosongkan',
+            maxLength: 50,
+          },
+          { name: 'notes', label: 'Catatan Pengambilan', type: 'textarea', maxLength: 500, placeholder: 'Catatan kebutuhan unit (opsional)...', span: 2 },
+        ]
+      : [
+          {
+            name: '_set_selector',
+            type: 'custom',
+            span: 2,
+            render: ({ values, setValue, setValues }) => (
+              <SterileSetSelector values={values} setValue={setValue} setValues={setValues} gauze={gauze} />
+            ),
+          },
+          {
+            name: 'barcode',
+            label: 'Kode barcode paket steril',
+            type: 'barcode',
+            required: true,
+            placeholder: 'Scan barcode alat (ST-... / AS-... / AK-...)',
+            onScan: lookupStock(gauze),
+          },
+          {
+            type: 'remote-select',
+            name: 'unit_id',
+            label: 'Unit tujuan / pengambil',
+            required: true,
+            placeholder: 'Pilih unit...',
+            optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS,
+            optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
+            default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
+          },
+          { name: 'quantity', label: 'Jumlah', type: 'number', required: true, min: 1, default: 1 },
+          officerSelectField({
+            name: 'officer',
+            label: 'Petugas CSSD',
+            required: true,
+            placeholder: 'Pilih petugas CSSD...',
+            onSignatureField: 'officer_signature',
+          }),
+          { name: 'officer_signature', label: 'TTD Petugas CSSD (Otomatis)', type: 'signature' },
+          { name: 'receiver_name', label: 'Petugas Pengambil (Unit)', required: true, maxLength: 100, placeholder: 'Nama perawat / petugas unit' },
+          { name: 'receiver_signature', label: 'TTD Petugas Unit (Layar HP)', type: 'signature' },
+          { name: 'dist_date', label: 'Tanggal', type: 'date', required: true, default: todayISO },
+          { name: 'notes', label: 'Catatan', type: 'textarea', maxLength: 500, placeholder: 'Catatan tambahan...' },
+        ],
   },
 });
 
