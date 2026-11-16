@@ -501,7 +501,7 @@ export default function InstrumentSetsPage() {
               >
                 <option value="ALL">Semua Kategori ({stats.totalSets})</option>
                 <option value="Steril">1. Set Steril ({stats.sterilCount})</option>
-                <option value="DTT">2. Set DTT ({stats.dttCount})</option>
+                <option value="DTT">2. Set DTT / Reuse ({stats.dttCount})</option>
               </select>
 
               <select

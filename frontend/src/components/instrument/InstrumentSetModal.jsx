@@ -181,7 +181,7 @@ export default function InstrumentSetModal({
                     : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                <span>1. Set Steril (Autoclave/Plasma)</span>
+                <span>1. Set Steril</span>
               </button>
               <button
                 type="button"
@@ -192,13 +192,13 @@ export default function InstrumentSetModal({
                     : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                <span>2. Set DTT (Reuse / Sirkuit)</span>
+                <span>2. Set DTT / Reuse</span>
               </button>
             </div>
             <p className="mt-1.5 text-[11px] text-slate-500">
               {processType === 'Steril'
                 ? 'Set Steril: Diproses melalui alur Pencucian, Pengeringan, Pengemasan, Sterilisasi, dan Distribusi Alat Steril.'
-                : 'Set DTT: Diproses melalui alur Penerimaan Alat Kotor DTT, Desinfeksi Tingkat Tinggi, dan Pengambilan Alat DTT.'}
+                : 'Set DTT / Reuse: Diproses melalui alur Penerimaan Alat Kotor DTT, Desinfeksi Tingkat Tinggi, dan Pengambilan Alat DTT.'}
             </p>
           </div>
 
