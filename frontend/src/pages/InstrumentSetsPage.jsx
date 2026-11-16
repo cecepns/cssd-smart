@@ -86,6 +86,7 @@ export default function InstrumentSetsPage() {
 
   // Filters Tab 1
   const [search, setSearch] = useState('');
+  const [filterProcess, setFilterProcess] = useState('ALL'); // ALL, Steril, DTT
   const [filterStock, setFilterStock] = useState('ALL'); // ALL, AVAILABLE, EMPTY
   const [filterComplete, setFilterComplete] = useState('ALL'); // ALL, COMPLETE, INCOMPLETE
 
@@ -121,6 +122,8 @@ export default function InstrumentSetsPage() {
     let totalInUnit = 0;
     let completeCount = 0;
     let incompleteCount = 0;
+    let sterilCount = 0;
+    let dttCount = 0;
 
     for (const s of sets) {
       totalAvailable += Number(s.available_stock) || 0;
@@ -128,6 +131,9 @@ export default function InstrumentSetsPage() {
       totalInUnit += Number(s.in_unit_stock ?? s.distributed_stock) || 0;
       if (s.completeness_status === 'Lengkap') completeCount++;
       else incompleteCount++;
+
+      if (s.process_type === 'DTT') dttCount++;
+      else sterilCount++;
     }
 
     return {
@@ -137,6 +143,8 @@ export default function InstrumentSetsPage() {
       totalInUnit,
       completeCount,
       incompleteCount,
+      sterilCount,
+      dttCount,
     };
   }, [sets]);
 
@@ -150,6 +158,11 @@ export default function InstrumentSetsPage() {
         (s.code && s.code.toLowerCase().includes(q)) ||
         (s.items && s.items.some((it) => it.instrument_name.toLowerCase().includes(q)));
 
+      const matchProcess =
+        filterProcess === 'ALL' ||
+        (filterProcess === 'Steril' && (s.process_type === 'Steril' || !s.process_type)) ||
+        (filterProcess === 'DTT' && s.process_type === 'DTT');
+
       const matchStock =
         filterStock === 'ALL' ||
         (filterStock === 'AVAILABLE' && s.available_stock > 0) ||
@@ -160,9 +173,9 @@ export default function InstrumentSetsPage() {
         (filterComplete === 'COMPLETE' && s.completeness_status === 'Lengkap') ||
         (filterComplete === 'INCOMPLETE' && s.completeness_status === 'Tidak Lengkap');
 
-      return matchSearch && matchStock && matchComplete;
+      return matchSearch && matchProcess && matchStock && matchComplete;
     });
-  }, [sets, search, filterStock, filterComplete]);
+  }, [sets, search, filterProcess, filterStock, filterComplete]);
 
   // Handlers Create / Edit Set
   const handleOpenCreate = () => {
@@ -479,8 +492,18 @@ export default function InstrumentSetsPage() {
               />
             </div>
 
-            {/* Filters (Grid 2 kolom rapi di mobile) */}
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:w-auto">
+            {/* Filters (Grid rapi di mobile & desktop) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:flex sm:items-center sm:w-auto">
+              <select
+                value={filterProcess}
+                onChange={(e) => setFilterProcess(e.target.value)}
+                className="input-base w-full sm:w-auto text-xs font-semibold py-2 col-span-2 sm:col-span-1 border-brand-200 bg-brand-50/30 text-brand-900"
+              >
+                <option value="ALL">Semua Kategori ({stats.totalSets})</option>
+                <option value="Steril">1. Set Steril ({stats.sterilCount})</option>
+                <option value="DTT">2. Set DTT ({stats.dttCount})</option>
+              </select>
+
               <select
                 value={filterStock}
                 onChange={(e) => setFilterStock(e.target.value)}
@@ -502,13 +525,14 @@ export default function InstrumentSetsPage() {
               </select>
             </div>
 
-            {(search || filterStock !== 'ALL' || filterComplete !== 'ALL') && (
+            {(search || filterStock !== 'ALL' || filterComplete !== 'ALL' || filterProcess !== 'ALL') && (
               <button
                 type="button"
                 onClick={() => {
                   setSearch('');
                   setFilterStock('ALL');
                   setFilterComplete('ALL');
+                  setFilterProcess('ALL');
                 }}
                 className="self-end text-xs font-semibold text-brand-700 hover:underline px-1 sm:self-auto"
               >

@@ -47,6 +47,15 @@ export default function InstrumentSetCard({
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            {set.process_type === 'DTT' ? (
+              <span className="inline-flex items-center rounded-lg border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] sm:text-[11px] font-extrabold text-amber-800">
+                Set DTT
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-lg border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] sm:text-[11px] font-extrabold text-brand-700">
+                Set Steril
+              </span>
+            )}
             {isAvailable ? (
               <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold text-emerald-700">
                 Tersedia

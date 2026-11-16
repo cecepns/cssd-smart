@@ -121,29 +121,26 @@ export const dttReceiptsConfig = {
       {
         type: 'remote-select',
         name: '_item_lookup',
-        label: 'Pilih Alat Medis DTT (sesuai unit)',
+        label: 'Pilih Alat / Set Medis DTT',
         span: 2,
         noSubmit: true,
-        placeholder: 'Pilih alat DTT terdaftar milik unit...',
-        disabledPlaceholder: 'Pilih Unit Pengirim terlebih dahulu...',
-        emptyText: 'Belum ada alat DTT terdaftar untuk unit ini di Master Alat',
-        enabledWhen: (vals) => Boolean(vals?.unit_id),
+        placeholder: 'Pilih alat atau set DTT terdaftar...',
         optionsEndpoint: API_ENDPOINTS.LOOKUPS.ITEMS,
         optionsParams: (vals) => ({
           is_active: 1,
           sort_by: 'name',
           order: 'asc',
           process_type: 'DTT',
-          require_unit: 1,
           unit_id: vals?.unit_id || '',
         }),
-        optionLabel: (r) => `${r.code} — ${r.name}${r.unit_label ? ` (${r.unit_label})` : ''}`,
+        optionLabel: (r) => `${r.code} — ${r.name}${r.unit_name ? ` [${r.unit_name}]` : ''}${r.unit_label ? ` (${r.unit_label})` : ''}`,
         onChange: (_, { option, setValues }) => {
           if (!option) return;
           setValues({
             item_code: option.code || '',
             item_name: option.name || '',
             unit_label: option.unit_label || 'Pcs',
+            ...(option.unit_id ? { unit_id: String(option.unit_id) } : {}),
           });
         },
       },

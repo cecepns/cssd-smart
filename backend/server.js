@@ -314,6 +314,10 @@ async function runList(cfg, query, { all = false, user = null } = {}) {
   const where = [];
   const params = [];
 
+  if (cfg.fixedWhere) {
+    where.push(cfg.fixedWhere);
+  }
+
   // Filter unit luar: hanya bisa melihat transaksi dari unitnya masing-masing
   if (user?.role === 'unit') {
     if (cfg.unitColumn) {
@@ -407,7 +411,9 @@ function toCsv(rows, columns) {
 }
 
 async function fetchOne(cfg, id, conn = pool) {
-  const [rows] = await conn.query(`SELECT ${cfg.select} FROM ${cfg.from} WHERE ${cfg.pk} = ? LIMIT 1`, [id]);
+  const where = [`${cfg.pk} = ?`];
+  if (cfg.fixedWhere) where.push(cfg.fixedWhere);
+  const [rows] = await conn.query(`SELECT ${cfg.select} FROM ${cfg.from} WHERE ${where.join(' AND ')} LIMIT 1`, [id]);
   return rows[0] ? enrichTimingRow(rows[0]) : null;
 }
 
@@ -832,15 +838,14 @@ router.get('/lookups/items', auth, wrap(async (req, res) => {
   }
   if (req.user.role === 'unit') {
     if (!req.user.unit_id) return res.json({ success: true, data: [] });
-    where.push('t.unit_id = ?');
+    where.push('(t.unit_id = ? OR t.unit_id IS NULL)');
     params.push(req.user.unit_id);
   } else if (req.query.unit_id !== undefined && req.query.unit_id !== '') {
     const uid = Number(req.query.unit_id);
-    if (!Number.isInteger(uid) || uid < 1) return res.json({ success: true, data: [] });
-    where.push('t.unit_id = ?');
-    params.push(uid);
-  } else if (req.query.require_unit === '1') {
-    return res.json({ success: true, data: [] });
+    if (Number.isInteger(uid) && uid >= 1) {
+      where.push('(t.unit_id = ? OR t.unit_id IS NULL)');
+      params.push(uid);
+    }
   }
   const [rows] = await pool.query(
     `SELECT t.id, t.unit_id, u.name AS unit_name, t.code, t.name, t.process_type, t.category, t.unit_label
@@ -1749,8 +1754,8 @@ router.get('/sterile-stock/lookup', auth, wrap(async (req, res) => {
       DATEDIFF(t.expiry_date, CURDATE()) AS days_left,
       p.receipt_id,
       r.barcode AS receipt_barcode,
-      r.unit_id AS origin_unit_id,
-      u.name AS origin_unit_name,
+      COALESCE(t.unit_id, r.unit_id) AS origin_unit_id,
+      COALESCE(u.name, 'Instalasi CSSD') AS origin_unit_name,
       r.sender_name AS origin_sender,
       r.receipt_date,
       s.id AS set_id,
@@ -1760,7 +1765,7 @@ router.get('/sterile-stock/lookup', auth, wrap(async (req, res) => {
     FROM sterile_stock t
     LEFT JOIN packagings p ON p.id = t.packaging_id
     LEFT JOIN dirty_receipts r ON r.id = p.receipt_id
-    LEFT JOIN units u ON u.id = r.unit_id
+    LEFT JOIN units u ON u.id = COALESCE(t.unit_id, r.unit_id)
     LEFT JOIN instrument_sets s ON (s.name = t.item_name OR s.code = t.item_name)
     WHERE t.barcode = ? OR r.barcode = ?
     ORDER BY (t.status = 'Tersedia' AND t.quantity > 0) DESC, t.id DESC
@@ -1803,8 +1808,8 @@ router.get('/sterile-stock/ready', auth, wrap(async (req, res) => {
       DATEDIFF(t.expiry_date, CURDATE()) AS days_left,
       p.receipt_id,
       r.barcode AS receipt_barcode,
-      r.unit_id AS origin_unit_id,
-      u.name AS origin_unit_name,
+      COALESCE(t.unit_id, r.unit_id) AS origin_unit_id,
+      COALESCE(u.name, 'Instalasi CSSD') AS origin_unit_name,
       r.sender_name AS origin_sender,
       r.receipt_date,
       s.id AS set_id,
@@ -1814,7 +1819,7 @@ router.get('/sterile-stock/ready', auth, wrap(async (req, res) => {
     FROM sterile_stock t
     LEFT JOIN packagings p ON p.id = t.packaging_id
     LEFT JOIN dirty_receipts r ON r.id = p.receipt_id
-    LEFT JOIN units u ON u.id = r.unit_id
+    LEFT JOIN units u ON u.id = COALESCE(t.unit_id, r.unit_id)
     LEFT JOIN instrument_sets s ON (s.name = t.item_name OR s.code = t.item_name)
     WHERE t.status = 'Tersedia' AND t.quantity > 0 AND t.expiry_date >= CURDATE()
   `;
@@ -1833,10 +1838,10 @@ router.get('/sterile-stock/ready', auth, wrap(async (req, res) => {
 
   if (req.user.role === 'unit') {
     if (!req.user.unit_id) return res.json({ success: true, data: [] });
-    sql += ' AND (r.unit_id = ? OR r.unit_id IS NULL)';
+    sql += ' AND (COALESCE(t.unit_id, r.unit_id) = ? OR (t.unit_id IS NULL AND r.unit_id IS NULL))';
     params.push(req.user.unit_id);
   } else if (unit_id) {
-    sql += ' AND (r.unit_id = ? OR r.unit_id IS NULL)';
+    sql += ' AND (COALESCE(t.unit_id, r.unit_id) = ? OR (t.unit_id IS NULL AND r.unit_id IS NULL))';
     params.push(unit_id);
   }
 
@@ -1948,6 +1953,99 @@ registerCrud({
   },
 });
 
+// ---------- Stok Awal & Produksi Kasa Steril (Langsung Masuk Stok) ----------
+registerCrud({
+  path: 'gauze-stock',
+  table: 'sterile_stock',
+  from: `sterile_stock t
+    LEFT JOIN packagings p ON p.id = t.packaging_id
+    LEFT JOIN dirty_receipts r ON r.id = p.receipt_id
+    LEFT JOIN units u ON u.id = COALESCE(t.unit_id, r.unit_id)`,
+  select: `t.*,
+    ${STOCK_STATUS_SQL} AS display_status,
+    DATEDIFF(t.expiry_date, CURDATE()) AS days_left,
+    COALESCE(t.unit_id, r.unit_id) AS origin_unit_id,
+    COALESCE(u.name, 'Instalasi CSSD') AS origin_unit_name,
+    COALESCE(t.officer, (SELECT officer FROM packagings WHERE id = t.packaging_id), 'Petugas CSSD') AS officer`,
+  fixedWhere: "t.category = 'Kasa Steril'",
+  search: ['t.barcode', 't.item_name', 't.batch_no', 't.officer', 'u.name'],
+  sort: {
+    id: 't.id',
+    barcode: 't.barcode',
+    item_name: 't.item_name',
+    batch_no: 't.batch_no',
+    sterile_date: 't.sterile_date',
+    expiry_date: 't.expiry_date',
+    quantity: 't.quantity',
+    status: 't.status',
+  },
+  defaultSort: 'id',
+  filters: {
+    status: STOCK_STATUS_SQL,
+    barcode: 't.barcode',
+    batch_no: 't.batch_no',
+    origin_unit_id: 'COALESCE(t.unit_id, r.unit_id)',
+  },
+  dateColumn: 't.sterile_date',
+  exportColumns: [
+    ['barcode', 'Barcode'],
+    ['item_name', 'Jenis Kasa'],
+    ['batch_no', 'No. Batch'],
+    ['sterile_date', 'Tgl Steril'],
+    ['expiry_date', 'Kedaluwarsa'],
+    ['quantity', 'Jumlah Sisa'],
+    ['unit_label', 'Satuan'],
+    ['origin_unit_name', 'Unit / Asal'],
+    ['officer', 'Petugas CSSD'],
+    ['display_status', 'Status'],
+    ['notes', 'Catatan'],
+  ],
+  roles: {
+    read: ['admin', 'petugas'],
+    write: ['admin', 'petugas'],
+    remove: ['admin', 'petugas'],
+    export: ['admin', 'petugas'],
+  },
+  fields: [
+    field('item_name', 'string', { required: true, label: 'Jenis Kasa Steril', max: 150 }),
+    field('quantity', 'int', { required: true, min: 1, label: 'Jumlah' }),
+    field('unit_label', 'string', { default: 'pouch', max: 30, label: 'Satuan' }),
+    field('batch_no', 'string', { label: 'No. Batch Sterilisasi', max: 50 }),
+    field('sterile_date', 'date', { default: todayStr, label: 'Tanggal Steril' }),
+    field('expiry_date', 'date', { label: 'Tanggal Kedaluwarsa' }),
+    field('unit_id', 'int', { label: 'Unit Khusus (Opsional)' }),
+    field('officer', 'string', { required: true, label: 'Petugas CSSD', max: 100 }),
+    field('notes', 'string', { label: 'Catatan', max: 500 }),
+  ],
+  async beforeCreate(conn, data, ctx) {
+    data.category = 'Kasa Steril';
+    data.status = 'Tersedia';
+    data.started_at = nowDateTimeStr();
+    data.completed_at = null;
+    data.sterile_date = data.sterile_date || todayStr();
+    if (!data.expiry_date) {
+      data.expiry_date = addMonths(data.sterile_date, DEFAULT_SHELF_LIFE_MONTHS || 6);
+    }
+    if (!data.batch_no) {
+      data.batch_no = `KS-BATCH-${data.sterile_date.replace(/-/g, '')}`;
+    }
+    data.barcode = await makeCode(conn, 'KS', data.sterile_date);
+  },
+  async beforeUpdate(conn, data, ctx, existing) {
+    if (existing.status === 'Terdistribusi') {
+      throw new HttpError(409, 'Stok yang sudah terdistribusi tidak dapat diedit');
+    }
+    delete data.barcode;
+    delete data.category;
+  },
+  async beforeDelete(conn, existing) {
+    const [[dists]] = await conn.query('SELECT COUNT(*) AS cnt FROM distributions WHERE stock_id = ?', [existing.id]);
+    if (dists && dists.cnt > 0) {
+      throw new HttpError(409, 'Tidak dapat menghapus stok yang sudah memiliki riwayat distribusi');
+    }
+  },
+});
+
 // ---------- Tahap 8 & 9: Distribusi Alat / Kasa Steril (barcode) ----------
 registerCrud({
   path: 'distributions',
@@ -2024,11 +2122,11 @@ registerCrud({
       data.unit_id = ctx.user.unit_id;
     }
     const [[stock]] = await conn.query(`
-      SELECT s.*, p.receipt_id, r.barcode AS receipt_barcode, r.unit_id AS origin_unit_id, u.name AS origin_unit_name
+      SELECT s.*, p.receipt_id, r.barcode AS receipt_barcode, COALESCE(s.unit_id, r.unit_id) AS origin_unit_id, COALESCE(u.name, 'Instalasi CSSD') AS origin_unit_name
       FROM sterile_stock s
       LEFT JOIN packagings p ON p.id = s.packaging_id
       LEFT JOIN dirty_receipts r ON r.id = p.receipt_id
-      LEFT JOIN units u ON u.id = r.unit_id
+      LEFT JOIN units u ON u.id = COALESCE(s.unit_id, r.unit_id)
       WHERE (s.barcode = ? OR r.barcode = ?)
       ORDER BY (s.status = 'Tersedia' AND s.quantity > 0) DESC, s.id DESC
       LIMIT 1
@@ -2063,7 +2161,9 @@ registerCrud({
       [data.quantity, data.started_at, ctx.stock.id]
     );
     if (ctx.stock.quantity - data.quantity <= 0) {
-      await conn.query("UPDATE packagings SET status = 'Terdistribusi' WHERE id = ?", [ctx.stock.packaging_id]);
+      if (ctx.stock.packaging_id) {
+        await conn.query("UPDATE packagings SET status = 'Terdistribusi' WHERE id = ?", [ctx.stock.packaging_id]);
+      }
     }
     const [[fresh]] = await conn.query(
       `SELECT d.*, u.name AS unit_name, st.item_name AS stock_item_name, st.unit_label AS stock_unit_label
@@ -2587,6 +2687,10 @@ async function getInstrumentSetsWithStock(query = {}, user = null) {
     sql += ' AND is_active = ?';
     params.push(Number(query.is_active));
   }
+  if (query.process_type && ['Steril', 'DTT'].includes(query.process_type)) {
+    sql += ' AND process_type = ?';
+    params.push(query.process_type);
+  }
   if (query.completeness_status) {
     sql += ' AND completeness_status = ?';
     params.push(query.completeness_status);
@@ -3078,6 +3182,7 @@ router.get('/instrument-sets/:id', auth, wrap(async (req, res) => {
 router.post('/instrument-sets', auth, allow('admin'), wrap(async (req, res) => {
   const body = req.body || {};
   if (!body.name || !body.name.trim()) throw new HttpError(422, 'Nama set instrumen wajib diisi');
+  const processType = body.process_type === 'DTT' ? 'DTT' : 'Steril';
   const completeness = body.completeness_status === 'Tidak Lengkap' ? 'Tidak Lengkap' : 'Lengkap';
   const missingNotes = body.missing_notes ? String(body.missing_notes).trim() : null;
   const description = body.description ? String(body.description).trim() : null;
@@ -3122,6 +3227,7 @@ router.post('/instrument-sets', auth, allow('admin'), wrap(async (req, res) => {
     const [result] = await conn.query('INSERT INTO instrument_sets SET ?', [{
       code,
       name: normalizedName,
+      process_type: processType,
       completeness_status: completeness,
       missing_notes: missingNotes,
       description,
@@ -3144,24 +3250,24 @@ router.post('/instrument-sets', auth, allow('admin'), wrap(async (req, res) => {
       }
     }
 
-    // Sinkronisasi otomatis ke master items (agar langsung muncul di transaksi & punya masa steril)
+    // Sinkronisasi otomatis ke master items (agar langsung muncul di transaksi & punya masa steril/DTT)
     const [[itemByCode]] = await conn.query('SELECT id, name FROM items WHERE code = ?', [code]);
     const [[itemByName]] = await conn.query('SELECT id, code FROM items WHERE name = ?', [normalizedName]);
 
     if (itemByCode) {
       await conn.query(
-        'UPDATE items SET name = ?, category = "Set Instrumen", process_type = "Steril", unit_label = "Set", description = ? WHERE id = ?',
-        [normalizedName, description || 'Set instrumen bedah', itemByCode.id]
+        'UPDATE items SET name = ?, category = "Set Instrumen", process_type = ?, unit_label = "Set", description = ? WHERE id = ?',
+        [normalizedName, processType, description || 'Set instrumen bedah', itemByCode.id]
       );
     } else if (itemByName) {
       await conn.query(
-        'UPDATE items SET code = ?, category = "Set Instrumen", process_type = "Steril", unit_label = "Set", description = ? WHERE id = ?',
-        [code, description || 'Set instrumen bedah', itemByName.id]
+        'UPDATE items SET code = ?, category = "Set Instrumen", process_type = ?, unit_label = "Set", description = ? WHERE id = ?',
+        [code, processType, description || 'Set instrumen bedah', itemByName.id]
       );
     } else {
       await conn.query(
-        'INSERT INTO items (code, name, process_type, category, unit_label, shelf_life_months, description, is_active) VALUES (?, ?, "Steril", "Set Instrumen", "Set", 6, ?, 1) ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description)',
-        [code, normalizedName, description || 'Set instrumen bedah']
+        'INSERT INTO items (code, name, process_type, category, unit_label, shelf_life_months, description, is_active) VALUES (?, ?, ?, "Set Instrumen", "Set", 6, ?, 1) ON DUPLICATE KEY UPDATE name = VALUES(name), process_type = VALUES(process_type), description = VALUES(description)',
+        [code, normalizedName, processType, description || 'Set instrumen bedah']
       );
     }
 
@@ -3199,9 +3305,11 @@ router.put('/instrument-sets/:id', auth, allow('admin'), wrap(async (req, res) =
       }
     }
 
+    const processType = body.process_type ? (body.process_type === 'DTT' ? 'DTT' : 'Steril') : (existing.process_type || 'Steril');
     const updateData = {
       name: normalizedName,
       code,
+      process_type: processType,
       completeness_status: body.completeness_status === 'Tidak Lengkap' ? 'Tidak Lengkap' : 'Lengkap',
       missing_notes: body.missing_notes !== undefined ? (body.missing_notes ? String(body.missing_notes).trim() : null) : existing.missing_notes,
       description: body.description !== undefined ? String(body.description).trim() : existing.description,
@@ -3229,9 +3337,10 @@ router.put('/instrument-sets/:id', auth, allow('admin'), wrap(async (req, res) =
     // Sync to items
     const [[itemByOldCode]] = await conn.query('SELECT id FROM items WHERE code = ?', [existing.code]);
     if (itemByOldCode) {
-      await conn.query('UPDATE items SET code = ?, name = ?, description = ? WHERE id = ?', [
+      await conn.query('UPDATE items SET code = ?, name = ?, process_type = ?, description = ? WHERE id = ?', [
         code,
         normalizedName,
+        processType,
         updateData.description || 'Set instrumen bedah',
         itemByOldCode.id,
       ]);

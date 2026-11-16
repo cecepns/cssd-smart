@@ -183,6 +183,7 @@ CREATE TABLE `instrument_sets` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `code` VARCHAR(30) NOT NULL,
   `name` VARCHAR(150) NOT NULL,
+  `process_type` ENUM('Steril','DTT') NOT NULL DEFAULT 'Steril',
   `completeness_status` ENUM('Lengkap','Tidak Lengkap') NOT NULL DEFAULT 'Lengkap',
   `missing_notes` VARCHAR(255) DEFAULT NULL,
   `description` VARCHAR(255) DEFAULT NULL,
@@ -191,7 +192,8 @@ CREATE TABLE `instrument_sets` (
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_instrument_sets_code` (`code`),
-  KEY `idx_instrument_sets_name` (`name`)
+  KEY `idx_instrument_sets_name` (`name`),
+  KEY `idx_instrument_sets_process_type` (`process_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `instrument_set_items` (
@@ -384,10 +386,10 @@ CREATE TABLE `verifications` (
   CONSTRAINT `fk_verifications_sterilization` FOREIGN KEY (`sterilization_id`) REFERENCES `sterilizations` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tahap 7 - Stok Alat Steril (hanya dari verifikasi LULUS)
+-- Tahap 7 - Stok Alat Steril (verifikasi LULUS / input stok langsung kasa)
 CREATE TABLE `sterile_stock` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `packaging_id` INT UNSIGNED NOT NULL,
+  `packaging_id` INT UNSIGNED DEFAULT NULL,
   `barcode` VARCHAR(50) NOT NULL,
   `category` ENUM('Alat Satuan','Set Instrumen','Duk & Jas Operasi','Kasa Steril') NOT NULL,
   `item_name` VARCHAR(150) NOT NULL,
@@ -396,14 +398,17 @@ CREATE TABLE `sterile_stock` (
   `started_at` DATETIME DEFAULT NULL,
   `completed_at` DATETIME DEFAULT NULL,
   `expiry_date` DATE NOT NULL,
+  `unit_id` INT UNSIGNED DEFAULT NULL,
   `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
   `unit_label` VARCHAR(30) NOT NULL DEFAULT 'paket',
+  `officer` VARCHAR(100) DEFAULT NULL,
+  `notes` VARCHAR(500) DEFAULT NULL,
   `status` ENUM('Tersedia','Terdistribusi') NOT NULL DEFAULT 'Tersedia',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_stock_barcode` (`barcode`),
-  UNIQUE KEY `uq_stock_packaging` (`packaging_id`),
+  KEY `idx_stock_packaging` (`packaging_id`),
   KEY `idx_stock_expiry` (`expiry_date`),
   CONSTRAINT `fk_stock_packaging` FOREIGN KEY (`packaging_id`) REFERENCES `packagings` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

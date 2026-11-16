@@ -87,6 +87,7 @@ export const API_ENDPOINTS = {
     LOOKUP: '/sterile-stock/lookup',
     READY: '/sterile-stock/ready',
   },
+  GAUZE_STOCK: crud('/gauze-stock'),
   QUARANTINES: crud('/quarantines'),
   DISTRIBUTIONS: crud('/distributions'),
 

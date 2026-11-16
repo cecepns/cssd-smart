@@ -14,6 +14,7 @@ import {
   washingsConfig,
 } from '@/config/resources/process';
 import { distGauzeConfig, distToolsConfig } from '@/config/resources/distribution';
+import { gauzeStockConfig } from '@/config/resources/gauzeStock';
 import { dttControlConfig, dttDistributionsConfig, dttReceiptsConfig } from '@/config/resources/dtt';
 import { bmhpInConfig, bmhpItemsConfig, bmhpMutationConfig, bmhpOutConfig } from '@/config/resources/stock';
 import { machineLogsConfig } from '@/config/resources/machineLogs';
@@ -102,6 +103,7 @@ export default function App() {
               <Route path={ROUTES.PACKAGINGS} element={resource(packagingsConfig)} />
               <Route path={ROUTES.STERILIZATIONS} element={resource(sterilizationsConfig)} />
               <Route path={ROUTES.VERIFICATIONS} element={resource(verificationsConfig)} />
+              <Route path={ROUTES.GAUZE_STOCK} element={resource(gauzeStockConfig)} />
               <Route path={ROUTES.MACHINE_LOGS} element={resource(machineLogsConfig)} />
               <Route path={ROUTES.PROCESS_TIMINGS} element={<ProcessTimingMonitorPage />} />
               <Route path={ROUTES.DTT_CONTROL} element={resource(dttControlConfig)} />

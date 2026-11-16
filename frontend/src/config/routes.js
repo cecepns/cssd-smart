@@ -9,6 +9,7 @@ export const ROUTES = {
   PACKAGINGS: '/pengemasan',
   STERILIZATIONS: '/sterilisasi',
   VERIFICATIONS: '/verifikasi',
+  GAUZE_STOCK: '/stok-kasa',
   DIST_TOOLS: '/distribusi-alat',
   DIST_GAUZE: '/distribusi-kasa',
   DTT_RECEIPTS: '/dtt-penerimaan',

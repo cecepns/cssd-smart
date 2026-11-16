@@ -14,6 +14,7 @@ export default function InstrumentSetModal({
 }) {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
+  const [processType, setProcessType] = useState('Steril');
   const [description, setDescription] = useState('');
   const [completenessStatus, setCompletenessStatus] = useState('Lengkap');
   const [missingNotes, setMissingNotes] = useState('');
@@ -25,6 +26,7 @@ export default function InstrumentSetModal({
       if (mode === 'edit' && initialData) {
         setName(initialData.name || '');
         setCode(initialData.code || '');
+        setProcessType(initialData.process_type || 'Steril');
         setDescription(initialData.description || '');
         setCompletenessStatus(initialData.completeness_status || 'Lengkap');
         setMissingNotes(initialData.missing_notes || '');
@@ -41,6 +43,7 @@ export default function InstrumentSetModal({
       } else {
         setName('');
         setCode('');
+        setProcessType('Steril');
         setDescription('');
         setCompletenessStatus('Lengkap');
         setMissingNotes('');
@@ -97,6 +100,7 @@ export default function InstrumentSetModal({
       await onSubmit({
         name: name.trim().toUpperCase(),
         code: code.trim() || undefined,
+        process_type: processType,
         description: description.trim() || undefined,
         completeness_status: completenessStatus,
         missing_notes: completenessStatus === 'Tidak Lengkap' ? missingNotes.trim() : null,
@@ -160,6 +164,42 @@ export default function InstrumentSetModal({
               placeholder="mis. SET-LAP"
               className="input-base font-mono uppercase"
             />
+          </div>
+
+          {/* Pilihan Kategori Proses Layanan: Set Steril vs Set DTT */}
+          <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-700">
+              Kategori Proses Layanan <span className="text-rose-500">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setProcessType('Steril')}
+                className={`flex items-center justify-center gap-2 rounded-xl p-2.5 text-xs font-bold transition ${
+                  processType === 'Steril'
+                    ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700 ring-offset-1'
+                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <span>1. Set Steril (Autoclave/Plasma)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setProcessType('DTT')}
+                className={`flex items-center justify-center gap-2 rounded-xl p-2.5 text-xs font-bold transition ${
+                  processType === 'DTT'
+                    ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-600 ring-offset-1'
+                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <span>2. Set DTT (Reuse / Sirkuit)</span>
+              </button>
+            </div>
+            <p className="mt-1.5 text-[11px] text-slate-500">
+              {processType === 'Steril'
+                ? 'Set Steril: Diproses melalui alur Pencucian, Pengeringan, Pengemasan, Sterilisasi, dan Distribusi Alat Steril.'
+                : 'Set DTT: Diproses melalui alur Penerimaan Alat Kotor DTT, Desinfeksi Tingkat Tinggi, dan Pengambilan Alat DTT.'}
+            </p>
           </div>
 
           <div className="sm:col-span-2">
