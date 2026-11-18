@@ -35,6 +35,10 @@ const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const InstrumentSetsPage = lazy(() => import('@/pages/InstrumentSetsPage'));
 const TraceabilityPage = lazy(() => import('@/pages/TraceabilityPage'));
 const BmhpHubPage = lazy(() => import('@/pages/BmhpHubPage'));
+const BmhpAdjustmentPage = lazy(() => import('@/pages/BmhpAdjustmentPage'));
+const BmhpDocumentsPage = lazy(() => import('@/pages/BmhpDocumentsPage'));
+const BmhpReportsPage = lazy(() => import('@/pages/BmhpReportsPage'));
+const DttReuseReportPage = lazy(() => import('@/pages/DttReuseReportPage'));
 const ReportsHubPage = lazy(() => import('@/pages/ReportsHubPage'));
 const ReportPage = lazy(() => import('@/pages/ReportPage'));
 const GuidePage = lazy(() => import('@/pages/GuidePage'));
@@ -94,6 +98,8 @@ export default function App() {
               <Route path={ROUTES.BMHP_STOCK_CARD} element={<BmhpHubPage initialSection="kartu-stok" />} />
               <Route path={ROUTES.BMHP_IN} element={resource(bmhpInConfig)} />
               <Route path={ROUTES.BMHP_OUT} element={resource(bmhpOutConfig)} />
+              <Route path={ROUTES.BMHP_RETUR} element={<BmhpAdjustmentPage />} />
+              <Route path={ROUTES.BMHP_DOCUMENTS} element={<BmhpDocumentsPage />} />
               <Route path={ROUTES.BMHP_STOCK} element={resource(bmhpItemsConfig)} />
             </Route>
 
@@ -106,9 +112,9 @@ export default function App() {
               <Route path={ROUTES.GAUZE_STOCK} element={resource(gauzeStockConfig)} />
               <Route path={ROUTES.MACHINE_LOGS} element={resource(machineLogsConfig)} />
               <Route path={ROUTES.PROCESS_TIMINGS} element={<ProcessTimingMonitorPage />} />
-              <Route path={ROUTES.DTT_CONTROL} element={resource(dttControlConfig)} />
+              <Route path={ROUTES.DTT_CONTROL} element={<DttReuseReportPage />} />
 
-              <Route path={ROUTES.BMHP_REPORT} element={resource(bmhpMutationConfig)} />
+              <Route path={ROUTES.BMHP_REPORT} element={<BmhpReportsPage />} />
               <Route path={ROUTES.REPORTS} element={<ReportsHubPage />} />
               <Route path={`${ROUTES.REPORTS}/:slug`} element={<ReportPage />} />
               <Route path={ROUTES.COUNTER_BARCODE} element={<CounterBarcodePage />} />

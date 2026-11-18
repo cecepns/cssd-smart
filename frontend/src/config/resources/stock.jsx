@@ -1,4 +1,4 @@
-import { AlertOctagon, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Archive, CalendarX, ClipboardList, FileText, Layers, PackageCheck, PackageX } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Archive, CalendarX, ClipboardList, FilePlus2, FileText, Layers, PackageCheck, PackageX, RefreshCw } from 'lucide-react';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { PACKAGE_TYPES } from '@/utils/constants';
 import { getList } from '@/utils/request';
@@ -74,11 +74,13 @@ export const quarantinesConfig = {
 
 /* ---------------------------------- BMHP ---------------------------------- */
 export const BMHP_TABS = [
-  { label: 'Manajemen Terpadu', to: ROUTES.BMHP, icon: Archive },
+  { label: 'Dashboard BMHP', to: ROUTES.BMHP, icon: Archive },
   { label: 'Barang Masuk', to: ROUTES.BMHP_IN, icon: ArrowDownToLine },
   { label: 'Pengambilan', to: ROUTES.BMHP_OUT, icon: ArrowUpFromLine },
+  { label: 'Retur / Koreksi', to: ROUTES.BMHP_RETUR, icon: RefreshCw },
+  { label: 'Riwayat Dokumen', to: ROUTES.BMHP_DOCUMENTS, icon: FilePlus2 },
+  { label: 'Stok Saat Ini', to: ROUTES.BMHP_STOCK, icon: Layers },
   { label: 'Kartu Stok', to: ROUTES.BMHP_STOCK_CARD, icon: ClipboardList },
-  { label: 'Stok Keseluruhan', to: ROUTES.BMHP_STOCK, icon: Layers },
   { label: 'Laporan BMHP', to: ROUTES.BMHP_REPORT, icon: FileText, adminOnly: true },
 ];
 

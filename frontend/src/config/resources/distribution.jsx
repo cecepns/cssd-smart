@@ -12,7 +12,21 @@ export const GAUZE_TYPES = [
   'Kasa Rol 6 cm',
   'Kasa Rol 10 cm',
   'Kasa Rol 12 cm',
+  'Kasa Tampon Bulat VK',
+  'Kasa Tampon X-Ray OK',
+  'Kasa Buntut X-Ray 8 Ply OK',
 ];
+
+export const GAUZE_DEFAULTS = {
+  'Kasa Lipat OK': { size: '10 x 10 cm (Lipat OK)', unit: 'pouch' },
+  'Kasa Lipat Umum': { size: '7.5 x 7.5 cm (Lipat Umum)', unit: 'pouch' },
+  'Kasa Rol 6 cm': { size: 'Lebar 6 cm', unit: 'roll' },
+  'Kasa Rol 10 cm': { size: 'Lebar 10 cm', unit: 'roll' },
+  'Kasa Rol 12 cm': { size: 'Lebar 12 cm', unit: 'roll' },
+  'Kasa Tampon Bulat VK': { size: 'Tampon Bulat VK', unit: 'pouch' },
+  'Kasa Tampon X-Ray OK': { size: 'Tampon X-Ray OK', unit: 'pouch' },
+  'Kasa Buntut X-Ray 8 Ply OK': { size: '8 Ply Buntut X-Ray OK', unit: 'pouch' },
+};
 
 /**
  * Scan barcode paket di stok steril: validasi cepat di form

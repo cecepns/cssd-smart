@@ -50,7 +50,7 @@ export const NAV_SECTIONS = [
     items: [
       { label: 'Penerimaan Alat DTT', to: ROUTES.DTT_RECEIPTS, icon: Sparkles, allowUnit: true },
       { label: 'Pengambilan Alat DTT', to: ROUTES.DTT_DISTRIBUTIONS, icon: Truck, allowUnit: true },
-      { label: 'Buku Kontrol Reuse DTT', to: ROUTES.DTT_CONTROL, icon: BookOpen },
+      { label: 'Laporan Reuse DTT', to: ROUTES.DTT_CONTROL, icon: BookOpen },
     ],
   },
   {
@@ -72,9 +72,11 @@ export const NAV_SECTIONS = [
       { label: 'Manajemen BMHP Terpadu', to: ROUTES.BMHP, icon: Archive },
       { label: 'Barang Masuk BMHP', to: ROUTES.BMHP_IN, icon: ArrowDownToLine },
       { label: 'Pengambilan BMHP', to: ROUTES.BMHP_OUT, icon: ArrowUpFromLine },
-      { label: 'Kartu Stok BMHP', to: ROUTES.BMHP_STOCK_CARD, icon: ClipboardList },
-      { label: 'Stok Keseluruhan BMHP', to: ROUTES.BMHP_STOCK, icon: Layers },
-      { label: 'Laporan BMHP', to: ROUTES.BMHP_REPORT, icon: FileText, adminOnly: true },
+      { label: 'Retur / Koreksi BMHP', to: ROUTES.BMHP_RETUR, icon: RefreshCw },
+      { label: 'Riwayat Dokumen Keluar', to: ROUTES.BMHP_DOCUMENTS, icon: FilePlus2 },
+      { label: 'Master & Stok BMHP', to: ROUTES.BMHP_STOCK, icon: Layers },
+      { label: 'Kartu Stok & Cetak', to: ROUTES.BMHP_STOCK_CARD, icon: ClipboardList },
+      { label: 'Laporan BMHP Lengkap', to: ROUTES.BMHP_REPORT, icon: FileText, adminOnly: true },
     ],
   },
   {
@@ -112,7 +114,7 @@ export const MENU_CARDS = [
   { title: 'Stok & Produksi Kasa Steril', desc: 'Input saldo awal dan pencatatan produksi kasa steril CSSD siap ambil', to: ROUTES.GAUZE_STOCK, icon: Boxes, tone: 'amber', adminOnly: true },
   { title: 'Penerimaan Alat Kotor DTT (Reuse)', desc: 'Barcode penerimaan alat kotor DTT unit ke CSSD dengan TTD HP', to: ROUTES.DTT_RECEIPTS, icon: Sparkles, tone: 'purple', allowUnit: true },
   { title: 'Pengambilan Alat DTT (Reuse)', desc: 'Barcode serah terima alat hasil DTT CSSD ke unit dengan TTD HP', to: ROUTES.DTT_DISTRIBUTIONS, icon: RefreshCw, tone: 'blue', allowUnit: true },
-  { title: 'Buku Kontrol Reuse DTT', desc: 'Buku kontrol riwayat pemakaian ulang dan batas siklus alat medis', to: ROUTES.DTT_CONTROL, icon: BookOpen, tone: 'purple', adminOnly: true },
+  { title: 'Laporan Reuse DTT', desc: 'Laporan otomatis siklus pemakaian ulang DTT & peringatan batas 3x/4x', to: ROUTES.DTT_CONTROL, icon: BookOpen, tone: 'purple', adminOnly: true },
   { title: 'Indikator Sterilisasi', desc: 'Bowie-Dick, indikator kimia, biologi, dan verifikasi batch', to: ROUTES.VERIFICATIONS, icon: ShieldCheck, tone: 'purple', adminOnly: true },
   { title: 'Stok BMHP Barcode', desc: 'Barang masuk, keluar, kedaluwarsa dan mutasi stok BMHP', to: ROUTES.BMHP, icon: Archive, tone: 'amber' },
   { title: 'Pusat Laporan', desc: 'Rekap otomatis seluruh transaksi dan unduh PDF/Excel', to: ROUTES.REPORTS, icon: ClipboardList, tone: 'blue', adminOnly: true },

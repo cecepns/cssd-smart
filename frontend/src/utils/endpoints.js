@@ -58,8 +58,11 @@ export const API_ENDPOINTS = {
   DTT_RECEIPTS: {
     ...crud('/dtt-receipts'),
     READY: '/dtt-receipts/ready',
+    REUSE_STATUS: '/dtt-receipts/reuse-status',
   },
   DTT_DISTRIBUTIONS: crud('/dtt-distributions'),
+  DTT_REUSE_REPORT: '/dtt-reuse-report',
+  DTT_REUSE_LIMIT: '/dtt-reuse-limit',
 
   // Set Instrumen & Monitoring
   INSTRUMENT_SETS: {
@@ -98,6 +101,9 @@ export const API_ENDPOINTS = {
     BATCHES: '/bmhp-batches',
     IN: '/bmhp-in',
     OUT: '/bmhp-out',
+    ADJUSTMENT: '/bmhp-adjustment',
+    DOCUMENTS: '/bmhp-documents',
+    REPORTS: '/bmhp-reports',
     STOCK_CARD: '/bmhp-stock-card',
     OVERALL_STOCK: '/bmhp-overall-stock',
   },

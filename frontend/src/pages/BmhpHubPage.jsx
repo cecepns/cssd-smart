@@ -34,6 +34,7 @@ import SubNav from '@/components/ui/SubNav';
 import Modal from '@/components/ui/Modal';
 import BarcodeInput from '@/components/form/BarcodeInput';
 import SignaturePad from '@/components/form/SignaturePad';
+import BmhpDashboardOverview from '@/components/bmhp/BmhpDashboardOverview';
 import { BMHP_CATEGORIES, BMHP_TABS } from '@/config/resources/stock';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { api } from '@/utils/api';
@@ -56,14 +57,20 @@ export default function BmhpHubPage() {
   const { user, isAdmin } = useAuth();
   const [searchParams] = useSearchParams();
 
-  // 1. Data Katalog Master BMHP
-  const { data: itemsResponse, refetch: refetchItems } = useFetch(API_ENDPOINTS.BMHP_ITEMS.LIST, {
+  // 1. Data Katalog Master BMHP + Ringkasan Real-time Terintegrasi
+  const { data: itemsResponse, reload: refetchItems } = useFetch(API_ENDPOINTS.BMHP_ITEMS.LIST, {
     is_active: 1,
     limit: 200,
     sort_by: 'name',
     order: 'asc',
   });
   const items = useMemo(() => itemsResponse?.data || itemsResponse || [], [itemsResponse]);
+
+  const { data: summaryRes, reload: refetchSummary } = useFetch(API_ENDPOINTS.BMHP_ITEMS.SUMMARY);
+  const bmhpSummary = useMemo(() => summaryRes?.data || summaryRes || {}, [summaryRes]);
+
+  const { data: allBatchesRes, reload: refetchAllBatches } = useFetch(API_ENDPOINTS.BMHP_ITEMS.BATCHES);
+  const allBatches = useMemo(() => allBatchesRes?.data || allBatchesRes || [], [allBatchesRes]);
 
   // 2. Data Master Petugas CSSD
   const { data: officersResponse } = useFetch(API_ENDPOINTS.LOOKUPS.OFFICERS, {
@@ -238,6 +245,8 @@ export default function BmhpHubPage() {
       toast.success(res.data?.message || 'Barang masuk BMHP berhasil disimpan');
 
       refetchItems();
+      refetchSummary();
+      refetchAllBatches();
       refetchBatches();
       fetchStockCard();
       fetchOverallStock();
@@ -278,7 +287,7 @@ export default function BmhpHubPage() {
   }, [bmhpUnits, outForm.unit_id]);
 
   // Fetch batches for selected item
-  const { data: batchesResponse, refetch: refetchBatches, loading: batchesLoading } = useFetch(
+  const { data: batchesResponse, reload: refetchBatches, loading: batchesLoading } = useFetch(
     API_ENDPOINTS.BMHP_ITEMS.BATCHES,
     selectedItemId ? { bmhp_item_id: selectedItemId, only_available: 'true' } : null
   );
@@ -343,6 +352,8 @@ export default function BmhpHubPage() {
       toast.success(res.data?.message || 'Pengambilan BMHP berhasil disimpan');
 
       refetchItems();
+      refetchSummary();
+      refetchAllBatches();
       refetchBatches();
       fetchStockCard();
       fetchOverallStock();
@@ -486,59 +497,26 @@ export default function BmhpHubPage() {
         <SubNav items={BMHP_TABS} />
       </div>
 
-      {/* TOP HEADER: EXACT MATCH TO MEDIA SCREENSHOT */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#001f54] via-[#0a3272] to-[#001f54] px-6 py-4 shadow-md border-b-2 border-amber-400">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          {/* Left Brand */}
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-md">
-              <Boxes size={28} className="text-[#001f54]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xl font-black tracking-tight text-white">CSSD</span>
-                <span className="text-xl font-black tracking-tight text-amber-400">SMART</span>
-              </div>
-              <p className="text-[11px] font-bold tracking-wider text-amber-300 uppercase">Sterile Management System</p>
-            </div>
-          </div>
-
-          {/* Center Title */}
-          <div className="text-center">
-            <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wide bg-gradient-to-r from-amber-300 via-amber-200 to-amber-400 bg-clip-text text-transparent">
-              Manajemen BMHP
-            </h1>
-            <p className="text-xs sm:text-sm font-medium text-blue-100 tracking-wide">
-              Sistem Pengelolaan Persediaan BMHP CSSD
-            </p>
-          </div>
-
-          {/* Right Decoration / Quick Selector */}
-          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20">
-            <Package size={16} className="text-amber-400 shrink-0" />
-            <select
-              value={selectedItemId || ''}
-              onChange={(e) => {
-                const id = Number(e.target.value);
-                setSelectedItemId(id);
-                setFilterCard((prev) => ({ ...prev, item_id: id }));
-              }}
-              className="bg-[#001f54] border border-amber-400/50 rounded-lg px-2.5 py-1 text-xs font-bold text-amber-300 focus:outline-none"
-            >
-              {items.map((it) => (
-                <option key={it.id} value={it.id}>
-                  {it.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
+      {/* DASHBOARD TERINTEGRASI BMHP (Sesuai Mockup Gambar 3 — Banner Biru Gelap Lama Dihapus) */}
+      <BmhpDashboardOverview
+        summary={bmhpSummary}
+        items={items}
+        batches={allBatches}
+        onSelectItem={(id) => {
+          setSelectedItemId(id);
+          setFilterCard((prev) => ({ ...prev, item_id: id }));
+        }}
+        onQuickAction={(target) => {
+          const idMap = { in: 'bmhp-in-section', out: 'bmhp-out-section', card: 'kartu-stok' };
+          const el = document.getElementById(idMap[target]);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }}
+      />
 
       {/* ========================================================================= */}
       {/* 2-COLUMN TOP GRID: BARANG MASUK BMHP & PENGAMBILAN BMHP                  */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div id="bmhp-in-section" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* ---------------- CARD 1: BARANG MASUK BMHP ---------------- */}
         <div className="rounded-2xl bg-white shadow-sm border border-slate-200 overflow-hidden flex flex-col justify-between">
           {/* Header */}
@@ -894,7 +872,7 @@ export default function BmhpHubPage() {
         </div>
 
         {/* ---------------- CARD 2: PENGAMBILAN BMHP ---------------- */}
-        <div className="rounded-2xl bg-white shadow-sm border border-slate-200 overflow-hidden flex flex-col justify-between">
+        <div id="bmhp-out-section" className="rounded-2xl bg-white shadow-sm border border-slate-200 overflow-hidden flex flex-col justify-between">
           {/* Header */}
           <div className="bg-[#001f54] px-4 py-2.5 text-white flex items-center justify-between border-b-2 border-amber-400">
             <div className="flex items-center gap-2">

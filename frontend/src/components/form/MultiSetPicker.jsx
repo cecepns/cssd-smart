@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -8,7 +8,6 @@ import {
   Package,
   Plus,
   Trash2,
-  Wrench,
   XCircle,
 } from 'lucide-react';
 import useFetch from '@/hooks/useFetch';
@@ -16,8 +15,8 @@ import { API_ENDPOINTS } from '@/utils/endpoints';
 
 export default function MultiSetPicker({ value, values, setValue, setValues, disabled }) {
   const unitId = values?.unit_id;
-  const [selectedDropdownId, setSelectedDropdownId] = useState('');
-  const [expandedSets, setExpandedSets] = useState({});
+  const prevUnitIdRef = useRef(unitId);
+  const [expandedSets, setExpandedSets] = useState({ 0: true });
 
   // 1. Fetch item/set sesuai unit asal
   const { data: itemsData, loading } = useFetch(
@@ -185,40 +184,54 @@ export default function MultiSetPicker({ value, values, setValue, setValues, dis
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsMap]);
 
-  // Tambah Set dari dropdown atau baris baru
+  // Tambah baris Set baru tersendiri (bebas pilih jenis set yang berbeda di tiap dropdown)
   const handleAddSet = () => {
-    if (selectedDropdownId) {
-      const match = unitItems.find((it) => String(it.id) === String(selectedDropdownId));
-      if (match) {
-        const existingIdx = items.findIndex((it) => it.item_id === match.id || it.item_name === match.name);
-        if (existingIdx >= 0) {
-          const next = [...items];
-          next[existingIdx].quantity += 1;
-          syncParent(next);
-          return;
-        }
-
-        const checklist = getInitialChecklist(match.name, match.id);
-        const next = [
-          ...items,
-          {
-            item_id: match.id,
-            item_name: match.name,
-            quantity: 1,
-            unit_label: match.unit_label || 'Set',
-            checklist,
-          },
-        ];
-        const filtered = next.filter((it) => it.item_name.trim() !== '' || next.length === 1);
-        syncParent(filtered);
-        setExpandedSets((prev) => ({ ...prev, [filtered.length - 1]: true }));
-        return;
-      }
-    }
-
-    const next = [...items, { item_name: '', quantity: 1, unit_label: 'Set', checklist: [] }];
+    const next = [
+      ...items,
+      { item_id: null, item_name: '', quantity: 1, unit_label: 'Set', checklist: [], isCustom: false },
+    ];
     syncParent(next);
     setExpandedSets((prev) => ({ ...prev, [next.length - 1]: true }));
+  };
+
+  // Pilih set dari dropdown milik baris set tertentu
+  const handleSelectSetOption = (setIdx, rawVal) => {
+    const next = [...items];
+    if (rawVal === '__CUSTOM__') {
+      next[setIdx] = {
+        ...next[setIdx],
+        item_id: null,
+        item_name: '',
+        isCustom: true,
+        checklist: [],
+      };
+      syncParent(next);
+      return;
+    }
+    if (!rawVal) {
+      next[setIdx] = {
+        ...next[setIdx],
+        item_id: null,
+        item_name: '',
+        isCustom: false,
+        checklist: [],
+      };
+      syncParent(next);
+      return;
+    }
+    const match = unitItems.find((u) => String(u.id) === String(rawVal));
+    if (match) {
+      next[setIdx] = {
+        ...next[setIdx],
+        item_id: match.id,
+        item_name: match.name,
+        unit_label: match.unit_label || 'Set',
+        isCustom: false,
+        checklist: getInitialChecklist(match.name, match.id),
+      };
+      syncParent(next);
+      setExpandedSets((prev) => ({ ...prev, [setIdx]: true }));
+    }
   };
 
   const handleUpdateSetName = (setIdx, name, itemObj = null) => {
@@ -320,85 +333,38 @@ export default function MultiSetPicker({ value, values, setValue, setValues, dis
     syncParent(items, next);
   };
 
-  // Auto select item pertama jika unit berubah dan list kosong
+  // Reset daftar set saat Unit Asal berganti agar pilihan set sesuai unit baru
   useEffect(() => {
-    if (unitItems.length > 0 && (!items[0]?.item_name || items[0]?.item_name.trim() === '')) {
-      const first = unitItems[0];
-      const chk = getInitialChecklist(first.name, first.id);
-      syncParent([
-        {
-          item_id: first.id,
-          item_name: first.name,
-          quantity: 1,
-          unit_label: first.unit_label || 'Set',
-          checklist: chk,
-        },
-      ]);
+    if (prevUnitIdRef.current && String(prevUnitIdRef.current) !== String(unitId || '')) {
+      syncParent([{ item_id: null, item_name: '', quantity: 1, unit_label: 'Set', checklist: [], isCustom: false }]);
       setExpandedSets({ 0: true });
     }
+    prevUnitIdRef.current = unitId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unitItems]);
+  }, [unitId]);
 
   // Autocomplete untuk alat satuan dari master data
   const singleToolSuggestions = unitItems.filter((i) => i.category === 'Alat Satuan');
 
+  // Hitung total set dan total kuantitas
+  const filledSetsCount = items.filter((i) => i.item_name && i.item_name.trim()).length;
+  const totalSetQty = items
+    .filter((i) => i.item_name && i.item_name.trim())
+    .reduce((acc, it) => acc + Number(it.quantity || 1), 0);
+
   return (
     <div className="space-y-4">
-      {/* 1. Dropdown Pilih jenis alat / set instrumen (sesuai unit) */}
-      <div>
-        <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-          Pilih jenis alat / set instrumen (sesuai unit)
-        </label>
-        <select
-          value={selectedDropdownId}
-          disabled={disabled || !unitId || loading}
-          onChange={(e) => {
-            const selectedVal = e.target.value;
-            setSelectedDropdownId(selectedVal);
-            if (selectedVal) {
-              const match = unitItems.find((it) => String(it.id) === selectedVal);
-              if (match) {
-                const chk = getInitialChecklist(match.name, match.id);
-                // Jika hanya 1 baris & belum diisi namanya, langsung isi
-                if (items.length === 1 && (!items[0].item_name || items[0].item_name.trim() === '')) {
-                  syncParent([
-                    {
-                      item_id: match.id,
-                      item_name: match.name,
-                      quantity: 1,
-                      unit_label: match.unit_label || 'Set',
-                      checklist: chk,
-                    },
-                  ]);
-                  setExpandedSets({ 0: true });
-                }
-              }
-            }
-          }}
-          className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 focus:border-brand-500 focus:outline-none shadow-sm font-medium"
-        >
-          <option value="">
-            {!unitId ? 'Pilih Unit Asal terlebih dahulu...' : loading ? 'Memuat alat...' : 'Pilih jenis alat / set instrumen...'}
-          </option>
-          {unitItems.map((it) => (
-            <option key={it.id} value={it.id}>
-              {it.name} ({it.category || it.unit_label || 'Set'})
-            </option>
-          ))}
-        </select>
-      </div>
-
       {/* ============================================================== */}
-      {/* A. DAFTAR SET INSTRUMEN & PEMERIKSAAN KELENGKAPAN OTOMATIS     */}
+      {/* A. DAFTAR SET INSTRUMEN (MULTI-SET BERBEDA DALAM 1 TRANSAKSI)  */}
       {/* ============================================================== */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center gap-1.5">
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs font-bold text-slate-900">
-              A. Daftar Set Instrumen (Unit: {unitName})
+              A. Daftar Set Instrumen (Unit: {unitId ? unitName : 'Pilih Unit Asal dahulu'})
             </span>
-            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">
-              {items.filter((i) => i.item_name).length} Set
+            <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-bold text-blue-800">
+              {filledSetsCount} Jenis Set • {totalSetQty} Total
             </span>
           </div>
           <button
@@ -411,6 +377,12 @@ export default function MultiSetPicker({ value, values, setValue, setValues, dis
           </button>
         </div>
 
+        {!unitId && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-2.5 text-xs font-medium text-amber-800">
+            Pilih <b>Unit Asal</b> terlebih dahulu di atas agar daftar set instrumen milik unit tersebut muncul di setiap dropdown.
+          </div>
+        )}
+
         {/* Container Kartu Set */}
         <div className="space-y-3">
           {items.map((item, setIdx) => {
@@ -420,36 +392,83 @@ export default function MultiSetPicker({ value, values, setValue, setValues, dis
             const missingCount = checklist.filter((c) => c.status === 'Tidak ada' || c.status === 'Kurang').length;
             const hasIssues = damagedCount > 0 || missingCount > 0;
 
+            // Cek apakah nama set saat ini cocok dengan salah satu opsi dropdown unitItems
+            const matchedOption = unitItems.find(
+              (u) =>
+                (item.item_id && String(u.id) === String(item.item_id)) ||
+                (item.item_name && u.name.toLowerCase() === item.item_name.trim().toLowerCase())
+            );
+            const isCustomMode = item.isCustom || (Boolean(item.item_name) && !matchedOption && unitItems.length > 0);
+
             return (
               <div
                 key={setIdx}
-                className="rounded-2xl border border-sky-100 bg-[#F4F7FC] p-3 sm:p-4 shadow-sm space-y-3 transition"
+                className="rounded-2xl border border-sky-200/80 bg-[#F4F7FC] p-3 sm:p-4 shadow-sm space-y-3 transition"
               >
-                {/* Baris Input Nama Set & Stepper Jumlah */}
-                <div className="flex items-center gap-2 sm:gap-3">
+                {/* Baris Dropdown Pilih Nama Set & Stepper Jumlah */}
+                <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3">
                   <div className="flex-1">
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-                      Nama Set Instrumen #{setIdx + 1}
-                    </label>
-                    <input
-                      type="text"
-                      list={`set-items-list-${setIdx}`}
-                      value={item.item_name}
-                      disabled={disabled}
-                      placeholder="Pilih atau ketik Nama Set (misal: SET MINOR)..."
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const match = unitItems.find((u) => u.name.toLowerCase() === val.toLowerCase());
-                        handleUpdateSetName(setIdx, val, match);
-                      }}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none"
-                      required
-                    />
-                    <datalist id={`set-items-list-${setIdx}`}>
-                      {unitItems.map((u) => (
-                        <option key={u.id} value={u.name} />
-                      ))}
-                    </datalist>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold text-brand-800 uppercase tracking-wider">
+                        Set Instrumen #{setIdx + 1} <span className="text-rose-500">*</span>
+                      </label>
+                      {isCustomMode && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectSetOption(setIdx, '')}
+                          className="text-[10px] font-semibold text-brand-700 hover:underline"
+                        >
+                          ← Kembali ke Dropdown
+                        </button>
+                      )}
+                    </div>
+
+                    {!isCustomMode ? (
+                      <select
+                        value={matchedOption ? String(matchedOption.id) : ''}
+                        disabled={disabled || !unitId || loading}
+                        onChange={(e) => handleSelectSetOption(setIdx, e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none"
+                        required
+                      >
+                        <option value="">
+                          {!unitId
+                            ? 'Pilih Unit Asal dahulu...'
+                            : loading
+                            ? 'Memuat daftar set unit...'
+                            : `-- Pilih Jenis Set Instrumen #${setIdx + 1} --`}
+                        </option>
+                        {unitItems.map((u) => {
+                          const usedAtIdx = items.findIndex(
+                            (other, idx) =>
+                              idx !== setIdx &&
+                              ((other.item_id && String(other.item_id) === String(u.id)) ||
+                                (other.item_name && other.item_name.toLowerCase() === u.name.toLowerCase()))
+                          );
+                          return (
+                            <option key={u.id} value={u.id}>
+                              {u.name} ({u.category || u.unit_label || 'Set'})
+                              {usedAtIdx >= 0 ? ` — [Sudah di Set #${usedAtIdx + 1}]` : ''}
+                            </option>
+                          );
+                        })}
+                        <option value="__CUSTOM__">✏️ Ketik nama set / alat manual...</option>
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={item.item_name}
+                        disabled={disabled}
+                        placeholder="Ketik Nama Set Instrumen (misal: SET MINOR)..."
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const match = unitItems.find((u) => u.name.toLowerCase() === val.toLowerCase());
+                          handleUpdateSetName(setIdx, val, match);
+                        }}
+                        className="w-full rounded-xl border border-brand-400 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none"
+                        required
+                      />
+                    )}
                   </div>
 
                   {/* Stepper Jumlah Set */}
@@ -656,6 +675,18 @@ export default function MultiSetPicker({ value, values, setValue, setValues, dis
             );
           })}
         </div>
+
+        {/* Tombol Cepat Tambah Jenis Set Lain di Bawah */}
+        {unitId && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={handleAddSet}
+            className="w-full flex items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50 py-2 text-xs font-bold text-brand-800 transition disabled:opacity-50"
+          >
+            <Plus size={14} /> Tambah Jenis Set Lain (dalam 1 Transaksi & Barcode yang Sama)
+          </button>
+        )}
       </div>
 
       {/* ============================================================== */}

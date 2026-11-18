@@ -1016,65 +1016,55 @@ router.post('/dirty-receipts', auth, allow('admin', 'petugas', 'unit'), wrap(asy
     const [[unitRow]] = await conn.query('SELECT name FROM units WHERE id = ?', [unitId]);
     const unitName = unitRow?.name || 'Unit';
 
-    // A. Proses Tiap Set Instrumen
+    // SATU TRANSAKSI PENERIMAAN DENGAN SATU BARCODE UNTUK SELURUH SET & ALAT SATUAN
+    const barcode = await makeCode(conn, 'AK', receiptDate);
+
+    const summaryParts = [];
+    const allChecklist = [];
+    const allIssues = [];
+    let totalQty = 0;
+    let anyDamaged = false;
+    let anyMissing = false;
+    const firstItemId = validSets[0]?.item_id ? parseInt(validSets[0].item_id, 10) : null;
+    const unitLabel = validSets.length > 0 ? (sanitizeText(validSets[0].unit_label) || 'Set') : 'Buah';
+
+    // A. Kumpulkan seluruh Set Instrumen yang diserahkan
     for (const setItem of validSets) {
-      const barcode = await makeCode(conn, 'AK', receiptDate);
-      const itemName = sanitizeText(setItem.item_name);
+      const setName = sanitizeText(setItem.item_name);
       const qty = Math.max(parseInt(setItem.quantity, 10) || 1, 1);
-      const unitLabel = sanitizeText(setItem.unit_label) || 'Set';
+      const uLabel = sanitizeText(setItem.unit_label) || 'Set';
       const itemId = setItem.item_id ? parseInt(setItem.item_id, 10) : null;
       const checklist = Array.isArray(setItem.checklist) ? setItem.checklist : [];
 
-      // Evaluasi status kelengkapan set
-      const hasDamaged = checklist.some((c) => c && c.status === 'Rusak');
-      const hasMissing = checklist.some((c) => c && (c.status === 'Tidak ada' || c.status === 'Kurang'));
-      const checklistStatus = hasDamaged ? 'Ada Kerusakan' : (hasMissing ? 'Tidak Lengkap' : 'Lengkap');
+      totalQty += qty;
+      summaryParts.push(
+        validSets.length === 1 && validExtra.length === 0 ? setName : `${setName} (${qty} ${uLabel})`
+      );
 
-      // Gabungkan catatan ketidaklengkapan ke field notes
-      const issues = checklist
-        .filter((c) => c && (c.status === 'Tidak ada' || c.status === 'Rusak' || c.status === 'Kurang'))
-        .map((c) => `${c.instrument_name}: ${c.status}${c.notes ? ` (${c.notes})` : ''}`);
-
-      const itemNotes = [
-        generalNotes,
-        issues.length ? `[Pemeriksaan]: ${issues.join('; ')}` : null,
-      ].filter(Boolean).join(' • ');
-
-      const itemsDetailStr = checklist.length ? JSON.stringify(checklist) : null;
-
-      let insertRes;
-      try {
-        [insertRes] = await conn.query(`
-          INSERT INTO dirty_receipts
-          (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
-           sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Diterima', ?)
-        `, [
-          barcode, receiptDate, ts.started_at, ts.completed_at, unitId, itemId, itemName, qty, unitLabel,
-          senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, itemNotes || null, itemsDetailStr, checklistStatus, req.user.id
-        ]);
-      } catch (insertErr) {
-        if (insertErr && (insertErr.errno === 1054 || insertErr.code === 'ER_BAD_FIELD_ERROR')) {
-          console.warn('Auto-healing missing dirty_receipts columns and retrying INSERT...', insertErr.message);
-          await ensureDirtyReceiptsColumnsDirect(conn);
-          [insertRes] = await conn.query(`
-            INSERT INTO dirty_receipts
-            (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
-             sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Diterima', ?)
-          `, [
-            barcode, receiptDate, ts.started_at, ts.completed_at, unitId, itemId, itemName, qty, unitLabel,
-            senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, itemNotes || null, itemsDetailStr, checklistStatus, req.user.id
-          ]);
-        } else {
-          throw insertErr;
-        }
+      for (const chk of checklist) {
+        if (!chk) continue;
+        allChecklist.push({
+          set_name: setName,
+          set_qty: qty,
+          instrument_name: chk.instrument_name,
+          quantity: chk.quantity || 1,
+          unit_label: chk.unit_label || 'Buah',
+          status: chk.status || 'Lengkap',
+          notes: chk.notes || '',
+        });
       }
 
-      const insertedId = insertRes.insertId;
-      createdList.push({ id: insertedId, barcode, item_name: itemName, quantity: qty, unit_label: unitLabel, checklist_status: checklistStatus });
+      const hasDamaged = checklist.some((c) => c && c.status === 'Rusak');
+      const hasMissing = checklist.some((c) => c && (c.status === 'Tidak ada' || c.status === 'Kurang'));
+      if (hasDamaged) anyDamaged = true;
+      if (hasMissing) anyMissing = true;
 
-      // Catat ke instrument_discrepancy_logs jika ada alat yang tidak ada / rusak
+      const setIssues = checklist
+        .filter((c) => c && (c.status === 'Tidak ada' || c.status === 'Rusak' || c.status === 'Kurang'))
+        .map((c) => `[${setName}] ${c.instrument_name}: ${c.status}${c.notes ? ` (${c.notes})` : ''}`);
+      allIssues.push(...setIssues);
+
+      // Catat ke instrument_discrepancy_logs per set jika ada alat yang tidak ada / rusak
       if (hasDamaged || hasMissing) {
         let setId = null;
         if (itemId) {
@@ -1082,7 +1072,7 @@ router.post('/dirty-receipts', auth, allow('admin', 'petugas', 'unit'), wrap(asy
           setId = matchByItem?.id;
         }
         if (!setId) {
-          const [[matchByName]] = await conn.query('SELECT id FROM instrument_sets WHERE LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?) OR name LIKE ? LIMIT 1', [itemName, itemName, `%${itemName}%`]);
+          const [[matchByName]] = await conn.query('SELECT id FROM instrument_sets WHERE LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?) OR name LIKE ? LIMIT 1', [setName, setName, `%${setName}%`]);
           setId = matchByName?.id;
         }
         if (!setId) {
@@ -1094,7 +1084,7 @@ router.post('/dirty-receipts', auth, allow('admin', 'petugas', 'unit'), wrap(asy
           if (chk && (chk.status === 'Tidak ada' || chk.status === 'Rusak' || chk.status === 'Kurang')) {
             const incType = chk.status === 'Rusak' ? 'Rusak' : 'Kurang';
             const discQty = Math.max(parseInt(chk.quantity, 10) || 1, 1);
-            const discNote = `[Penerimaan ${barcode}] ${chk.notes ? chk.notes : (chk.status === 'Rusak' ? 'Instrumen rusak saat serah terima alat kotor' : 'Instrumen tidak ada saat serah terima')}`;
+            const discNote = `[Penerimaan ${barcode} • ${setName}] ${chk.notes ? chk.notes : (chk.status === 'Rusak' ? 'Instrumen rusak saat serah terima alat kotor' : 'Instrumen tidak ada saat serah terima')}`;
             await conn.query(`
               INSERT INTO instrument_discrepancy_logs
               (set_id, instrument_name, incident_type, quantity, unit_origin, officer, incident_date, notes, resolution_status)
@@ -1105,92 +1095,105 @@ router.post('/dirty-receipts', auth, allow('admin', 'petugas', 'unit'), wrap(asy
           }
         }
       }
-
-      await recordAdminNotification(conn, {
-        type: 'RECEIPT',
-        title: `Penerimaan Alat Kotor: ${itemName}`,
-        unit_id: unitId,
-        item_name: itemName,
-        quantity: qty,
-        unit_label: unitLabel,
-        barcode: barcode,
-        officer_sender: senderName,
-        officer_receiver: receiverName,
-        signature_sender: senderSignature,
-        signature_receiver: receiverSignature,
-        trx_date: receiptDate,
-        trx_time: (ts.started_at || '').slice(11, 16) || null,
-        ref_table: 'dirty_receipts',
-        ref_id: insertedId,
-        data_payload: { id: insertedId, barcode, item_name: itemName, quantity: qty, unit_label: unitLabel, checklist_status: checklistStatus, sender_name: senderName, receiver_name: receiverName },
-      });
     }
 
-    // B. Proses Penambahan Alat Satuan di Luar Set
+    // B. Kumpulkan Alat Satuan Tambahan (di luar isi set) dalam transaksi yang sama
+    const normalizedExtra = [];
     for (const extra of validExtra) {
-      const barcode = await makeCode(conn, 'AK', receiptDate);
       const extraName = sanitizeText(extra.item_name);
       const extraQty = Math.max(parseInt(extra.quantity, 10) || 1, 1);
       const extraUnitLabel = sanitizeText(extra.unit_label) || 'Buah';
-      const extraNotes = [generalNotes, 'Alat Satuan Tambahan di luar isi set'].filter(Boolean).join(' • ');
-      const extraDetailStr = JSON.stringify([{ instrument_name: extraName, quantity: extraQty, unit_label: extraUnitLabel, status: 'Lengkap' }]);
+      totalQty += extraQty;
+      summaryParts.push(`${extraName} (${extraQty} ${extraUnitLabel})`);
+      normalizedExtra.push({ item_name: extraName, quantity: extraQty, unit_label: extraUnitLabel });
+    }
 
-      let insertExtraRes;
-      try {
-        [insertExtraRes] = await conn.query(`
+    const fullSummary = summaryParts.join(', ');
+    const itemName = fullSummary.length > 150 ? `${fullSummary.slice(0, 146)}...` : fullSummary;
+    const checklistStatus = anyDamaged ? 'Ada Kerusakan' : (anyMissing ? 'Tidak Lengkap' : 'Lengkap');
+    const combinedNotes = [
+      fullSummary.length > 150 ? `[Daftar Lengkap]: ${fullSummary}` : null,
+      generalNotes || null,
+      allIssues.length ? `[Pemeriksaan]: ${allIssues.join('; ')}` : null,
+    ].filter(Boolean).join(' • ').slice(0, 500);
+
+    const itemsDetailStr = allChecklist.length ? JSON.stringify(allChecklist) : null;
+    const extraItemsStr = normalizedExtra.length ? JSON.stringify(normalizedExtra) : null;
+
+    let insertRes;
+    try {
+      [insertRes] = await conn.query(`
+        INSERT INTO dirty_receipts
+        (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
+         sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, extra_items, checklist_status, stage, status, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Diterima', ?)
+      `, [
+        barcode, receiptDate, ts.started_at, ts.completed_at, unitId, firstItemId, itemName, Math.max(totalQty, 1), unitLabel,
+        senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, combinedNotes || null, itemsDetailStr, extraItemsStr, checklistStatus, req.user.id
+      ]);
+    } catch (insertErr) {
+      if (insertErr && (insertErr.errno === 1054 || insertErr.code === 'ER_BAD_FIELD_ERROR')) {
+        console.warn('Auto-healing missing dirty_receipts columns and retrying INSERT...', insertErr.message);
+        await ensureDirtyReceiptsColumnsDirect(conn);
+        [insertRes] = await conn.query(`
           INSERT INTO dirty_receipts
           (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
-           sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
-          VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Lengkap', 1, 'Diterima', ?)
+           sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, extra_items, checklist_status, stage, status, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Diterima', ?)
         `, [
-          barcode, receiptDate, ts.started_at, ts.completed_at, unitId, `${extraName} (Alat Satuan)`, extraQty, extraUnitLabel,
-          senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, extraNotes, extraDetailStr, req.user.id
+          barcode, receiptDate, ts.started_at, ts.completed_at, unitId, firstItemId, itemName, Math.max(totalQty, 1), unitLabel,
+          senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, combinedNotes || null, itemsDetailStr, extraItemsStr, checklistStatus, req.user.id
         ]);
-      } catch (extraErr) {
-        if (extraErr && (extraErr.errno === 1054 || extraErr.code === 'ER_BAD_FIELD_ERROR')) {
-          console.warn('Auto-healing missing dirty_receipts columns on extra items and retrying INSERT...', extraErr.message);
-          await ensureDirtyReceiptsColumnsDirect(conn);
-          [insertExtraRes] = await conn.query(`
-            INSERT INTO dirty_receipts
-            (barcode, receipt_date, started_at, completed_at, unit_id, item_id, item_name, quantity, unit_label,
-             sender_name, sender_signature, receiver_name, receiver_signature, confirmed_at, confirmed_by, notes, items_detail, checklist_status, stage, status, created_by)
-            VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Lengkap', 1, 'Diterima', ?)
-          `, [
-            barcode, receiptDate, ts.started_at, ts.completed_at, unitId, `${extraName} (Alat Satuan)`, extraQty, extraUnitLabel,
-            senderName, senderSignature, receiverName, receiverSignature, confirmedAt, confirmedBy, extraNotes, extraDetailStr, req.user.id
-          ]);
-        } else {
-          throw extraErr;
-        }
+      } else {
+        throw insertErr;
       }
-
-      const insertedExtraId = insertExtraRes.insertId;
-      createdList.push({ id: insertedExtraId, barcode, item_name: `${extraName} (Alat Satuan)`, quantity: extraQty, unit_label: extraUnitLabel, checklist_status: 'Lengkap' });
-
-      await recordAdminNotification(conn, {
-        type: 'RECEIPT',
-        title: `Penerimaan Alat Satuan: ${extraName}`,
-        unit_id: unitId,
-        item_name: `${extraName} (Alat Satuan)`,
-        quantity: extraQty,
-        unit_label: extraUnitLabel,
-        barcode: barcode,
-        officer_sender: senderName,
-        officer_receiver: receiverName,
-        signature_sender: senderSignature,
-        signature_receiver: receiverSignature,
-        trx_date: receiptDate,
-        trx_time: (ts.started_at || '').slice(11, 16) || null,
-        ref_table: 'dirty_receipts',
-        ref_id: insertedExtraId,
-        data_payload: { id: insertedExtraId, barcode, item_name: `${extraName} (Alat Satuan)`, quantity: extraQty, unit_label: extraUnitLabel, sender_name: senderName, receiver_name: receiverName },
-      });
     }
+
+    const insertedId = insertRes.insertId;
+    createdList.push({
+      id: insertedId,
+      barcode,
+      item_name: itemName,
+      quantity: Math.max(totalQty, 1),
+      unit_label: unitLabel,
+      sets_count: validSets.length,
+      checklist_status: checklistStatus,
+    });
+
+    await recordAdminNotification(conn, {
+      type: 'RECEIPT',
+      title: `Penerimaan Alat Kotor (${validSets.length} Set): ${itemName}`,
+      unit_id: unitId,
+      unit_name: unitName,
+      item_name: itemName,
+      quantity: Math.max(totalQty, 1),
+      unit_label: unitLabel,
+      barcode: barcode,
+      officer_sender: senderName,
+      officer_receiver: receiverName,
+      signature_sender: senderSignature,
+      signature_receiver: receiverSignature,
+      trx_date: receiptDate,
+      trx_time: (ts.started_at || '').slice(11, 16) || null,
+      ref_table: 'dirty_receipts',
+      ref_id: insertedId,
+      data_payload: {
+        id: insertedId,
+        barcode,
+        item_name: itemName,
+        quantity: Math.max(totalQty, 1),
+        unit_label: unitLabel,
+        sets_count: validSets.length,
+        checklist_status: checklistStatus,
+        sender_name: senderName,
+        receiver_name: receiverName,
+      },
+    });
   });
 
   const [[firstRecord]] = await pool.query('SELECT r.*, u.name AS unit_name FROM dirty_receipts r LEFT JOIN units u ON u.id = r.unit_id WHERE r.id = ?', [createdList[0].id]);
 
-  let msg = `${createdList.length} penerimaan alat kotor berhasil disimpan`;
+  let msg = `Penerimaan alat kotor (${validSets.length} jenis set, barcode ${firstRecord.barcode}) berhasil disimpan`;
   if (discrepancyAlerts.length > 0) {
     msg += ` (${discrepancyAlerts.length} catatan ketidaklengkapan otomatis dicatat ke log pemantauan)`;
   }
@@ -2322,7 +2325,7 @@ registerCrud({
     field('quantity', 'int', { required: true, min: 1, label: 'Jumlah' }),
     field('unit_label', 'string', { default: 'pcs', max: 30, label: 'Satuan' }),
     field('reuse_count', 'int', { required: true, min: 1, default: 1, label: 'Penggunaan Ke-' }),
-    field('max_reuse_limit', 'int', { min: 1, default: 10, label: 'Batas Pemakaian Ulang' }),
+    field('max_reuse_limit', 'int', { min: 1, default: 4, label: 'Batas Pemakaian Ulang' }),
     field('tool_condition', 'enum', { values: ['Baik', 'Perlu Perbaikan', 'Rusak / Afkir'], default: 'Baik', label: 'Kondisi Alat' }),
     field('sender_name', 'string', { required: true, label: 'Petugas penyerah (unit)', max: 100 }),
     field('sender_signature', 'path', { label: 'TTD penyerah' }),
@@ -3805,20 +3808,56 @@ router.get('/reports/monthly-summary', auth, allow('admin'), wrap(async (req, re
   });
 }));
 
-// ---------- BMHP Ringkasan / Summary ----------
+// Helper auto-heal kolom tambahan BMHP (Retur/Koreksi & Dokumen NPB/SPB/SPPB/BAST)
+let _bmhpColsReady = false;
+async function ensureBmhpEnhancementColumns(connOrPool) {
+  if (_bmhpColsReady) return;
+  try {
+    await connOrPool.query("ALTER TABLE bmhp_transactions MODIFY COLUMN type VARCHAR(30) NOT NULL DEFAULT 'MASUK'");
+  } catch (e) {}
+  const cols = [
+    ['doc_number', 'VARCHAR(60) DEFAULT NULL AFTER type'],
+    ['doc_type', 'VARCHAR(30) DEFAULT NULL AFTER doc_number'],
+    ['ref_transaction_id', 'INT UNSIGNED DEFAULT NULL AFTER doc_type'],
+    ['correction_reason', 'VARCHAR(255) DEFAULT NULL AFTER notes'],
+    ['receiver_name', 'VARCHAR(100) DEFAULT NULL AFTER officer'],
+  ];
+  for (const [col, def] of cols) {
+    try {
+      await connOrPool.query(`ALTER TABLE bmhp_transactions ADD COLUMN ${col} ${def}`);
+    } catch (e) {}
+  }
+  _bmhpColsReady = true;
+}
+
+// ---------- BMHP Ringkasan / Summary Terintegrasi ----------
 router.get('/bmhp-summary', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  await ensureBmhpEnhancementColumns(pool);
   const [[summary]] = await pool.query(`
     SELECT
       COUNT(*) AS total_items,
       COALESCE(SUM(stock), 0) AS total_stock,
+      COUNT(CASE WHEN stock > min_stock THEN 1 END) AS safe_count,
+      COALESCE(SUM(CASE WHEN stock > min_stock THEN stock ELSE 0 END), 0) AS safe_stock_qty,
       COUNT(CASE WHEN stock <= 0 THEN 1 END) AS empty_count,
       COUNT(CASE WHEN stock > 0 AND stock <= min_stock THEN 1 END) AS low_count,
+      COALESCE(SUM(CASE WHEN stock > 0 AND stock <= min_stock THEN stock ELSE 0 END), 0) AS low_stock_qty,
       COUNT(CASE WHEN expiry_date IS NOT NULL AND expiry_date < CURDATE() THEN 1 END) AS expired_count,
       COUNT(CASE WHEN expiry_date IS NOT NULL AND expiry_date >= CURDATE() AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 END) AS expiring_count
     FROM bmhp_items
     WHERE is_active = 1
   `);
-  res.json({ success: true, data: summary });
+  const [[trxSummary]] = await pool.query(`
+    SELECT
+      COALESCE(SUM(CASE WHEN type IN ('MASUK', 'RETUR_MASUK', 'KOREKSI_TAMBAH') AND MONTH(trx_date) = MONTH(CURDATE()) AND YEAR(trx_date) = YEAR(CURDATE()) THEN quantity ELSE 0 END), 0) AS total_in_period,
+      COALESCE(SUM(CASE WHEN type IN ('KELUAR', 'RETUR_KELUAR', 'KOREKSI_KURANG') AND MONTH(trx_date) = MONTH(CURDATE()) AND YEAR(trx_date) = YEAR(CURDATE()) THEN quantity ELSE 0 END), 0) AS total_out_period,
+      COALESCE(SUM(CASE WHEN type = 'MASUK' THEN quantity ELSE 0 END), 0) AS total_in_all,
+      COALESCE(SUM(CASE WHEN type = 'KELUAR' THEN quantity ELSE 0 END), 0) AS total_out_all,
+      COUNT(CASE WHEN type IN ('RETUR_MASUK', 'RETUR_KELUAR', 'KOREKSI_TAMBAH', 'KOREKSI_KURANG') THEN 1 END) AS total_adjustments,
+      COUNT(CASE WHEN type = 'KELUAR' THEN 1 END) AS total_documents
+    FROM bmhp_transactions
+  `);
+  res.json({ success: true, data: { ...summary, ...trxSummary } });
 }));
 
 // ---------- BMHP: Daftar Batch & Kelompok Anggaran ----------
@@ -3984,8 +4023,9 @@ router.post('/bmhp-in', auth, allow('admin', 'petugas'), wrap(async (req, res) =
   });
 }));
 
-// ---------- BMHP: Pengambilan BMHP (Otomatis Kurang dari Kelompok Dipilih) ----------
+// ---------- BMHP: Pengambilan BMHP (Otomatis Kurang dari Kelompok Dipilih + Dokumen NPB/SPB/SPPB/BAST) ----------
 router.post('/bmhp-out', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  await ensureBmhpEnhancementColumns(pool);
   const body = req.body || {};
   const qty = parseInt(body.quantity, 10);
   if (!qty || qty <= 0) {
@@ -3999,11 +4039,13 @@ router.post('/bmhp-out', auth, allow('admin', 'petugas'), wrap(async (req, res) 
 
   const purpose = sanitizeText(body.purpose || body.notes) || 'Untuk pengemasan set instrumen';
   const officer = sanitizeText(body.officer) || req.user.name || 'Petugas CSSD';
+  const receiverName = sanitizeText(body.receiver_name) || officer;
+  const docType = sanitizeText(body.doc_type) || 'NPB';
   const trxDate = body.trx_date ? String(body.trx_date).slice(0, 10) : todayStr();
   const trxTime = sanitizeText(body.trx_time) || `${nowDateTimeStr().slice(11, 16)} WIB`;
   const officerSignature = body.officer_signature || null;
   const unitId = body.unit_id ? Number(body.unit_id) : null;
-  let unitName = 'Instalasi CSSD';
+  let unitName = sanitizeText(body.unit_name) || 'Instalasi CSSD';
 
   let resultData = null;
 
@@ -4035,18 +4077,24 @@ router.post('/bmhp-out', auth, allow('admin', 'petugas'), wrap(async (req, res) 
 
     await conn.query('UPDATE bmhp_items SET stock = ? WHERE id = ?', [totalPhysicalStock, batch.bmhp_item_id]);
 
-    // 4. Catat transaksi KELUAR di bmhp_transactions
+    // 4. Generate nomor dokumen barang keluar otomatis (terhubung ke NPB/SPB/SPPB/BAST)
+    const docNumber = sanitizeText(body.doc_number) || (await makeCode(conn, 'BMHP-OUT', trxDate));
+
+    // 5. Catat transaksi KELUAR di bmhp_transactions
     const [txRes] = await conn.query(`
       INSERT INTO bmhp_transactions
-      (bmhp_item_id, type, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_id, unit_name, officer, trx_date, trx_time, purpose, officer_signature, notes, stock_after)
-      VALUES (?, 'KELUAR', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (bmhp_item_id, type, doc_number, doc_type, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_price, total_price, unit_id, unit_name, officer, receiver_name, trx_date, trx_time, purpose, officer_signature, notes, stock_after)
+      VALUES (?, 'KELUAR', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      batch.bmhp_item_id, qty, batch.fiscal_year, batch.budget_source, batch.id, batch.batch_no, batch.expiry_date,
-      unitId, unitName, officer, trxDate, trxTime, purpose, officerSignature, purpose, batchStockAfter
+      batch.bmhp_item_id, docNumber, docType, qty, batch.fiscal_year, batch.budget_source, batch.id, batch.batch_no, batch.expiry_date,
+      batch.unit_price || 0, (batch.unit_price || 0) * qty,
+      unitId, unitName, officer, receiverName, trxDate, trxTime, purpose, officerSignature, purpose, batchStockAfter
     ]);
 
     resultData = {
       transaction_id: txRes.insertId,
+      doc_number: docNumber,
+      doc_type: docType,
       bmhp_item_id: batch.bmhp_item_id,
       batch_id: batch.id,
       batch_stock: batchStockAfter,
@@ -4056,7 +4104,7 @@ router.post('/bmhp-out', auth, allow('admin', 'petugas'), wrap(async (req, res) 
 
   res.json({
     success: true,
-    message: 'Pengambilan BMHP berhasil disimpan dan stok kelompok otomatis berkurang',
+    message: `Pengambilan BMHP (${resultData.doc_number}) berhasil disimpan. Stok, Kartu Stok, Dokumen & seluruh Laporan otomatis terbarui.`,
     data: resultData,
   });
 }));
@@ -4102,8 +4150,8 @@ router.get('/bmhp-stock-card', auth, allow('admin', 'petugas'), wrap(async (req,
     const preParams = [...params, start_date];
     const [[preRes]] = await pool.query(`
       SELECT 
-        COALESCE(SUM(CASE WHEN t.type = 'MASUK' THEN t.quantity ELSE 0 END), 0) AS pre_in,
-        COALESCE(SUM(CASE WHEN t.type = 'KELUAR' THEN t.quantity ELSE 0 END), 0) AS pre_out
+        COALESCE(SUM(CASE WHEN t.type IN ('MASUK', 'RETUR_MASUK', 'KOREKSI_TAMBAH') THEN t.quantity ELSE 0 END), 0) AS pre_in,
+        COALESCE(SUM(CASE WHEN t.type IN ('KELUAR', 'RETUR_KELUAR', 'KOREKSI_KURANG') THEN t.quantity ELSE 0 END), 0) AS pre_out
       FROM bmhp_transactions t
       WHERE ${preWhere.join(' AND ')}
     `, preParams);
@@ -4158,9 +4206,20 @@ router.get('/bmhp-stock-card', auth, allow('admin', 'petugas'), wrap(async (req,
     const qty = Number(tx.quantity);
     let qtyIn = null;
     let qtyOut = null;
-    let typeLabel = tx.notes || (tx.type === 'MASUK' ? 'Barang Masuk - Pembelian' : 'Pengambilan BMHP');
+    const isIncoming = ['MASUK', 'RETUR_MASUK', 'KOREKSI_TAMBAH'].includes(tx.type);
+    const defaultLabels = {
+      MASUK: 'Barang Masuk - Pembelian',
+      KELUAR: 'Pengambilan BMHP',
+      RETUR_MASUK: 'Retur Masuk (+)',
+      RETUR_KELUAR: 'Retur Keluar (-)',
+      KOREKSI_TAMBAH: 'Koreksi Tambah (+)',
+      KOREKSI_KURANG: 'Koreksi Kurang (-)',
+    };
+    let typeLabel = tx.correction_reason
+      ? `${defaultLabels[tx.type] || tx.type}: ${tx.correction_reason}`
+      : (tx.notes || defaultLabels[tx.type] || tx.type);
 
-    if (tx.type === 'MASUK') {
+    if (isIncoming) {
       running += qty;
       totalIn += qty;
       qtyIn = qty;
@@ -4172,6 +4231,8 @@ router.get('/bmhp-stock-card', auth, allow('admin', 'petugas'), wrap(async (req,
 
     rows.push({
       id: tx.id,
+      doc_number: tx.doc_number || null,
+      doc_type: tx.doc_type || null,
       trx_date: tx.trx_date,
       trx_time: tx.trx_time,
       type_label: typeLabel,
@@ -4180,6 +4241,7 @@ router.get('/bmhp-stock-card', auth, allow('admin', 'petugas'), wrap(async (req,
       budget_source: tx.budget_source || 'BLUD',
       batch_no: tx.batch_no || '-',
       expiry_date: tx.expiry_date,
+      unit_name: tx.unit_name || 'Instalasi CSSD',
       qty_in: qtyIn,
       qty_out: qtyOut,
       balance: running,
@@ -4258,6 +4320,534 @@ router.get('/bmhp-overall-stock', auth, allow('admin', 'petugas'), wrap(async (r
       all_items: allItems,
     },
   });
+}));
+
+// ---------- BMHP: Retur / Koreksi Stok (Terintegrasi Penuh ke Batch, Stok, Kartu Stok & Laporan) ----------
+router.post('/bmhp-adjustment', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  await ensureBmhpEnhancementColumns(pool);
+  const body = req.body || {};
+  const qty = parseInt(body.quantity, 10);
+  if (!qty || qty <= 0) {
+    throw new HttpError(422, 'Jumlah retur/koreksi wajib angka positif', { quantity: 'Jumlah tidak valid' });
+  }
+  const adjType = String(body.adjustment_type || body.type || '').toUpperCase();
+  const validTypes = ['RETUR_MASUK', 'RETUR_KELUAR', 'KOREKSI_TAMBAH', 'KOREKSI_KURANG'];
+  if (!validTypes.includes(adjType)) {
+    throw new HttpError(422, 'Jenis retur/koreksi tidak valid', { adjustment_type: 'Pilih jenis retur atau koreksi' });
+  }
+  const reason = sanitizeText(body.correction_reason || body.reason);
+  if (!reason) {
+    throw new HttpError(422, 'Alasan retur / koreksi wajib diisi', { correction_reason: 'Alasan wajib diisi' });
+  }
+  const batchId = body.batch_id ? Number(body.batch_id) : null;
+  if (!batchId) {
+    throw new HttpError(422, 'Kelompok stok / batch BMHP wajib dipilih', { batch_id: 'Batch wajib dipilih' });
+  }
+
+  const officer = sanitizeText(body.officer) || req.user.name || 'Petugas CSSD';
+  const trxDate = body.trx_date ? String(body.trx_date).slice(0, 10) : todayStr();
+  const trxTime = sanitizeText(body.trx_time) || `${nowDateTimeStr().slice(11, 16)} WIB`;
+  const refTxId = body.ref_transaction_id ? Number(body.ref_transaction_id) : null;
+  const notes = sanitizeText(body.notes) || reason;
+  const isIncoming = adjType === 'RETUR_MASUK' || adjType === 'KOREKSI_TAMBAH';
+  const docPrefix = adjType.startsWith('RETUR') ? 'RET' : 'KOR';
+  const docType = adjType.startsWith('RETUR') ? 'RETUR' : 'KOREKSI';
+
+  let resultData = null;
+
+  await withTx(async (conn) => {
+    const [[batch]] = await conn.query(
+      'SELECT b.*, i.name AS item_name, i.unit_label FROM bmhp_batches b JOIN bmhp_items i ON i.id = b.bmhp_item_id WHERE b.id = ? FOR UPDATE',
+      [batchId]
+    );
+    if (!batch) throw new HttpError(404, 'Batch BMHP tidak ditemukan');
+
+    if (!isIncoming && batch.stock < qty) {
+      throw new HttpError(422, `Stok batch tidak mencukupi untuk dikurangi (tersedia: ${batch.stock} ${batch.unit_label})`);
+    }
+
+    const nextBatchStock = isIncoming ? batch.stock + qty : batch.stock - qty;
+    await conn.query('UPDATE bmhp_batches SET stock = ?, updated_at = NOW() WHERE id = ?', [nextBatchStock, batchId]);
+
+    const [[stockSum]] = await conn.query('SELECT COALESCE(SUM(stock), 0) AS total FROM bmhp_batches WHERE bmhp_item_id = ?', [batch.bmhp_item_id]);
+    const totalPhysicalStock = Number(stockSum?.total || 0);
+    await conn.query('UPDATE bmhp_items SET stock = ? WHERE id = ?', [totalPhysicalStock, batch.bmhp_item_id]);
+
+    const docNumber = await makeCode(conn, docPrefix, trxDate);
+    const [txRes] = await conn.query(`
+      INSERT INTO bmhp_transactions
+      (bmhp_item_id, type, doc_number, doc_type, ref_transaction_id, quantity, fiscal_year, budget_source, batch_id, batch_no, expiry_date, unit_price, total_price, unit_name, officer, trx_date, trx_time, purpose, notes, correction_reason, stock_after)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Instalasi CSSD', ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      batch.bmhp_item_id, adjType, docNumber, docType, refTxId, qty,
+      batch.fiscal_year, batch.budget_source, batch.id, batch.batch_no, batch.expiry_date,
+      batch.unit_price || 0, (batch.unit_price || 0) * qty,
+      officer, trxDate, trxTime, reason, notes, reason, nextBatchStock
+    ]);
+
+    resultData = {
+      transaction_id: txRes.insertId,
+      doc_number: docNumber,
+      adjustment_type: adjType,
+      batch_stock: nextBatchStock,
+      total_item_stock: totalPhysicalStock,
+    };
+  });
+
+  res.json({
+    success: true,
+    message: `Transaksi ${docType} (${resultData.doc_number}) berhasil disimpan. Stok & seluruh laporan otomatis diperbarui.`,
+    data: resultData,
+  });
+}));
+
+// ---------- BMHP: Riwayat Dokumen Barang Keluar (NPB, SPB, SPPB, BAST) ----------
+router.get('/bmhp-documents', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  await ensureBmhpEnhancementColumns(pool);
+  const { start_date, end_date, search, doc_type, budget_source, fiscal_year } = req.query;
+  const where = ["t.type = 'KELUAR'"];
+  const params = [];
+
+  if (start_date) { where.push('t.trx_date >= ?'); params.push(start_date); }
+  if (end_date) { where.push('t.trx_date <= ?'); params.push(end_date); }
+  if (budget_source && budget_source !== 'Semua') { where.push('t.budget_source = ?'); params.push(budget_source); }
+  if (fiscal_year && fiscal_year !== 'Semua') { where.push('t.fiscal_year = ?'); params.push(fiscal_year); }
+  if (doc_type && doc_type !== 'Semua') { where.push('COALESCE(t.doc_type, "NPB") = ?'); params.push(doc_type); }
+  if (search) {
+    where.push('(i.name LIKE ? OR i.code LIKE ? OR t.doc_number LIKE ? OR t.unit_name LIKE ? OR t.officer LIKE ? OR t.batch_no LIKE ?)');
+    const term = `%${search.trim()}%`;
+    params.push(term, term, term, term, term, term);
+  }
+
+  const [rows] = await pool.query(`
+    SELECT t.*, i.name AS item_name, i.code AS item_code, i.category, i.unit_label
+    FROM bmhp_transactions t
+    JOIN bmhp_items i ON i.id = t.bmhp_item_id
+    WHERE ${where.join(' AND ')}
+    ORDER BY t.trx_date DESC, t.id DESC
+    LIMIT 300
+  `, params);
+
+  const enriched = rows.map((r) => {
+    const baseNo = r.doc_number || `BMHP-OUT-${String(r.trx_date || '').replace(/-/g, '').slice(2)}-${pad(r.id)}`;
+    const suffix = baseNo.replace(/^(BMHP-OUT|NPB|SPB|SPPB|BAST)-/, '');
+    return {
+      ...r,
+      doc_number: baseNo,
+      npb_number: `NPB-${suffix}`,
+      spb_number: `SPB-${suffix}`,
+      sppb_number: `SPPB-${suffix}`,
+      bast_number: `BAST-${suffix}`,
+    };
+  });
+
+  res.json({ success: true, data: enriched });
+}));
+
+// ---------- BMHP: Laporan Terintegrasi Otomatis (10 Jenis Laporan dari 1 Database) ----------
+router.get('/bmhp-reports', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  await ensureBmhpEnhancementColumns(pool);
+  const { report_type = 'mutasi', start_date, end_date, category, fiscal_year, budget_source, batch_no, bmhp_item_id, search } = req.query;
+  const isAdminUser = req.user.role === 'admin';
+
+  // Helper filter transaksi
+  const buildTxFilter = () => {
+    const w = ['1=1'];
+    const p = [];
+    if (start_date) { w.push('t.trx_date >= ?'); p.push(start_date); }
+    if (end_date) { w.push('t.trx_date <= ?'); p.push(end_date); }
+    if (category && category !== 'Semua') { w.push('i.category = ?'); p.push(category); }
+    if (fiscal_year && fiscal_year !== 'Semua') { w.push('t.fiscal_year = ?'); p.push(fiscal_year); }
+    if (budget_source && budget_source !== 'Semua') { w.push('t.budget_source = ?'); p.push(budget_source); }
+    if (batch_no && batch_no !== 'Semua') { w.push('t.batch_no = ?'); p.push(batch_no); }
+    if (bmhp_item_id) { w.push('t.bmhp_item_id = ?'); p.push(Number(bmhp_item_id)); }
+    if (search) {
+      w.push('(i.name LIKE ? OR i.code LIKE ? OR t.batch_no LIKE ? OR t.officer LIKE ? OR t.doc_number LIKE ?)');
+      const term = `%${search.trim()}%`;
+      p.push(term, term, term, term, term);
+    }
+    return { w, p };
+  };
+
+  if (report_type === 'kartu_stok_all') {
+    // Cetak Kartu Stok Seluruh Barang Sesuai Filter (TANPA nominal rupiah!)
+    const itemW = ['i.is_active = 1'];
+    const itemP = [];
+    if (category && category !== 'Semua') { itemW.push('i.category = ?'); itemP.push(category); }
+    if (bmhp_item_id) { itemW.push('i.id = ?'); itemP.push(Number(bmhp_item_id)); }
+    if (search) {
+      itemW.push('(i.name LIKE ? OR i.code LIKE ?)');
+      const term = `%${search.trim()}%`;
+      itemP.push(term, term);
+    }
+    const [itemsList] = await pool.query(`SELECT * FROM bmhp_items i WHERE ${itemW.join(' AND ')} ORDER BY i.name ASC`, itemP);
+
+    const cards = [];
+    for (const item of itemsList) {
+      const tw = ['t.bmhp_item_id = ?'];
+      const tp = [item.id];
+      if (fiscal_year && fiscal_year !== 'Semua') { tw.push('t.fiscal_year = ?'); tp.push(fiscal_year); }
+      if (budget_source && budget_source !== 'Semua') { tw.push('t.budget_source = ?'); tp.push(budget_source); }
+      if (batch_no && batch_no !== 'Semua') { tw.push('t.batch_no = ?'); tp.push(batch_no); }
+
+      let initStock = 0;
+      if (start_date) {
+        const [[pre]] = await pool.query(`
+          SELECT
+            COALESCE(SUM(CASE WHEN t.type IN ('MASUK','RETUR_MASUK','KOREKSI_TAMBAH') THEN t.quantity ELSE 0 END), 0) AS pre_in,
+            COALESCE(SUM(CASE WHEN t.type IN ('KELUAR','RETUR_KELUAR','KOREKSI_KURANG') THEN t.quantity ELSE 0 END), 0) AS pre_out
+          FROM bmhp_transactions t WHERE ${tw.join(' AND ')} AND t.trx_date < ?
+        `, [...tp, start_date]);
+        initStock = Math.max((pre?.pre_in || 0) - (pre?.pre_out || 0), 0);
+      }
+
+      const pw = [...tw];
+      const pp = [...tp];
+      if (start_date) { pw.push('t.trx_date >= ?'); pp.push(start_date); }
+      if (end_date) { pw.push('t.trx_date <= ?'); pp.push(end_date); }
+
+      const [txs] = await pool.query(`
+        SELECT t.id, t.doc_number, t.type, t.quantity, t.fiscal_year, t.budget_source, t.batch_no, t.expiry_date,
+               t.unit_name, t.officer, t.trx_date, t.trx_time, t.notes, t.correction_reason
+        FROM bmhp_transactions t
+        WHERE ${pw.join(' AND ')}
+        ORDER BY t.trx_date ASC, t.id ASC
+      `, pp);
+
+      let running = initStock;
+      let sumIn = 0;
+      let sumOut = 0;
+      const rows = txs.map((tx) => {
+        const isIn = ['MASUK', 'RETUR_MASUK', 'KOREKSI_TAMBAH'].includes(tx.type);
+        const q = Number(tx.quantity);
+        if (isIn) { running += q; sumIn += q; } else { running -= q; sumOut += q; }
+        return {
+          ...tx,
+          qty_in: isIn ? q : null,
+          qty_out: isIn ? null : q,
+          balance: running,
+        };
+      });
+
+      if (rows.length > 0 || !bmhp_item_id) {
+        cards.push({
+          item: { id: item.id, code: item.code, name: item.name, category: item.category, unit_label: item.unit_label, stock: item.stock },
+          summary: { initial_stock: initStock, total_in: sumIn, total_out: sumOut, current_stock: running || item.stock },
+          rows,
+        });
+      }
+    }
+    return res.json({ success: true, data: { report_type, cards } });
+  }
+
+  if (report_type === 'masuk' || report_type === 'keluar' || report_type === 'retur') {
+    const { w, p } = buildTxFilter();
+    if (report_type === 'masuk') w.push("t.type = 'MASUK'");
+    if (report_type === 'keluar') w.push("t.type = 'KELUAR'");
+    if (report_type === 'retur') w.push("t.type IN ('RETUR_MASUK','RETUR_KELUAR','KOREKSI_TAMBAH','KOREKSI_KURANG')");
+    const [rows] = await pool.query(`
+      SELECT t.*, i.name AS item_name, i.code AS item_code, i.category, i.unit_label
+      FROM bmhp_transactions t
+      JOIN bmhp_items i ON i.id = t.bmhp_item_id
+      WHERE ${w.join(' AND ')}
+      ORDER BY t.trx_date DESC, t.id DESC
+      LIMIT 500
+    `, p);
+    return res.json({ success: true, data: { report_type, rows } });
+  }
+
+  if (report_type === 'mutasi') {
+    const itemW = ['i.is_active = 1'];
+    const itemP = [];
+    if (category && category !== 'Semua') { itemW.push('i.category = ?'); itemP.push(category); }
+    if (search) { itemW.push('(i.name LIKE ? OR i.code LIKE ?)'); itemP.push(`%${search.trim()}%`, `%${search.trim()}%`); }
+    const txCond = [];
+    const txP = [];
+    if (start_date) { txCond.push('trx_date >= ?'); txP.push(start_date); }
+    if (end_date) { txCond.push('trx_date <= ?'); txP.push(end_date); }
+    if (fiscal_year && fiscal_year !== 'Semua') { txCond.push('fiscal_year = ?'); txP.push(fiscal_year); }
+    if (budget_source && budget_source !== 'Semua') { txCond.push('budget_source = ?'); txP.push(budget_source); }
+    const txWhereSql = txCond.length ? `AND ${txCond.join(' AND ')}` : '';
+
+    const [rows] = await pool.query(`
+      SELECT i.id, i.code, i.name, i.category, i.unit_label, i.min_stock, i.stock AS current_stock,
+        COALESCE((SELECT SUM(quantity) FROM bmhp_transactions WHERE bmhp_item_id = i.id AND type = 'MASUK' ${txWhereSql}), 0) AS qty_in,
+        COALESCE((SELECT SUM(quantity) FROM bmhp_transactions WHERE bmhp_item_id = i.id AND type = 'KELUAR' ${txWhereSql}), 0) AS qty_out,
+        COALESCE((SELECT SUM(CASE WHEN type IN ('RETUR_MASUK','KOREKSI_TAMBAH') THEN quantity WHEN type IN ('RETUR_KELUAR','KOREKSI_KURANG') THEN -quantity ELSE 0 END) FROM bmhp_transactions WHERE bmhp_item_id = i.id ${txWhereSql}), 0) AS qty_adj
+      FROM bmhp_items i
+      WHERE ${itemW.join(' AND ')}
+      ORDER BY i.name ASC
+    `, [...txP, ...txP, ...txP, ...itemP]);
+    return res.json({ success: true, data: { report_type, rows } });
+  }
+
+  if (report_type === 'rekap') {
+    const w = ['i.is_active = 1'];
+    const p = [];
+    if (category && category !== 'Semua') { w.push('i.category = ?'); p.push(category); }
+    if (search) { w.push('(i.name LIKE ? OR i.code LIKE ?)'); p.push(`%${search.trim()}%`, `%${search.trim()}%`); }
+    const [rows] = await pool.query(`
+      SELECT i.*,
+        CASE
+          WHEN i.stock <= 0 THEN 'Habis'
+          WHEN i.stock <= i.min_stock THEN 'Menipis'
+          ELSE 'Aman'
+        END AS stock_status,
+        (SELECT COUNT(*) FROM bmhp_batches b WHERE b.bmhp_item_id = i.id AND b.stock > 0) AS active_batches
+      FROM bmhp_items i
+      WHERE ${w.join(' AND ')}
+      ORDER BY i.stock ASC, i.name ASC
+    `, p);
+    return res.json({ success: true, data: { report_type, rows } });
+  }
+
+  if (report_type === 'per_kategori' || report_type === 'per_tahun' || report_type === 'per_anggaran') {
+    const bw = ['1=1'];
+    const bp = [];
+    if (category && category !== 'Semua') { bw.push('i.category = ?'); bp.push(category); }
+    if (fiscal_year && fiscal_year !== 'Semua') { bw.push('b.fiscal_year = ?'); bp.push(fiscal_year); }
+    if (budget_source && budget_source !== 'Semua') { bw.push('b.budget_source = ?'); bp.push(budget_source); }
+    const groupField =
+      report_type === 'per_kategori' ? 'i.category' :
+      report_type === 'per_tahun' ? 'b.fiscal_year' : 'b.budget_source';
+
+    const [rows] = await pool.query(`
+      SELECT ${groupField} AS group_label,
+        COUNT(DISTINCT b.bmhp_item_id) AS total_items,
+        COUNT(b.id) AS total_batches,
+        COALESCE(SUM(b.initial_stock), 0) AS total_initial,
+        COALESCE(SUM(b.stock), 0) AS total_stock,
+        COALESCE(SUM(b.stock * COALESCE(b.unit_price, 0)), 0) AS total_value
+      FROM bmhp_batches b
+      JOIN bmhp_items i ON i.id = b.bmhp_item_id
+      WHERE ${bw.join(' AND ')}
+      GROUP BY ${groupField}
+      ORDER BY group_label DESC
+    `, bp);
+    return res.json({ success: true, data: { report_type, rows: rows.map((r) => ({ ...r, total_value: isAdminUser ? Number(r.total_value || 0) : null })) } });
+  }
+
+  if (report_type === 'expired') {
+    const [rows] = await pool.query(`
+      SELECT b.*, i.code AS item_code, i.name AS item_name, i.category, i.unit_label,
+        DATEDIFF(b.expiry_date, CURDATE()) AS days_left,
+        CASE
+          WHEN b.expiry_date < CURDATE() THEN 'Kedaluwarsa'
+          WHEN DATEDIFF(b.expiry_date, CURDATE()) <= 30 THEN 'Akan Expired (≤30 Hari)'
+          WHEN DATEDIFF(b.expiry_date, CURDATE()) <= 90 THEN 'Perhatian (≤90 Hari)'
+          ELSE 'Aman'
+        END AS expiry_status
+      FROM bmhp_batches b
+      JOIN bmhp_items i ON i.id = b.bmhp_item_id
+      WHERE b.stock > 0 AND b.expiry_date IS NOT NULL
+      ORDER BY b.expiry_date ASC
+    `);
+    return res.json({ success: true, data: { report_type, rows } });
+  }
+
+  // Default: 'keseluruhan' (termasuk nilai rupiah khusus Admin)
+  const bw = ['1=1'];
+  const bp = [];
+  if (category && category !== 'Semua') { bw.push('i.category = ?'); bp.push(category); }
+  if (fiscal_year && fiscal_year !== 'Semua') { bw.push('b.fiscal_year = ?'); bp.push(fiscal_year); }
+  if (budget_source && budget_source !== 'Semua') { bw.push('b.budget_source = ?'); bp.push(budget_source); }
+  if (search) { bw.push('(i.name LIKE ? OR i.code LIKE ? OR b.batch_no LIKE ?)'); bp.push(`%${search.trim()}%`, `%${search.trim()}%`, `%${search.trim()}%`); }
+  const [rows] = await pool.query(`
+    SELECT b.*, i.code AS item_code, i.name AS item_name, i.category, i.unit_label,
+      (b.stock * COALESCE(b.unit_price, 0)) AS total_value
+    FROM bmhp_batches b
+    JOIN bmhp_items i ON i.id = b.bmhp_item_id
+    WHERE ${bw.join(' AND ')}
+    ORDER BY i.name ASC, b.fiscal_year DESC, b.expiry_date ASC
+  `, bp);
+  res.json({
+    success: true,
+    data: {
+      report_type: 'keseluruhan',
+      rows: rows.map((r) => ({
+        ...r,
+        unit_price: isAdminUser ? Number(r.unit_price || 0) : null,
+        total_value: isAdminUser ? Number(r.total_value || 0) : null,
+      })),
+    },
+  });
+}));
+
+// ---------- DTT (Reuse): Cek Status Reuse Berikutnya (Auto-fill di Penerimaan DTT) ----------
+router.get('/dtt-receipts/reuse-status', auth, wrap(async (req, res) => {
+  const { item_name, unit_id, item_code } = req.query;
+  if (!item_name && !item_code) {
+    return res.json({ success: true, data: { previous_count: 0, next_reuse: 1, max_reuse_limit: 4, alert_level: 'SAFE' } });
+  }
+  const where = [];
+  const params = [];
+  if (item_name) { where.push('LOWER(item_name) = LOWER(?)'); params.push(item_name.trim()); }
+  else if (item_code) { where.push('LOWER(item_code) = LOWER(?)'); params.push(item_code.trim()); }
+  if (unit_id) { where.push('unit_id = ?'); params.push(Number(unit_id)); }
+
+  const [[stats]] = await pool.query(`
+    SELECT
+      COUNT(*) AS total_tx,
+      COALESCE(MAX(reuse_count), 0) AS max_recorded,
+      COALESCE(MIN(CASE WHEN max_reuse_limit IN (3, 4) THEN max_reuse_limit ELSE NULL END), 4) AS max_limit
+    FROM dtt_receipts
+    WHERE ${where.join(' AND ')}
+  `, params);
+
+  const prevCount = Math.max(Number(stats?.total_tx || 0), Number(stats?.max_recorded || 0));
+  const nextReuse = prevCount + 1;
+  const maxLimit = Number(stats?.max_limit || 4);
+  const alertLevel = nextReuse >= maxLimit ? 'DANGER' : (nextReuse === maxLimit - 1 ? 'WARNING' : 'SAFE');
+
+  res.json({
+    success: true,
+    data: {
+      previous_count: prevCount,
+      next_reuse: nextReuse,
+      max_reuse_limit: maxLimit,
+      alert_level: alertLevel,
+    },
+  });
+}));
+
+// ---------- DTT (Reuse): Laporan Reuse DTT Otomatis (Terintegrasi Penerimaan & Pengambilan) ----------
+router.get('/dtt-reuse-report', auth, wrap(async (req, res) => {
+  const { unit_id, search, alert_level, start_date, end_date } = req.query;
+  const where = ['1=1'];
+  const params = [];
+
+  if (req.user.role === 'unit' && req.user.unit_id) {
+    where.push('r.unit_id = ?');
+    params.push(req.user.unit_id);
+  } else if (unit_id) {
+    where.push('r.unit_id = ?');
+    params.push(Number(unit_id));
+  }
+  if (start_date) { where.push('DATE(r.receipt_datetime) >= ?'); params.push(start_date); }
+  if (end_date) { where.push('DATE(r.receipt_datetime) <= ?'); params.push(end_date); }
+  if (search) {
+    where.push('(r.item_name LIKE ? OR r.item_code LIKE ? OR r.barcode LIKE ? OR u.name LIKE ?)');
+    const term = `%${search.trim()}%`;
+    params.push(term, term, term, term);
+  }
+
+  // 1. Ambil seluruh transaksi terintegrasi (Penerimaan + Pengambilan DTT)
+  const [txRows] = await pool.query(`
+    SELECT r.*, u.name AS unit_name,
+      d.id AS dist_id, d.barcode AS dist_barcode, d.dist_datetime, d.officer AS dist_officer, d.receiver_name AS dist_receiver_name
+    FROM dtt_receipts r
+    JOIN units u ON u.id = r.unit_id
+    LEFT JOIN dtt_distributions d ON d.dtt_receipt_id = r.id
+    WHERE ${where.join(' AND ')}
+    ORDER BY r.receipt_datetime DESC, r.id DESC
+    LIMIT 500
+  `, params);
+
+  // 2. Agregasi otomatis per jenis alat & unit (terintegrasi penuh)
+  const toolMap = new Map();
+  for (const r of txRows) {
+    const key = `${r.unit_id}::${(r.item_name || '').trim().toLowerCase()}`;
+    const recLimit = Number(r.max_reuse_limit);
+    const effectiveLimit = recLimit >= 1 && recLimit <= 6 ? recLimit : 4; // standar RSUD 3x atau 4x
+
+    if (!toolMap.has(key)) {
+      toolMap.set(key, {
+        key,
+        unit_id: r.unit_id,
+        unit_name: r.unit_name,
+        item_code: r.item_code || '-',
+        item_name: r.item_name,
+        unit_label: r.unit_label || 'Pcs',
+        total_receipts: 0,
+        total_distributions: 0,
+        max_recorded_reuse: 0,
+        max_reuse_limit: effectiveLimit,
+        last_condition: r.tool_condition,
+        last_stage: r.process_stage,
+        last_receipt_datetime: r.receipt_datetime,
+        last_dist_datetime: r.dist_datetime || null,
+        last_barcode: r.barcode,
+      });
+    }
+    const entry = toolMap.get(key);
+    entry.total_receipts += 1;
+    if (r.dist_id) entry.total_distributions += 1;
+    if (Number(r.reuse_count || 0) > entry.max_recorded_reuse) {
+      entry.max_recorded_reuse = Number(r.reuse_count || 0);
+    }
+    if (recLimit === 3 || recLimit === 4) {
+      entry.max_reuse_limit = recLimit;
+    }
+  }
+
+  let summaryByTool = Array.from(toolMap.values()).map((t) => {
+    const currentReuse = Math.max(t.total_receipts, t.max_recorded_reuse);
+    const maxLimit = t.max_reuse_limit || 4;
+    const remaining = Math.max(maxLimit - currentReuse, 0);
+    let level = 'SAFE';
+    let alertMessage = `Aman (Sisa ${remaining}x reuse)`;
+    if (currentReuse >= maxLimit || t.last_condition === 'Rusak / Afkir') {
+      level = 'DANGER';
+      alertMessage = currentReuse >= maxLimit
+        ? `PERINGATAN: Sudah mencapai batas maksimal (${currentReuse}/${maxLimit}x) — Wajib Ganti / Afkir!`
+        : 'PERINGATAN: Kondisi alat Rusak / Afkir!';
+    } else if (currentReuse === maxLimit - 1) {
+      level = 'WARNING';
+      alertMessage = `WARNING: Mendekati batas maksimal reuse (${currentReuse}/${maxLimit}x) — Sisa 1x pakai`;
+    }
+    return {
+      ...t,
+      current_reuse: currentReuse,
+      max_reuse_limit: maxLimit,
+      remaining_reuse: remaining,
+      alert_level: level,
+      alert_message: alertMessage,
+    };
+  });
+
+  // Sort: DANGER dulu, lalu WARNING, lalu SAFE
+  const orderRank = { DANGER: 0, WARNING: 1, SAFE: 2 };
+  summaryByTool.sort((a, b) => (orderRank[a.alert_level] - orderRank[b.alert_level]) || (b.current_reuse - a.current_reuse));
+
+  const kpi = {
+    total_tools: summaryByTool.length,
+    total_receipts: txRows.length,
+    total_distributions: txRows.filter((r) => Boolean(r.dist_id)).length,
+    danger_count: summaryByTool.filter((t) => t.alert_level === 'DANGER').length,
+    warning_count: summaryByTool.filter((t) => t.alert_level === 'WARNING').length,
+    safe_count: summaryByTool.filter((t) => t.alert_level === 'SAFE').length,
+  };
+
+  if (alert_level && alert_level !== 'ALL') {
+    summaryByTool = summaryByTool.filter((t) => t.alert_level === alert_level);
+  }
+
+  const transactions = txRows.map((r) => {
+    const limit = Number(r.max_reuse_limit) >= 1 && Number(r.max_reuse_limit) <= 6 ? Number(r.max_reuse_limit) : 4;
+    const rc = Number(r.reuse_count || 1);
+    const lvl = rc >= limit || r.tool_condition === 'Rusak / Afkir' ? 'DANGER' : (rc === limit - 1 ? 'WARNING' : 'SAFE');
+    return { ...r, effective_max_limit: limit, alert_level: lvl };
+  });
+
+  res.json({
+    success: true,
+    data: { kpi, summary_by_tool: summaryByTool, transactions },
+  });
+}));
+
+// ---------- DTT (Reuse): Atur Batas Maksimal Reuse per Alat (3x / 4x) ----------
+router.patch('/dtt-reuse-limit', auth, allow('admin', 'petugas'), wrap(async (req, res) => {
+  const { item_name, unit_id, max_reuse_limit } = req.body || {};
+  const limit = parseInt(max_reuse_limit, 10);
+  if (!item_name || !limit || limit < 1 || limit > 20) {
+    throw new HttpError(422, 'Nama alat dan batas maksimal reuse (3x / 4x) wajib valid');
+  }
+  const where = ['LOWER(item_name) = LOWER(?)'];
+  const params = [limit, item_name.trim()];
+  if (unit_id) { where.push('unit_id = ?'); params.push(Number(unit_id)); }
+
+  await pool.query(`UPDATE dtt_receipts SET max_reuse_limit = ? WHERE ${where.join(' AND ')}`, params);
+  res.json({ success: true, message: `Batas maksimal reuse "${item_name}" diatur menjadi ${limit}x` });
 }));
 
 // ---------- Dashboard ----------

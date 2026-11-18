@@ -74,11 +74,29 @@ export const dttReceiptsConfig = {
     {
       key: 'reuse_count',
       label: 'Reuse Ke-',
-      render: (r) => (
-        <span className="font-semibold text-slate-800">
-          Ke-{r.reuse_count} <span className="text-xs text-slate-400">/ max {r.max_reuse_limit || 10}</span>
-        </span>
-      ),
+      render: (r) => {
+        const limit = Number(r.max_reuse_limit) >= 1 && Number(r.max_reuse_limit) <= 6 ? Number(r.max_reuse_limit) : 4;
+        const count = Number(r.reuse_count || 1);
+        const isDanger = count >= limit;
+        const isWarning = !isDanger && count === limit - 1;
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className={`font-bold ${isDanger ? 'text-rose-700' : isWarning ? 'text-amber-700' : 'text-slate-800'}`}>
+              Ke-{count} <span className="text-xs font-normal text-slate-400">/ max {limit}x</span>
+            </span>
+            {isDanger && (
+              <span className="inline-flex w-fit items-center gap-1 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-extrabold text-rose-700">
+                <AlertTriangle size={10} /> BATAS MAKSIMAL
+              </span>
+            )}
+            {isWarning && (
+              <span className="inline-flex w-fit items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-800">
+                <AlertTriangle size={10} /> WARNING (Sisa 1x)
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     { key: 'tool_condition', label: 'Kondisi', render: (r) => conditionBadge(r.tool_condition) },
     { key: 'process_stage', label: 'Tahap DTT', render: (r) => <span className="badge badge-info">{r.process_stage}</span> },
@@ -134,14 +152,29 @@ export const dttReceiptsConfig = {
           unit_id: vals?.unit_id || '',
         }),
         optionLabel: (r) => `${r.code} — ${r.name}${r.unit_name ? ` [${r.unit_name}]` : ''}${r.unit_label ? ` (${r.unit_label})` : ''}`,
-        onChange: (_, { option, setValues }) => {
+        onChange: async (_, { option, values, setValues }) => {
           if (!option) return;
-          setValues({
+          const nextUnitId = option.unit_id ? String(option.unit_id) : (values?.unit_id || '');
+          const patch = {
             item_code: option.code || '',
             item_name: option.name || '',
             unit_label: option.unit_label || 'Pcs',
             ...(option.unit_id ? { unit_id: String(option.unit_id) } : {}),
-          });
+          };
+          setValues(patch);
+          try {
+            const res = await getList(API_ENDPOINTS.DTT_RECEIPTS.REUSE_STATUS, {
+              item_name: option.name,
+              unit_id: nextUnitId,
+            });
+            const st = res?.data;
+            if (st) {
+              setValues({
+                reuse_count: st.next_reuse || 1,
+                max_reuse_limit: st.max_reuse_limit || 4,
+              });
+            }
+          } catch (e) {}
         },
       },
       {
@@ -210,15 +243,62 @@ export const dttReceiptsConfig = {
         required: true,
         min: 1,
         default: 1,
-        help: 'Catat siklus pemakaian ulang alat ini (mis. 1, 2, 3...)',
+        help: 'Otomatis terhitung dari riwayat penerimaan DTT sebelumnya',
       },
       {
         name: 'max_reuse_limit',
-        label: 'Batas Maksimum Penggunaan Ulang (Reuse)',
-        type: 'number',
-        min: 1,
-        default: 10,
-        help: 'Batas rekomendasi pabrik/kebijakan RS sebelum alat harus diafkir/diganti',
+        label: 'Batas Maksimal Reuse (3x / 4x)',
+        type: 'custom',
+        default: 4,
+        render: ({ values, setValue }) => {
+          const limit = Number(values?.max_reuse_limit || 4);
+          const count = Number(values?.reuse_count || 1);
+          const isDanger = count >= limit;
+          const isWarning = !isDanger && count === limit - 1;
+          return (
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Batas Maksimal Reuse (Ketentuan Alat)
+              </label>
+              <div className="flex items-center gap-2">
+                {[3, 4].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setValue('max_reuse_limit', preset)}
+                    className={`rounded-xl px-3.5 py-2 text-xs font-extrabold transition ${
+                      limit === preset
+                        ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700 ring-offset-1'
+                        : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    Maks {preset}x
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={limit}
+                  onChange={(e) => setValue('max_reuse_limit', Math.max(1, parseInt(e.target.value, 10) || 4))}
+                  className="input-base w-20 text-center text-xs font-bold"
+                />
+              </div>
+              {isDanger && (
+                <div className="flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-800">
+                  <AlertTriangle size={14} className="shrink-0 text-rose-600" />
+                  <span>PERINGATAN: Alat sudah mencapai batas maksimal reuse ({count}/{limit}x)! Wajib evaluasi afkir/ganti baru.</span>
+                </div>
+              )}
+              {isWarning && (
+                <div className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-800">
+                  <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+                  <span>WARNING: Mendekati batas maksimal reuse ({count}/{limit}x — sisa 1x pemakaian lagi).</span>
+                </div>
+              )}
+            </div>
+          );
+        },
       },
       {
         name: 'tool_condition',
@@ -437,13 +517,13 @@ export const dttDistributionsConfig = {
 };
 
 /* ------------------------------------------------------------
- * 3. Buku Kontrol & Laporan Penggunaan Ulang Alat Medis DTT (Reuse)
+ * 3. Laporan Reuse DTT (Otomatis Terintegrasi)
  * ------------------------------------------------------------ */
 export const dttControlConfig = {
   ...dttReceiptsConfig,
   key: 'dtt-buku-kontrol',
-  title: 'Buku Kontrol Penggunaan Ulang Alat Medis DTT (Reuse)',
-  subtitle: 'Pencatatan digital kontrol siklus pemakaian ulang alat medis, batas pakai, dan riwayat kondisi',
+  title: 'Laporan Reuse DTT',
+  subtitle: 'Laporan otomatis siklus reuse alat medis DTT terintegrasi dari Penerimaan & Pengambilan Alat DTT',
   icon: BookOpen,
   readOnly: true,
   report: true,

@@ -3,7 +3,7 @@ import { API_ENDPOINTS } from '@/utils/endpoints';
 import { formatDate, todayISO } from '@/utils/format';
 import { badge, bold, date, expiry, mono, qty } from '@/config/cells';
 import { officerSelectField } from '@/config/officerField';
-import { GAUZE_TYPES } from '@/config/resources/distribution';
+import { GAUZE_DEFAULTS, GAUZE_TYPES } from '@/config/resources/distribution';
 
 /**
  * Konfigurasi menu: Stok & Produksi Kasa Steril (Khusus Admin/Petugas CSSD).
@@ -69,22 +69,29 @@ export const gauzeStockConfig = {
         type: 'custom',
         required: true,
         span: 2,
-        render: ({ values, setValue }) => {
+        render: ({ values, setValue, setValues }) => {
           const current = values.item_name || '';
           return (
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                 <Sparkles size={13} className="text-brand-600" />
-                <span>Pilih cepat jenis kasa standar:</span>
+                <span>Pilih cepat jenis kasa standar ({GAUZE_TYPES.length} jenis):</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 {GAUZE_TYPES.map((gt) => {
                   const isSelected = current === gt;
+                  const meta = GAUZE_DEFAULTS[gt];
                   return (
                     <button
                       key={gt}
                       type="button"
-                      onClick={() => setValue('item_name', gt)}
+                      onClick={() => {
+                        const patch = { item_name: gt };
+                        if (meta?.unit) patch.unit_label = meta.unit;
+                        if (meta?.size && !values.notes) patch.notes = `Ukuran/Spek: ${meta.size}`;
+                        if (setValues) setValues(patch);
+                        else setValue('item_name', gt);
+                      }}
                       className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
                         isSelected
                           ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700 ring-offset-1'
@@ -120,7 +127,7 @@ export const gauzeStockConfig = {
         label: 'Satuan',
         type: 'select',
         required: true,
-        options: ['pouch', 'paket', 'lembar', 'roll', 'box'],
+        options: ['pouch', 'paket', 'lembar', 'roll', 'buah', 'pack', 'box'],
         default: 'pouch',
       },
       {
@@ -161,10 +168,10 @@ export const gauzeStockConfig = {
       }),
       {
         name: 'notes',
-        label: 'Catatan Stok',
+        label: 'Ukuran / Spesifikasi & Catatan Stok',
         type: 'textarea',
         maxLength: 500,
-        placeholder: 'Contoh: Saldo awal stok rak CSSD / Produksi mandiri kamar bersih...',
+        placeholder: 'Contoh: Ukuran 8 Ply / Tampon Bulat diameter 3 cm / Saldo awal rak CSSD...',
         span: 2,
       },
     ],

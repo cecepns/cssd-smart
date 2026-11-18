@@ -25,6 +25,8 @@ export const ROUTES = {
   BMHP: '/bmhp',
   BMHP_IN: '/bmhp/masuk',
   BMHP_OUT: '/bmhp/keluar',
+  BMHP_RETUR: '/bmhp/retur-koreksi',
+  BMHP_DOCUMENTS: '/bmhp/dokumen-keluar',
   BMHP_STOCK: '/bmhp/stok',
   BMHP_STOCK_CARD: '/bmhp/kartu-stok',
   BMHP_REPORT: '/bmhp/laporan',
