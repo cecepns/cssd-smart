@@ -255,6 +255,7 @@ CREATE TABLE `dirty_receipts` (
   `extra_items` LONGTEXT DEFAULT NULL,
   `checklist_status` ENUM('Lengkap', 'Tidak Lengkap', 'Ada Kerusakan') DEFAULT 'Lengkap',
   `notes` VARCHAR(500) DEFAULT NULL,
+  `proof_image` LONGTEXT DEFAULT NULL,
   `stage` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `status` ENUM('Diterima','Proses','Selesai','Karantina') NOT NULL DEFAULT 'Diterima',
   `created_by` INT UNSIGNED DEFAULT NULL,
@@ -448,6 +449,7 @@ CREATE TABLE `distributions` (
   `started_at` DATETIME DEFAULT NULL,
   `completed_at` DATETIME DEFAULT NULL,
   `notes` VARCHAR(500) DEFAULT NULL,
+  `proof_image` LONGTEXT DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_distributions_date` (`dist_date`),
@@ -484,6 +486,7 @@ CREATE TABLE `dtt_receipts` (
   `dtt_duration_min` INT UNSIGNED DEFAULT 20,
   `verification_result` ENUM('Belum Diverifikasi', 'Lolos', 'Gagal / Cuci Ulang') NOT NULL DEFAULT 'Belum Diverifikasi',
   `notes` TEXT DEFAULT NULL,
+  `proof_image` LONGTEXT DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -497,7 +500,7 @@ CREATE TABLE `dtt_receipts` (
 CREATE TABLE `dtt_distributions` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `barcode` VARCHAR(50) NOT NULL,
-  `dtt_receipt_id` INT UNSIGNED NOT NULL,
+  `dtt_receipt_id` INT UNSIGNED DEFAULT NULL,
   `dist_datetime` DATETIME NOT NULL,
   `started_at` DATETIME DEFAULT NULL,
   `completed_at` DATETIME DEFAULT NULL,
@@ -512,6 +515,7 @@ CREATE TABLE `dtt_distributions` (
   `receiver_name` VARCHAR(100) NOT NULL,
   `receiver_signature` TEXT DEFAULT NULL,
   `notes` TEXT DEFAULT NULL,
+  `proof_image` LONGTEXT DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_dtt_dist_barcode` (`barcode`),
@@ -898,6 +902,36 @@ INSERT INTO `dtt_receipts`
 INSERT INTO `dtt_distributions`
 (`id`,`barcode`,`dtt_receipt_id`,`dist_datetime`,`unit_id`,`item_name`,`quantity`,`unit_label`,`reuse_count`,`tool_condition`,`officer`,`receiver_name`,`notes`) VALUES
 (1,'DDTT-301026-001',1,'2026-10-30 14:00:00',1,'Sungkup Laring / LMA',2,'sungkup',3,'Baik','Inge Kusryaningsih','dr. Evi','Penyerahan alat hasil DTT kembali ke unit OK');
+
+-- ------------------------------------------------------------
+-- Monitoring Suhu dan Kelembaban Udara Ruang Penyimpanan Alat Steril (RSUD Serpong Utara)
+-- Standar Suhu: 18 - 22°C (Warning jika <18°C atau >22°C)
+-- Standar Kelembaban: 35 - 55% RH (Warning jika <35% atau >55% RH)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `storage_climate_logs` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `room_name` VARCHAR(100) NOT NULL DEFAULT 'Ruang Penyimpanan Alat Steril',
+  `check_date` DATE NOT NULL,
+  `check_time` TIME NOT NULL,
+  `temperature` DECIMAL(4, 1) NOT NULL,
+  `humidity` DECIMAL(4, 1) NOT NULL,
+  `temp_status` ENUM('NORMAL', 'WARNING') NOT NULL DEFAULT 'NORMAL',
+  `humidity_status` ENUM('NORMAL', 'WARNING') NOT NULL DEFAULT 'NORMAL',
+  `overall_status` ENUM('NORMAL', 'WARNING') NOT NULL DEFAULT 'NORMAL',
+  `officer` VARCHAR(100) NOT NULL,
+  `officer_signature` TEXT DEFAULT NULL,
+  `notes` VARCHAR(255) DEFAULT NULL,
+  `corrective_action` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_climate_date` (`check_date`),
+  INDEX `idx_climate_room` (`room_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `storage_climate_logs` (`id`, `room_name`, `check_date`, `check_time`, `temperature`, `humidity`, `temp_status`, `humidity_status`, `overall_status`, `officer`, `notes`) VALUES
+(1, 'Ruang Penyimpanan Alat Steril', '2026-11-01', '08:00:00', 20.0, 45.0, 'NORMAL', 'NORMAL', 'NORMAL', 'Alvin - Petugas CSSD', 'Kondisi AC dan Dehumidifier berfungsi baik'),
+(2, 'Ruang Penyimpanan Alat Steril', '2026-11-02', '08:15:00', 21.0, 48.0, 'NORMAL', 'NORMAL', 'NORMAL', 'Alvin - Petugas CSSD', 'Suhu dan kelembaban stabil');
 
 -- Penomoran otomatis dilanjutkan dari data contoh
 INSERT INTO `counters` (`name`,`counter_date`,`value`) VALUES

@@ -105,6 +105,21 @@ export const receiptsConfig = {
     { key: 'quantity', label: 'Jumlah', sortable: true, render: qty() },
     { key: 'sender_name', label: 'Penyerah' },
     { key: 'receiver_name', label: 'Penerima' },
+    {
+      key: 'proof_image',
+      label: 'Foto Bukti',
+      render: (r) => r.proof_image ? (
+        <a
+          href={r.proof_image.startsWith('data:') ? r.proof_image : fileUrl(r.proof_image)}
+          target="_blank"
+          rel="noreferrer"
+          title="Lihat Foto Bukti Serah Terima"
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 hover:border-brand-400 shadow-xs"
+        >
+          <img src={r.proof_image.startsWith('data:') ? r.proof_image : fileUrl(r.proof_image)} alt="Bukti" className="h-7 w-7 rounded object-cover" />
+        </a>
+      ) : <span className="text-xs text-slate-300">-</span>,
+    },
     { key: 'stage', label: 'Tahap', sortable: true, render: (r) => STAGE_LABELS[r.stage] || '-' },
     { key: 'status', label: 'Status', sortable: true, render: badge('status') },
   ],
@@ -270,6 +285,7 @@ export const receiptsConfig = {
       }),
       { name: 'sender_signature', label: 'TTD penyerah', type: 'signature' },
       { name: 'receiver_signature', label: 'TTD penerima (otomatis terisi)', type: 'signature' },
+      { name: 'proof_image', label: 'Foto Bukti Serah Terima (Kamera HP)', type: 'image' },
       fieldNotes,
     ],
   },

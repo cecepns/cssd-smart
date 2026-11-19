@@ -23,6 +23,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Thermometer,
   Truck,
   Wind,
 } from 'lucide-react';
@@ -62,6 +63,7 @@ export const NAV_SECTIONS = [
       { label: 'Sterilisasi', to: ROUTES.STERILIZATIONS, icon: Flame, adminOnly: true },
       { label: 'Verifikasi Sterilisasi', to: ROUTES.VERIFICATIONS, icon: ShieldCheck, adminOnly: true },
       { label: 'Stok & Produksi Kasa', to: ROUTES.GAUZE_STOCK, icon: Boxes, adminOnly: true },
+      { label: 'Monitoring Suhu & Kelembaban', to: ROUTES.CLIMATE_MONITORING, icon: Thermometer, adminOnly: true },
       { label: 'Log Mesin Washer & Steam', to: ROUTES.MACHINE_LOGS, icon: Cpu, adminOnly: true },
       { label: 'Log Waktu Pengerjaan', to: ROUTES.PROCESS_TIMINGS, icon: Clock, adminOnly: true },
     ],

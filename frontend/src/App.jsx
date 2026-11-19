@@ -47,6 +47,7 @@ const CounterBarcodePage = lazy(() => import('@/pages/CounterBarcodePage'));
 const UnitTrackingPage = lazy(() => import('@/pages/UnitTrackingPage'));
 const ProcessTimingMonitorPage = lazy(() => import('@/pages/ProcessTimingMonitorPage'));
 const UnitRequisitionsPage = lazy(() => import('@/pages/UnitRequisitionsPage'));
+const ClimateMonitoringPage = lazy(() => import('@/pages/ClimateMonitoringPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 const PageLoader = () => (
@@ -110,6 +111,7 @@ export default function App() {
               <Route path={ROUTES.STERILIZATIONS} element={resource(sterilizationsConfig)} />
               <Route path={ROUTES.VERIFICATIONS} element={resource(verificationsConfig)} />
               <Route path={ROUTES.GAUZE_STOCK} element={resource(gauzeStockConfig)} />
+              <Route path={ROUTES.CLIMATE_MONITORING} element={<ClimateMonitoringPage />} />
               <Route path={ROUTES.MACHINE_LOGS} element={resource(machineLogsConfig)} />
               <Route path={ROUTES.PROCESS_TIMINGS} element={<ProcessTimingMonitorPage />} />
               <Route path={ROUTES.DTT_CONTROL} element={<DttReuseReportPage />} />

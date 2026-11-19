@@ -21,6 +21,7 @@ export const ROUTES = {
   PROCESS_TIMINGS: '/log-waktu-pengerjaan',
   MACHINE_LOGS: '/log-mesin',
   UNIT_REQUISITIONS: '/kebutuhan-alat-unit',
+  CLIMATE_MONITORING: '/monitoring-suhu-kelembaban',
 
   BMHP: '/bmhp',
   BMHP_IN: '/bmhp/masuk',

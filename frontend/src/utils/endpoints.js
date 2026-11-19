@@ -22,6 +22,10 @@ export const API_ENDPOINTS = {
   PUBLIC_UNIT_STATUS: (id) => `/public/unit-status/${id}`,
   REPORTS_MONTHLY: '/reports/monthly-summary',
   MONITORING_PROCESS_TIMINGS: '/monitoring/process-timings',
+  CLIMATE_MONITORING: {
+    ...crud('/storage-climate-logs'),
+    MONTHLY: '/storage-climate-logs/monthly',
+  },
 
   // Notifikasi Aktivitas Admin CSSD
   NOTIFICATIONS: {

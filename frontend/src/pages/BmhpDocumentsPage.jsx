@@ -57,30 +57,244 @@ export default function BmhpDocumentsPage() {
       type === 'SPB' ? row.spb_number :
       type === 'SPPB' ? row.sppb_number : row.bast_number;
 
-    const win = window.open('', '_blank', 'width=900,height=700');
+    const win = window.open('', '_blank', 'width=1000,height=850');
     if (!win) {
       toast.error('Pop-up diblokir browser. Izinkan pop-up untuk mencetak dokumen.');
       return;
     }
+
+    const officialKop = `
+      <div style="border-bottom: 2.5px solid #000; padding-bottom: 8px; margin-bottom: 12px; text-align: center; font-family: Arial, sans-serif;">
+        <h4 style="margin: 0; font-size: 11px; font-weight: bold; letter-spacing: 0.5px;">PEMERINTAH KOTA TANGERANG SELATAN</h4>
+        <h3 style="margin: 2px 0 0; font-size: 13px; font-weight: bold;">DINAS KESEHATAN</h3>
+        <h2 style="margin: 2px 0 0; font-size: 15px; font-weight: bold; color: #002D85;">RUMAH SAKIT UMUM DAERAH SERPONG UTARA</h2>
+        <p style="margin: 3px 0 0; font-size: 9px; color: #333;">
+          Jl. Raya Serpong, Kel. Pakulonan, Kec. Serpong Utara, Kota Tangerang Selatan - 15320<br/>
+          Telp. 021-3982999, Pos-el rsudserpongutara@tangerangselatankota.go.id, Laman rsudserpongutara.tangerangselatankota.go.id
+        </p>
+      </div>
+    `;
+
+    if (type === 'SPB') {
+      win.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head><title>SURAT PERMINTAAN BARANG (SPB) - ${docNo}</title></head>
+          <body style="font-family: Arial, sans-serif; padding: 18px 24px; color: #000; font-size: 10px;">
+            ${officialKop}
+            <div style="text-align: center; margin-bottom: 14px;">
+              <h2 style="margin: 0; font-size: 14px; text-decoration: underline; font-weight: bold;">SURAT PERMINTAAN BARANG (SPB)</h2>
+              <div style="margin-top: 3px; font-size: 11px;">Nomor : <b>${docNo}</b></div>
+            </div>
+
+            <table style="width: 100%; font-size: 10px; margin-bottom: 12px; border-collapse: collapse;">
+              <tr><td style="width: 150px; font-weight: bold;">Daftar Permintaan:</td><td></td></tr>
+              <tr><td style="padding-left: 12px;">Nomor Transaksi</td><td>: ${row.doc_number || '-'}</td></tr>
+              <tr><td style="padding-left: 12px;">Tanggal Transaksi</td><td>: ${formatDate(row.trx_date)} ${row.trx_time || ''} WIB</td></tr>
+              <tr><td style="padding-left: 12px;">Pihak Yang Meminta</td><td>: <b>${row.unit_name || 'Instalasi CSSD'} (${row.officer || 'Petugas CSSD'})</b></td></tr>
+              <tr><td style="padding-left: 12px;">Sumber Anggaran / Tahun</td><td>: ${row.budget_source || 'BLUD'} / ${row.fiscal_year || '2026'}</td></tr>
+            </table>
+
+            <table style="width: 100%; border-collapse: collapse; font-size: 9px; text-align: center; margin-bottom: 18px;">
+              <thead>
+                <tr style="background: #e2e8f0;">
+                  <th rowspan="2" style="border: 1px solid #000; padding: 4px; width: 25px;">NO</th>
+                  <th rowspan="2" style="border: 1px solid #000; padding: 4px; width: 85px;">KODE BARANG</th>
+                  <th rowspan="2" style="border: 1px solid #000; padding: 4px; text-align: left;">NAMA BARANG</th>
+                  <th rowspan="2" style="border: 1px solid #000; padding: 4px; width: 50px;">NUSP</th>
+                  <th rowspan="2" style="border: 1px solid #000; padding: 4px; text-align: left;">SPESIFIKASI NAMA BARANG</th>
+                  <th colspan="2" style="border: 1px solid #000; padding: 3px;">PENGAJUAN PERMINTAAN</th>
+                  <th colspan="2" style="border: 1px solid #000; padding: 3px;">INFORMASI SISA PERSEDIAAN</th>
+                  <th colspan="2" style="border: 1px solid #000; padding: 3px;">USULAN PERSETUJUAN</th>
+                  <th rowspan="2" style="border: 1px solid #000; padding: 4px; width: 90px;">KEPERLUAN</th>
+                  <th rowspan="2" style="border: 1px solid #000; padding: 4px; width: 80px;">KETERANGAN</th>
+                </tr>
+                <tr style="background: #f1f5f9;">
+                  <th style="border: 1px solid #000; padding: 3px; width: 45px;">JUMLAH</th>
+                  <th style="border: 1px solid #000; padding: 3px; width: 45px;">SATUAN</th>
+                  <th style="border: 1px solid #000; padding: 3px; width: 45px;">JUMLAH</th>
+                  <th style="border: 1px solid #000; padding: 3px; width: 45px;">SATUAN</th>
+                  <th style="border: 1px solid #000; padding: 3px; width: 45px;">JUMLAH</th>
+                  <th style="border: 1px solid #000; padding: 3px; width: 45px;">SATUAN</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 6px;">1</td>
+                  <td style="border: 1px solid #000; padding: 6px; font-family: monospace;">${row.item_code || '-'}</td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: left; font-weight: bold;">${row.item_name}</td>
+                  <td style="border: 1px solid #000; padding: 6px;">-</td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: left;">${row.specification || row.category || 'BMHP Sterilisasi CSSD'}</td>
+                  <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${formatNumber(row.quantity)}</td>
+                  <td style="border: 1px solid #000; padding: 6px;">${row.unit_label || 'Pcs'}</td>
+                  <td style="border: 1px solid #000; padding: 6px;">${formatNumber(row.stock_after || row.quantity)}</td>
+                  <td style="border: 1px solid #000; padding: 6px;">${row.unit_label || 'Pcs'}</td>
+                  <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${formatNumber(row.quantity)}</td>
+                  <td style="border: 1px solid #000; padding: 6px;">${row.unit_label || 'Pcs'}</td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: left;">${row.purpose || 'Pelayanan CSSD'}</td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: left;">Batch: ${row.batch_no || '-'}</td>
+                </tr>
+                ${Array.from({ length: 9 }).map((_, idx) => `
+                  <tr style="height: 18px;">
+                    <td style="border: 1px solid #000; padding: 2px;">${idx + 2}</td>
+                    <td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <table style="width: 100%; font-size: 10px; margin-top: 24px; text-align: center;">
+              <tr>
+                <td style="width: 50%;"></td>
+                <td style="width: 50%;">
+                  <div>Tangerang Selatan, ${formatDate(row.trx_date)}</div>
+                  <div style="font-weight: bold; margin-top: 4px;">Pengurus Barang Pembantu</div>
+                  <div style="height: 65px;"></div>
+                  <div style="font-weight: bold;">( ............................................................ )</div>
+                  <div style="font-size: 9px; margin-top: 2px;">NIP. ........................................................</div>
+                </td>
+              </tr>
+            </table>
+
+            <script>window.onload = function() { window.print(); };</script>
+          </body>
+        </html>
+      `);
+      win.document.close();
+      return;
+    }
+
+    if (type === 'BAST') {
+      win.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head><title>BERITA ACARA SERAH TERIMA (BAST) - ${docNo}</title></head>
+          <body style="font-family: Arial, sans-serif; padding: 18px 24px; color: #000; font-size: 10px; line-height: 1.4;">
+            ${officialKop}
+            <div style="text-align: center; margin-bottom: 12px;">
+              <h2 style="margin: 0; font-size: 13px; text-decoration: underline; font-weight: bold;">BERITA ACARA SERAH TERIMA PENYALURAN BARANG PERSEDIAAN</h2>
+              <div style="margin-top: 3px; font-size: 11px;">Nomor : <b>${docNo}</b></div>
+            </div>
+
+            <p style="margin: 0 0 8px; text-align: justify;">
+              Pada hari ini <b>${formatDate(row.trx_date)}</b> bertempat di RSUD Serpong Utara, yang bertanda tangan di bawah ini :
+            </p>
+            <table style="width: 100%; font-size: 10px; margin-bottom: 6px; margin-left: 8px;">
+              <tr><td style="width: 18px; vertical-align: top;"><b>1.</b></td><td style="width: 110px;">Nama</td><td>: <b>${row.officer || 'Petugas CSSD'}</b></td></tr>
+              <tr><td></td><td>NIP</td><td>: -</td></tr>
+              <tr><td></td><td>Pangkat / Gol</td><td>: -</td></tr>
+              <tr><td></td><td colspan="2" style="font-style: italic; color: #333;">Dalam hal ini bertindak sebagai pemberi laporan BMD berupa barang persediaan, selanjutnya sebagai <b>PIHAK PERTAMA</b>.</td></tr>
+              <tr><td style="vertical-align: top; padding-top: 4px;"><b>2.</b></td><td style="padding-top: 4px;">Nama</td><td style="padding-top: 4px;">: <b>${row.receiver_name || row.unit_name || 'Pengurus Barang Pembantu'}</b></td></tr>
+              <tr><td></td><td>NIP</td><td>: -</td></tr>
+              <tr><td></td><td>Pangkat / Gol</td><td>: -</td></tr>
+              <tr><td></td><td colspan="2" style="font-style: italic; color: #333;">Dalam hal ini bertindak sebagai Pengurus Barang Pembantu / Unit Penerima RSUD Serpong Utara, selanjutnya sebagai <b>PIHAK KEDUA</b>.</td></tr>
+            </table>
+
+            <p style="margin: 6px 0 8px; text-align: justify;">
+              <b>PIHAK PERTAMA</b> telah melakukan serah terima laporan BMD, pada <b>PIHAK KEDUA</b> berupa laporan barang Persediaan, dengan rincian sebagai berikut:
+            </p>
+
+            <table style="width: 100%; border-collapse: collapse; font-size: 9px; text-align: center; margin-bottom: 12px;">
+              <thead>
+                <tr style="background: #e2e8f0; font-weight: bold;">
+                  <th style="border: 1px solid #000; padding: 4px; width: 25px;">NO</th>
+                  <th style="border: 1px solid #000; padding: 4px; width: 85px;">KODE REKENING</th>
+                  <th style="border: 1px solid #000; padding: 4px; width: 75px;">KODE BARANG</th>
+                  <th style="border: 1px solid #000; padding: 4px; text-align: left;">NAMA BARANG</th>
+                  <th style="border: 1px solid #000; padding: 4px; text-align: left;">SPESIFIKASI NAMA BARANG</th>
+                  <th style="border: 1px solid #000; padding: 4px; width: 45px;">JUMLAH</th>
+                  <th style="border: 1px solid #000; padding: 4px; width: 45px;">SATUAN</th>
+                  <th style="border: 1px solid #000; padding: 4px; width: 70px;">HARGA SATUAN</th>
+                  <th style="border: 1px solid #000; padding: 4px; width: 80px;">TOTAL HARGA</th>
+                  <th style="border: 1px solid #000; padding: 4px; width: 65px;">SUMBER ANGGARAN</th>
+                  <th style="border: 1px solid #000; padding: 4px; width: 75px;">KETERANGAN</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 6px;">1</td>
+                  <td style="border: 1px solid #000; padding: 6px;">${row.account_code || '5.1.02.01.01'}</td>
+                  <td style="border: 1px solid #000; padding: 6px; font-family: monospace;">${row.item_code || '-'}</td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: left; font-weight: bold;">${row.item_name}</td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: left;">${row.specification || row.category || '-'}</td>
+                  <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${formatNumber(row.quantity)}</td>
+                  <td style="border: 1px solid #000; padding: 6px;">${row.unit_label || 'Pcs'}</td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: right;">${row.unit_price ? `Rp ${formatNumber(row.unit_price)}` : '-'}</td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: right; font-weight: bold;">${row.total_price ? `Rp ${formatNumber(row.total_price)}` : '-'}</td>
+                  <td style="border: 1px solid #000; padding: 6px;">${row.budget_source || 'BLUD'}</td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: left;">Batch ${row.batch_no || '-'}</td>
+                </tr>
+                ${Array.from({ length: 5 }).map((_, idx) => `
+                  <tr style="height: 18px;">
+                    <td style="border: 1px solid #000; padding: 2px;">${idx + 2}</td>
+                    <td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td>
+                    <td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td>
+                  </tr>
+                `).join('')}
+                <tr style="background: #f8fafc; font-weight: bold;">
+                  <td colspan="8" style="border: 1px solid #000; padding: 6px; text-align: right;">TOTAL:</td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: right;">${row.total_price ? `Rp ${formatNumber(row.total_price)}` : '-'}</td>
+                  <td colspan="2" style="border: 1px solid #000;"></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <p style="margin: 0 0 16px;">
+              Berita Acara serah terima ini dibuat sebagai bukti pengeluaran barang: Persediaan.
+            </p>
+
+            <table style="width: 100%; font-size: 10px; text-align: center;">
+              <tr>
+                <td style="width: 50%;">
+                  <div style="font-weight: bold;">PIHAK PERTAMA</div>
+                  <div style="height: 60px; display: flex; align-items: center; justify-content: center;">
+                    ${row.officer_signature ? `<img src="${row.officer_signature}" style="max-height: 50px;" />` : ''}
+                  </div>
+                  <div style="font-weight: bold;">( ${row.officer || '................................'} )</div>
+                  <div style="font-size: 9px; margin-top: 2px;">NIP. ........................................................</div>
+                </td>
+                <td style="width: 50%;">
+                  <div style="font-weight: bold;">PIHAK KEDUA</div>
+                  <div style="height: 60px;"></div>
+                  <div style="font-weight: bold;">( ${row.receiver_name || row.unit_name || '................................'} )</div>
+                  <div style="font-size: 9px; margin-top: 2px;">NIP. ........................................................</div>
+                </td>
+              </tr>
+            </table>
+
+            <script>window.onload = function() { window.print(); };</script>
+          </body>
+        </html>
+      `);
+      win.document.close();
+      return;
+    }
+
+    // Default template untuk NPB dan SPPB
     win.document.write(`
       <html>
         <head><title>${meta.title} - ${docNo}</title></head>
-        <body style="font-family: Arial, sans-serif; padding: 28px; color: #0f172a;">
-          <div style="border-bottom: 3px double #002D85; padding-bottom: 10px; margin-bottom: 18px; text-align: center;">
-            <h3 style="margin: 0; font-size: 14px; color: #334155;">PEMERINTAH KOTA TANGERANG SELATAN — RSUD SERPONG UTARA</h3>
-            <h2 style="margin: 4px 0 0; font-size: 18px; color: #002D85;">INSTALASI CSSD (CENTRAL STERILE SUPPLY DEPARTMENT)</h2>
-          </div>
+        <body style="font-family: Arial, sans-serif; padding: 24px; color: #0f172a;">
+          ${officialKop}
           <div style="text-align: center; margin-bottom: 18px;">
-            <h1 style="margin: 0; font-size: 16px; text-decoration: underline;">${meta.title}</h1>
+            <h1 style="margin: 0; font-size: 15px; text-decoration: underline; font-weight: bold;">${meta.title}</h1>
             <p style="margin: 4px 0 0; font-size: 12px;">Nomor Dokumen: <b>${docNo}</b></p>
           </div>
-          <table style="width: 100%; font-size: 12px; margin-bottom: 16px;">
+          <table style="width: 100%; font-size: 11px; margin-bottom: 16px;">
             <tr><td style="width: 180px;">Tanggal Transaksi</td><td>: <b>${formatDate(row.trx_date)} ${row.trx_time || ''}</b></td></tr>
             <tr><td>Unit Peminta / Penerima</td><td>: <b>${row.unit_name || 'Instalasi CSSD'}</b></td></tr>
             <tr><td>Sumber Anggaran / Tahun</td><td>: <b>${row.budget_source || 'BLUD'} / ${row.fiscal_year || '2026'}</b></td></tr>
             <tr><td>Keperluan / Keterangan</td><td>: ${row.purpose || row.notes || '-'}</td></tr>
           </table>
-          <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 24px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 24px;">
             <thead>
               <tr style="background: #f1f5f9;">
                 <th style="border: 1px solid #94a3b8; padding: 8px;">No</th>
@@ -103,7 +317,7 @@ export default function BmhpDocumentsPage() {
           <p style="font-size: 11px; color: #475569; margin-bottom: 32px;">
             Dokumen ini dicetak otomatis dari Sistem Manajemen Persediaan BMHP Terintegrasi CSSD SMART RSUD Serpong Utara.
           </p>
-          <table style="width: 100%; text-align: center; font-size: 12px;">
+          <table style="width: 100%; text-align: center; font-size: 11px;">
             <tr>
               <td style="width: 50%;">
                 <div>Yang Menyerahkan (Petugas CSSD)</div>

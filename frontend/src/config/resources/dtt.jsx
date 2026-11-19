@@ -4,6 +4,7 @@ import { getList } from '@/utils/request';
 import { formatDateTime, fileUrl, wibDateTimeNow } from '@/utils/format';
 import { bold, durationBadge, mono, qty, timeWindow } from '@/config/cells';
 import { officerSelectField } from '@/config/officerField';
+import DttSetSelector from '@/components/distribution/DttSetSelector';
 
 export const TOOL_CONDITIONS = ['Baik', 'Perlu Perbaikan', 'Rusak / Afkir'];
 export const DTT_PROCESS_STAGES = ['Diterima', 'Pencucian DTT', 'Penyimpanan DTT', 'Siap Distribusi', 'Selesai'];
@@ -104,6 +105,21 @@ export const dttReceiptsConfig = {
     { key: 'sender_signature', label: 'TTD Unit', render: renderSignatureCell('sender_signature') },
     { key: 'receiver_name', label: 'Penerima CSSD' },
     { key: 'receiver_signature', label: 'TTD CSSD', render: renderSignatureCell('receiver_signature') },
+    {
+      key: 'proof_image',
+      label: 'Foto Bukti',
+      render: (r) => r.proof_image ? (
+        <a
+          href={r.proof_image.startsWith('data:') ? r.proof_image : fileUrl(r.proof_image)}
+          target="_blank"
+          rel="noreferrer"
+          title="Lihat Foto Bukti Serah Terima"
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 hover:border-brand-400 shadow-xs"
+        >
+          <img src={r.proof_image.startsWith('data:') ? r.proof_image : fileUrl(r.proof_image)} alt="Bukti" className="h-7 w-7 rounded object-cover" />
+        </a>
+      ) : <span className="text-xs text-slate-300">-</span>,
+    },
   ],
   canEdit: true,
   canDelete: true,
@@ -335,6 +351,11 @@ export const dttReceiptsConfig = {
         type: 'signature',
       },
       {
+        name: 'proof_image',
+        label: 'Foto Bukti Serah Terima Alat Kotor DTT (Kamera HP)',
+        type: 'image',
+      },
+      {
         name: 'process_stage',
         label: 'Tahap Proses DTT',
         type: 'select',
@@ -417,6 +438,21 @@ export const dttDistributionsConfig = {
     { key: 'officer_signature', label: 'TTD CSSD', render: renderSignatureCell('officer_signature') },
     { key: 'receiver_name', label: 'Penerima Unit' },
     { key: 'receiver_signature', label: 'TTD Unit', render: renderSignatureCell('receiver_signature') },
+    {
+      key: 'proof_image',
+      label: 'Foto Bukti',
+      render: (r) => r.proof_image ? (
+        <a
+          href={r.proof_image.startsWith('data:') ? r.proof_image : fileUrl(r.proof_image)}
+          target="_blank"
+          rel="noreferrer"
+          title="Lihat Foto Bukti Serah Terima"
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 hover:border-brand-400 shadow-xs"
+        >
+          <img src={r.proof_image.startsWith('data:') ? r.proof_image : fileUrl(r.proof_image)} alt="Bukti" className="h-7 w-7 rounded object-cover" />
+        </a>
+      ) : <span className="text-xs text-slate-300">-</span>,
+    },
   ],
   canEdit: true,
   canDelete: true,
@@ -425,34 +461,24 @@ export const dttDistributionsConfig = {
   form: {
     size: 'lg',
     createTitle: 'Pengambilan Alat DTT (Reuse)',
-    subtitle: 'Barcode pengambilan dibuat otomatis (DDTT-DDMMYY-001). Petugas unit penerima menandatangani di layar HP.',
+    subtitle: 'Pilih Set DTT dari Master Data unit penerima. Barcode pengambilan dibuat otomatis (DDTT-DDMMYY-001).',
     fields: [
       {
-        type: 'remote-select',
-        name: 'dtt_receipt_id',
-        label: 'Pilih Alat Hasil DTT yang Siap Didistribusikan',
-        required: true,
+        name: '_dtt_set_selector',
+        type: 'custom',
         span: 2,
-        placeholder: 'Pilih alat DTT siap serah...',
-        optionsEndpoint: API_ENDPOINTS.DTT_RECEIPTS.READY,
-        optionLabel: (r) =>
-          `${r.barcode} — ${r.item_name} (${r.quantity} ${r.unit_label}) • Unit: ${r.unit_name} • Reuse ke-${r.reuse_count} • Kondisi: ${r.tool_condition}`,
-        onChange: (_, { option, setValues }) => {
-          if (!option) return;
-          setValues({
-            unit_id: option.unit_id,
-            item_name: option.item_name,
-            quantity: option.quantity,
-            unit_label: option.unit_label,
-            reuse_count: option.reuse_count,
-            tool_condition: option.tool_condition,
-            receiver_name: option.sender_name || '',
-          });
-        },
+        render: ({ values, setValue, setValues }) => (
+          <DttSetSelector values={values} setValue={setValue} setValues={setValues} />
+        ),
       },
+      { name: 'dtt_receipt_id', type: 'hidden' },
+      { name: 'item_name', type: 'hidden' },
+      { name: 'unit_label', type: 'hidden', default: 'pcs' },
+      { name: 'tool_condition', type: 'hidden', default: 'Baik' },
+      { name: 'reuse_count', type: 'hidden', default: 1 },
       {
         name: 'dist_datetime',
-        label: 'Waktu Distribusi (Otomatis)',
+        label: 'Waktu Pengambilan (Otomatis)',
         type: 'datetime-local',
         required: true,
         default: () => wibDateTimeNow().slice(0, 16).replace(' ', 'T'),
@@ -467,18 +493,7 @@ export const dttDistributionsConfig = {
         optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
         default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
       },
-      { name: 'item_name', label: 'Nama Alat', required: true, maxLength: 150 },
       { name: 'quantity', label: 'Jumlah', type: 'number', required: true, min: 1, default: 1 },
-      { name: 'unit_label', label: 'Satuan', maxLength: 30, default: 'pcs' },
-      { name: 'reuse_count', label: 'Penggunaan Ke-', type: 'number', required: true, min: 1, default: 1 },
-      {
-        name: 'tool_condition',
-        label: 'Kondisi Alat saat Diserahkan',
-        type: 'select',
-        required: true,
-        options: TOOL_CONDITIONS,
-        default: 'Baik',
-      },
       officerSelectField({
         name: 'officer',
         label: 'Petugas CSSD yang Menyerahkan',
@@ -497,12 +512,18 @@ export const dttDistributionsConfig = {
         required: true,
         maxLength: 100,
         placeholder: 'Nama perawat / petugas penerima unit',
+        default: ({ user }) => (user?.role === 'unit' ? user.name : ''),
       },
       {
         name: 'receiver_signature',
         label: 'Tanda Tangan Petugas Unit (Layar HP)',
         type: 'signature',
         required: true,
+      },
+      {
+        name: 'proof_image',
+        label: 'Foto Bukti Serah Terima (Kamera HP)',
+        type: 'image',
       },
       {
         name: 'notes',
