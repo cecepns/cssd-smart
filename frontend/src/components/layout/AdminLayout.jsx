@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import Sidebar from '@/components/layout/Sidebar';
 import Topbar from '@/components/layout/Topbar';
 import BottomNav from '@/components/layout/BottomNav';
+import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { useAuth } from '@/context/AuthContext';
 import { SIDEBAR_KEY } from '@/utils/constants';
 
@@ -63,7 +64,9 @@ export default function AdminLayout() {
 
       <main className={`relative pt-16 transition-[padding] duration-300 ease-in-out ${collapsed ? 'lg:pl-[72px]' : 'lg:pl-72'}`}>
         <div className="mx-auto w-full max-w-[1500px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
-          <Outlet />
+          <ErrorBoundary key={pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </main>
 

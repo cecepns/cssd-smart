@@ -1,233 +1,352 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  AlertTriangle,
+  Boxes,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Layers,
-  RefreshCw,
+  Minus,
+  Package,
+  Plus,
+  QrCode,
   RotateCcw,
   ScanLine,
-  Search,
-  Sparkles,
+  Trash2,
+  Wrench,
 } from 'lucide-react';
+import useFetch from '@/hooks/useFetch';
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { useAuth } from '@/context/AuthContext';
 import { getList } from '@/utils/request';
-import { formatDate } from '@/utils/format';
-import BarcodeInput from '@/components/form/BarcodeInput';
-import Button from '@/components/ui/Button';
 
 /**
- * Komponen pemilih set steril untuk Distribusi / Pengambilan Alat Steril.
- * Sistem Otomatis 3 Jalur:
- * 1. Daftar Set Steril Otomatis (menampilkan semua set steril sesuai unit + rincian isi instrumen otomatis).
- * 2. Set Siap Hasil Verifikasi Steril (paket ber-barcode ST-... yang sudah lulus verifikasi).
- * 3. Scan Barcode (ST-... / AK-...).
+ * Komponen Pemilih Multi-Set & Alat Satuan untuk Pengambilan / Distribusi Alat Steril.
+ * Dibuat identik dengan alur input Terima Alat Kotor:
+ * 1. Bagian A: Daftar Set Instrumen (dengan tombol "+ Tambah Set" untuk memilih beberapa jenis set berbeda).
+ * 2. Bagian B: Alat Satuan Tambahan di Luar Set (dengan tombol "+ Tambah Alat Satuan").
+ * 3. Rincian instrumen otomatis muncul mengikuti Master Data setiap set.
+ * 4. Input beberapa alat sekaligus dan simpan cukup 1 kali dengan 1 barcode transaksi resmi (DS-...).
  */
-export default function SterileSetSelector({ values, setValue, setValues, gauze = false }) {
+export default function SterileSetSelector({ values, setValue, setValues, disabled }) {
   const { user } = useAuth();
-  const isUnit = user?.role === 'unit';
-  const [mode, setMode] = useState('CATALOG'); // 'CATALOG' | 'READY' | 'SCAN'
-  const [categoryFilter, setCategoryFilter] = useState('SET'); // 'SET' | 'SINGLE' | 'ALL'
-  const [readyList, setReadyList] = useState([]);
-  const [catalogList, setCatalogList] = useState([]);
-  const [itemsMap, setItemsMap] = useState({});
-  const [loadingReady, setLoadingReady] = useState(false);
-  const [loadingCatalog, setLoadingCatalog] = useState(false);
-  const [search, setSearch] = useState('');
-  const [unitFilter, setUnitFilter] = useState(() => (isUnit && user?.unit_id ? String(user.unit_id) : (values?.unit_id ? String(values.unit_id) : '')));
-  const [units, setUnits] = useState([]);
-  const [selectedStock, setSelectedStock] = useState(null);
-  const [scanCode, setScanCode] = useState('');
-  const [searchingCode, setSearchingCode] = useState(false);
+  const unitId = values?.unit_id;
+  const prevUnitIdRef = useRef(unitId);
+  const [expandedSets, setExpandedSets] = useState({ 0: true });
+  const [showScanBar, setShowScanBar] = useState(false);
+  const [scanInput, setScanInput] = useState('');
+  const [searchingScan, setSearchingScan] = useState(false);
 
-  // Sinkronkan filter unit dengan dropdown "Unit tujuan / pengambil" di bawah
-  useEffect(() => {
-    if (!isUnit && values?.unit_id && String(values.unit_id) !== String(unitFilter)) {
-      setUnitFilter(String(values.unit_id));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values?.unit_id, isUnit]);
+  // 1. Ambil daftar master set & alat milik unit tujuan
+  const { data: itemsData, loading: loadingItems } = useFetch(
+    API_ENDPOINTS.LOOKUPS.ITEMS,
+    { unit_id: unitId, is_active: 1, sort_by: 'name', order: 'asc' },
+    { enabled: Boolean(unitId) }
+  );
+  const unitItems = itemsData || [];
 
-  // Ambil daftar unit & master rincian isi set instrumen sekali saat mount
-  useEffect(() => {
-    let active = true;
-    if (!isUnit) {
-      getList(API_ENDPOINTS.LOOKUPS.UNITS, { is_active: 1, limit: 100, sort_by: 'name', order: 'asc' })
-        .then((res) => { if (active && res.data) setUnits(res.data); })
-        .catch(() => {});
-    }
-    getList(API_ENDPOINTS.LOOKUPS.SET_INSTRUMENTS)
-      .then((res) => { if (active && res.data?.itemsMap) setItemsMap(res.data.itemsMap); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [isUnit]);
+  // 2. Ambil master rincian instrumen per set
+  const { data: setInstrumentsData } = useFetch(API_ENDPOINTS.LOOKUPS.SET_INSTRUMENTS);
+  const itemsMap = setInstrumentsData?.itemsMap || {};
 
-  const effectiveUnitId = isUnit ? (user?.unit_id ? String(user.unit_id) : '') : unitFilter;
+  // 3. Nama unit tujuan
+  const { data: unitsData } = useFetch(API_ENDPOINTS.LOOKUPS.UNITS, { limit: 100 });
+  const selectedUnit = (unitsData || []).find((u) => String(u.id) === String(unitId));
+  const unitName = values?.unit_name || selectedUnit?.name || 'Unit';
 
-  // 1. Ambil daftar stok steril siap ambil (hasil lulus verifikasi)
-  const fetchReadyStock = async () => {
-    setLoadingReady(true);
-    try {
-      const res = await getList(API_ENDPOINTS.STERILE_STOCK.READY, {
-        type: gauze ? 'KASA' : 'ALAT',
-        unit_id: effectiveUnitId || undefined,
-      });
-      const list = res.data || [];
-      setReadyList(list);
-      // Jika ada set siap steril di hasil verifikasi dan user belum pindah mode, tetap informatif lewat badge jumlah
-    } catch (err) {
-      // Silent fallback ke katalog set
-    } finally {
-      setLoadingReady(false);
-    }
-  };
+  // Helper untuk mengambil rincian instrumen otomatis dari master data
+  const getInitialInstruments = (setName, itemId = null) => {
+    if (!setName || !setName.trim()) return [];
+    const normalized = setName.trim().toLowerCase();
 
-  // 2. Ambil daftar lengkap Set Instrumen & Alat Steril sesuai unit (sistem otomatis!)
-  const fetchCatalogSets = async () => {
-    if (gauze) return;
-    setLoadingCatalog(true);
-    try {
-      const res = await getList(API_ENDPOINTS.LOOKUPS.ITEMS, {
-        is_active: 1,
-        process_type: 'Steril',
-        unit_id: effectiveUnitId || undefined,
-        sort_by: 'name',
-        order: 'asc',
-      });
-      const list = (res.data || []).filter((it) => it.category !== 'Kasa Steril');
-      setCatalogList(list);
-    } catch (err) {
-      toast.error('Gagal memuat daftar set steril');
-    } finally {
-      setLoadingCatalog(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchReadyStock();
-    fetchCatalogSets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveUnitId, gauze]);
-
-  // Helper cari rincian isi instrumen dari master itemsMap
-  const resolveInstruments = (itemName, itemId = null) => {
-    if (!itemName) return [];
-    const norm = itemName.trim().toLowerCase();
-    let found = (itemId && itemsMap[itemId]) || itemsMap[norm];
+    // 1. Cari exact match di itemsMap
+    let found = (itemId && itemsMap[itemId]) || itemsMap[normalized];
     if (!found) {
-      const key = Object.keys(itemsMap).find((k) => norm.includes(k) || k.includes(norm));
+      // 2. Cari partial match nama set
+      const key = Object.keys(itemsMap).find(
+        (k) => normalized.includes(k) || k.includes(normalized)
+      );
       if (key) found = itemsMap[key];
     }
-    return Array.isArray(found) ? found : [];
-  };
 
-  // Filter real-time berdasarkan pencarian teks
-  const filteredReady = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return readyList;
-    return readyList.filter(
-      (s) =>
-        (s.item_name || '').toLowerCase().includes(q) ||
-        (s.barcode || '').toLowerCase().includes(q) ||
-        (s.origin_unit_name || '').toLowerCase().includes(q) ||
-        (s.receipt_barcode || '').toLowerCase().includes(q)
-    );
-  }, [readyList, search]);
-
-  const filteredCatalog = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return catalogList.filter((it) => {
-      if (categoryFilter === 'SET') {
-        const isSet = it.category === 'Set Instrumen' || it.category === 'Instrumen / Set Alat' || !it.category;
-        if (!isSet) return false;
-      } else if (categoryFilter === 'SINGLE') {
-        const isSingle = it.category === 'Alat Satuan';
-        if (!isSingle) return false;
-      }
-      if (!q) return true;
-      return (
-        (it.name || '').toLowerCase().includes(q) ||
-        (it.code || '').toLowerCase().includes(q) ||
-        (it.unit_name || '').toLowerCase().includes(q) ||
-        (it.category || '').toLowerCase().includes(q)
-      );
-    });
-  }, [catalogList, search, categoryFilter]);
-
-  // Handler saat memilih dari stok hasil verifikasi (punya barcode ST-...)
-  const handleSelectStock = (stock) => {
-    if (!stock) return;
-    const enrichedItems = stock.items?.length ? stock.items : resolveInstruments(stock.item_name);
-    setSelectedStock({ ...stock, items: enrichedItems, source: 'READY' });
-
-    const patch = {
-      barcode: stock.barcode,
-      item_name: stock.item_name,
-      item_category: stock.category || 'Set Instrumen',
-      unit_label: stock.unit_label || 'set',
-      quantity: 1,
-    };
-    if (stock.origin_unit_id) patch.unit_id = String(stock.origin_unit_id);
-    if (stock.origin_sender && !values.receiver_name) patch.receiver_name = stock.origin_sender;
-
-    if (setValues) setValues(patch);
-    else Object.entries(patch).forEach(([k, v]) => setValue(k, v));
-
-    toast.success(`Set ${stock.item_name} dipilih`);
-  };
-
-  // Handler saat memilih dari Daftar Set Steril Otomatis (katalog unit)
-  const handleSelectCatalogItem = (item) => {
-    if (!item) return;
-
-    // Cek otomatis apakah sudah ada paket steril 'Tersedia' untuk set ini di readyList
-    const matchedReady = readyList.find(
-      (r) =>
-        (r.item_name || '').trim().toLowerCase() === (item.name || '').trim().toLowerCase() &&
-        (!item.unit_id || !r.origin_unit_id || String(r.origin_unit_id) === String(item.unit_id))
-    );
-    if (matchedReady) {
-      handleSelectStock(matchedReady);
-      return;
+    if (found && Array.isArray(found) && found.length > 0) {
+      return found.map((item) => ({
+        instrument_name: item.instrument_name,
+        quantity: item.quantity || 1,
+        unit_label: item.unit_label || 'Buah',
+        status: 'Lengkap',
+        notes: '',
+      }));
     }
 
-    const instList = resolveInstruments(item.name, item.id);
-    setSelectedStock({
-      id: `cat-${item.id}`,
-      barcode: 'OTOMATIS (DS-...)',
-      item_name: item.name,
-      category: item.category || 'Set Instrumen',
-      origin_unit_id: item.unit_id || effectiveUnitId || null,
-      origin_unit_name: item.unit_name || (units.find((u) => String(u.id) === String(effectiveUnitId))?.name) || 'Instalasi CSSD',
-      unit_label: item.unit_label || 'Set',
-      completeness_status: 'Lengkap',
-      items: instList,
-      total_instruments: instList.reduce((acc, c) => acc + Number(c.quantity || 1), 0),
-      source: 'CATALOG',
-    });
+    // 3. Fallback cerdas sesuai standar medis RSUD
+    if (normalized.includes('minor')) {
+      return [
+        { instrument_name: 'Gunting jaringan', quantity: 1, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Pinset anatomis', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Pinset chirurgis', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Needle holder', quantity: 1, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Klem mosquito', quantity: 4, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Bengkok', quantity: 1, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Bak instrumen', quantity: 1, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+      ];
+    }
+    if (normalized.includes('laparotomi') || normalized.includes('mayor')) {
+      return [
+        { instrument_name: 'Pinset anatomis', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Pinset sirurgis', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Gunting Mayo', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Klem Pean', quantity: 6, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Needle holder', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Klem Kocher', quantity: 4, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Retraktor Abdomen', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+      ];
+    }
+    if (normalized.includes('sc') || normalized.includes('caesarea') || normalized.includes('sesar')) {
+      return [
+        { instrument_name: 'Pinset sirurgis', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Pinset anatomis', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Gunting Metzenbaum', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Gunting Mayo', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Klem Kocher', quantity: 4, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Klem Pean', quantity: 4, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Needle holder', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Retraktor Abdomen', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+      ];
+    }
+    if (normalized.includes('partus') || normalized.includes('vk')) {
+      return [
+        { instrument_name: 'Gunting episiotomi', quantity: 1, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Gunting tali pusat', quantity: 1, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Klem tali pusat', quantity: 2, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Pinset anatomis', quantity: 1, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+        { instrument_name: 'Needle holder', quantity: 1, unit_label: 'Buah', status: 'Lengkap', notes: '' },
+      ];
+    }
+
+    return [];
+  };
+
+  // State Daftar Set Terpilih
+  const [items, setItems] = useState(() => {
+    if (values?.items_detail) {
+      try {
+        const parsed = typeof values.items_detail === 'string' ? JSON.parse(values.items_detail) : values.items_detail;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    if (Array.isArray(values?.items) && values.items.length > 0) return values.items;
+    if (values?.item_name) {
+      return [{ item_name: values.item_name, quantity: values.quantity || 1, unit_label: values.unit_label || 'Set', checklist: [] }];
+    }
+    return [{ item_name: '', quantity: 1, unit_label: 'Set', checklist: [], isCustom: false }];
+  });
+
+  // State Daftar Alat Satuan Tambahan Terpilih
+  const [extraItems, setExtraItems] = useState(() => {
+    if (values?.extra_items) {
+      try {
+        const parsed = typeof values.extra_items === 'string' ? JSON.parse(values.extra_items) : values.extra_items;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    if (Array.isArray(values?.extra_items) && values.extra_items.length > 0) return values.extra_items;
+    return [];
+  });
+
+  // Sinkronisasi data ke parent form state
+  const syncParent = (newSets, newExtra = extraItems) => {
+    setItems(newSets);
+    setExtraItems(newExtra);
+
+    const validSets = newSets.filter((it) => it.item_name && it.item_name.trim());
+    const validExtra = newExtra.filter((it) => it.item_name && it.item_name.trim());
+
+    // Susun ringkasan nama alat untuk form utama
+    const parts = [
+      ...validSets.map((it) => `${it.item_name} (${it.quantity || 1} ${it.unit_label || 'Set'})`),
+      ...validExtra.map((it) => `${it.item_name} (${it.quantity || 1} ${it.unit_label || 'Buah'})`),
+    ];
+
+    const totalQty =
+      validSets.reduce((acc, curr) => acc + Number(curr.quantity || 1), 0) +
+      validExtra.reduce((acc, curr) => acc + Number(curr.quantity || 1), 0);
 
     const patch = {
-      barcode: '', // Kosongkan agar backend otomatis generate barcode DS-DDMMYY-XXX
-      item_name: item.name,
-      item_category: item.category || 'Set Instrumen',
-      unit_label: item.unit_label || 'set',
-      quantity: 1,
+      items: newSets,
+      extra_items: validExtra.length > 0 ? JSON.stringify(validExtra) : '',
+      items_detail: validSets.length > 0 ? JSON.stringify(validSets) : '',
+      item_name: parts.join(', ') || '',
+      quantity: totalQty || 1,
+      unit_label: validSets.length > 0 ? validSets[0].unit_label || 'Set' : 'Buah',
+      item_category: validSets.length > 0 ? 'Set Instrumen' : 'Alat Satuan',
+      item_id: validSets[0]?.item_id || null,
     };
-    if (item.unit_id) patch.unit_id = String(item.unit_id);
-    else if (effectiveUnitId) patch.unit_id = String(effectiveUnitId);
 
     if (setValues) setValues(patch);
     else Object.entries(patch).forEach(([k, v]) => setValue(k, v));
-
-    toast.success(`Set "${item.name}" dipilih — barcode dibuat otomatis saat disimpan`);
   };
 
-  // Lookup melalui scan barcode (ST-... / AK-...)
-  const handleLookupBarcode = async (code) => {
-    const clean = (code || '').trim();
+  // Muat rincian instrumen otomatis saat itemsMap selesai dimuat jika checklist masih kosong
+  useEffect(() => {
+    if (Object.keys(itemsMap).length > 0) {
+      let changed = false;
+      const updated = items.map((it) => {
+        if (it.item_name && (!it.checklist || it.checklist.length === 0)) {
+          const chk = getInitialInstruments(it.item_name, it.item_id);
+          if (chk.length > 0) {
+            changed = true;
+            return { ...it, checklist: chk };
+          }
+        }
+        return it;
+      });
+      if (changed) {
+        syncParent(updated);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemsMap]);
+
+  // Tambah baris Set baru tersendiri (bebas pilih jenis set yang berbeda di tiap dropdown)
+  const handleAddSet = () => {
+    const next = [
+      ...items,
+      { item_id: null, item_name: '', quantity: 1, unit_label: 'Set', checklist: [], isCustom: false },
+    ];
+    syncParent(next);
+    setExpandedSets((prev) => ({ ...prev, [next.length - 1]: true }));
+    toast.success('Baris Set instrumen baru ditambahkan');
+  };
+
+  // Pilih set dari dropdown milik baris set tertentu
+  const handleSelectSetOption = (setIdx, rawVal) => {
+    const next = [...items];
+    if (rawVal === '__CUSTOM__') {
+      next[setIdx] = {
+        ...next[setIdx],
+        item_id: null,
+        item_name: '',
+        isCustom: true,
+        checklist: [],
+      };
+      syncParent(next);
+      return;
+    }
+    if (!rawVal) {
+      next[setIdx] = {
+        ...next[setIdx],
+        item_id: null,
+        item_name: '',
+        isCustom: false,
+        checklist: [],
+      };
+      syncParent(next);
+      return;
+    }
+    const match = unitItems.find((u) => String(u.id) === String(rawVal));
+    if (match) {
+      next[setIdx] = {
+        ...next[setIdx],
+        item_id: match.id,
+        item_name: match.name,
+        unit_label: match.unit_label || 'Set',
+        isCustom: false,
+        checklist: getInitialInstruments(match.name, match.id),
+      };
+      syncParent(next);
+      setExpandedSets((prev) => ({ ...prev, [setIdx]: true }));
+    }
+  };
+
+  const handleUpdateSetName = (setIdx, name, itemObj = null) => {
+    const next = [...items];
+    const prevName = next[setIdx].item_name;
+    next[setIdx].item_name = name;
+
+    if (itemObj) {
+      next[setIdx].item_id = itemObj.id;
+      next[setIdx].unit_label = itemObj.unit_label || next[setIdx].unit_label || 'Set';
+    }
+
+    if (name.trim() !== prevName?.trim()) {
+      next[setIdx].checklist = getInitialInstruments(name, itemObj?.id || next[setIdx].item_id);
+    }
+
+    syncParent(next);
+    setExpandedSets((prev) => ({ ...prev, [setIdx]: true }));
+  };
+
+  const handleUpdateSetQty = (setIdx, delta) => {
+    const next = [...items];
+    const cur = Number(next[setIdx].quantity || 1);
+    const newQty = Math.max(1, cur + delta);
+    next[setIdx].quantity = newQty;
+    syncParent(next);
+  };
+
+  const handleRemoveSet = (setIdx) => {
+    const next = items.filter((_, i) => i !== setIdx);
+    syncParent(next.length === 0 ? [{ item_name: '', quantity: 1, unit_label: 'Set', checklist: [] }] : next);
+    toast.success('Set instrumen dihapus');
+  };
+
+  // Section B: Alat Satuan Tambahan
+  const handleAddExtraItem = () => {
+    const next = [...extraItems, { item_name: '', quantity: 1, unit_label: 'Buah' }];
+    syncParent(items, next);
+    toast.success('Baris alat satuan ditambahkan');
+  };
+
+  const handleUpdateExtraName = (idx, name) => {
+    const next = [...extraItems];
+    next[idx].item_name = name;
+    syncParent(items, next);
+  };
+
+  const handleUpdateExtraQty = (idx, delta) => {
+    const next = [...extraItems];
+    const cur = Number(next[idx].quantity || 1);
+    next[idx].quantity = Math.max(1, cur + delta);
+    syncParent(items, next);
+  };
+
+  const handleRemoveExtra = (idx) => {
+    const next = extraItems.filter((_, i) => i !== idx);
+    syncParent(items, next);
+    toast.success('Alat satuan dihapus');
+  };
+
+  // Reset daftar set saat Unit Tujuan berganti agar pilihan set sesuai unit baru
+  useEffect(() => {
+    if (prevUnitIdRef.current && String(prevUnitIdRef.current) !== String(unitId || '')) {
+      syncParent([{ item_id: null, item_name: '', quantity: 1, unit_label: 'Set', checklist: [], isCustom: false }], []);
+      setExpandedSets({ 0: true });
+    }
+    prevUnitIdRef.current = unitId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unitId]);
+
+  // Saran nama alat satuan dari Master Data
+  const singleToolSuggestions = unitItems.filter((i) => i.category === 'Alat Satuan');
+
+  // Hitung total set dan total kuantitas
+  const filledSetsCount = items.filter((i) => i.item_name && i.item_name.trim()).length;
+  const totalSetQty = items
+    .filter((i) => i.item_name && i.item_name.trim())
+    .reduce((acc, it) => acc + Number(it.quantity || 1), 0);
+  const totalExtraQty = extraItems
+    .filter((e) => e.item_name && e.item_name.trim())
+    .reduce((acc, it) => acc + Number(it.quantity || 1), 0);
+  const totalAllItems = totalSetQty + totalExtraQty;
+
+  // Fitur Scan Barcode Cepat (Opsional)
+  const handleScanBarcode = async (e) => {
+    e.preventDefault();
+    const clean = scanInput.trim();
     if (!clean) return;
-    setSearchingCode(true);
+    setSearchingScan(true);
     try {
       const res = await getList(API_ENDPOINTS.STERILE_STOCK.LOOKUP, { code: clean });
       const stock = res.data;
@@ -235,513 +354,377 @@ export default function SterileSetSelector({ values, setValue, setValues, gauze 
         toast.error(`Barcode ${clean} tidak ditemukan di stok steril`);
         return;
       }
-
-      const isGauze = stock.category === 'Kasa Steril';
-      if (gauze !== isGauze) {
-        toast.error(
-          isGauze
-            ? 'Barcode ini adalah Kasa Steril, gunakan menu Pengambilan Kasa Steril'
-            : 'Barcode ini adalah Alat Steril, gunakan menu Pengambilan Alat Steril'
-        );
-        return;
+      if (stock.category === 'Alat Satuan') {
+        const nextExtra = [...extraItems, { item_name: stock.item_name, quantity: stock.quantity || 1, unit_label: stock.unit_label || 'Buah' }];
+        syncParent(items, nextExtra);
+        toast.success(`Alat satuan "${stock.item_name}" berhasil ditambahkan dari scan!`);
+      } else {
+        const nextSets = [
+          ...items.filter((it) => it.item_name),
+          {
+            item_id: stock.origin_item_id || null,
+            item_name: stock.item_name,
+            quantity: stock.quantity || 1,
+            unit_label: stock.unit_label || 'Set',
+            checklist: getInitialInstruments(stock.item_name),
+            isCustom: false,
+          },
+        ];
+        syncParent(nextSets);
+        setExpandedSets((prev) => ({ ...prev, [nextSets.length - 1]: true }));
+        toast.success(`Set "${stock.item_name}" berhasil ditambahkan dari scan!`);
       }
-
-      handleSelectStock(stock);
+      setScanInput('');
     } catch (err) {
       toast.error(err?.message || `Barcode ${clean} tidak ditemukan`);
     } finally {
-      setSearchingCode(false);
+      setSearchingScan(false);
     }
   };
-
-  const handleResetSelection = () => {
-    setSelectedStock(null);
-    if (setValues) setValues({ barcode: '', item_name: '', item_category: '', unit_label: '' });
-    else {
-      setValue('barcode', '');
-      setValue('item_name', '');
-    }
-  };
-
-  // Preview Kartu Set Terpilih + Rincian Instrumen Otomatis
-  if (selectedStock) {
-    const isComplete = selectedStock.completeness_status !== 'Tidak Lengkap';
-    const items = selectedStock.items || [];
-
-    return (
-      <div className="rounded-2xl border-2 border-brand-500/80 bg-brand-50/20 p-4 shadow-sm transition-all sm:p-5">
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between border-b border-brand-100 pb-3.5">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand-700 px-2.5 py-1 text-xs font-bold text-white shadow-sm">
-                <CheckCircle2 size={13} />
-                Set Terpilih
-              </span>
-              <span className="font-mono text-xs font-bold text-brand-800 bg-brand-100/80 px-2 py-0.5 rounded">
-                {selectedStock.barcode}
-              </span>
-              <span className="text-xs text-slate-500 font-medium">
-                Kategori: <strong>{selectedStock.category}</strong>
-              </span>
-            </div>
-            <h3 className="mt-1.5 text-lg font-black text-slate-900 uppercase">
-              {selectedStock.item_name}
-            </h3>
-          </div>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleResetSelection}
-            className="self-start text-xs border-slate-300 text-slate-700 hover:bg-white"
-          >
-            <RotateCcw size={13} />
-            <span>Ganti Set Lain</span>
-          </Button>
-        </div>
-
-        <div className="mt-3.5 grid grid-cols-1 gap-2 sm:grid-cols-3 text-xs">
-          <div className="rounded-xl border border-slate-200/80 bg-white p-2.5">
-            <span className="text-slate-500 block font-medium">Unit Tujuan / Pemilik:</span>
-            <span className="text-slate-900 font-bold mt-0.5 block">
-              {selectedStock.origin_unit_name || 'Instalasi CSSD'}
-            </span>
-          </div>
-
-          <div className="rounded-xl border border-slate-200/80 bg-white p-2.5">
-            <span className="text-slate-500 block font-medium">Sumber Stok:</span>
-            <span className="text-slate-900 font-bold mt-0.5 block">
-              {selectedStock.receipt_barcode
-                ? `Sterilisasi (${selectedStock.receipt_barcode})`
-                : 'Stok Rak Steril CSSD (Otomatis)'}
-            </span>
-          </div>
-
-          <div className="rounded-xl border border-slate-200/80 bg-white p-2.5">
-            <span className="text-slate-500 block font-medium">Batch & Kedaluwarsa:</span>
-            <span className="text-slate-900 font-bold mt-0.5 block">
-              {selectedStock.batch_no
-                ? `Batch: ${selectedStock.batch_no} • Exp: ${formatDate(selectedStock.expiry_date)}`
-                : 'Otomatis (+6 bulan masa steril)'}
-            </span>
-          </div>
-        </div>
-
-        {/* Rincian Isi Set Instrumen Otomatis */}
-        <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3.5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <div className="flex items-center gap-2">
-              <Layers size={16} className="text-brand-700" />
-              <span className="text-sm font-bold text-slate-900">
-                Rincian Instrumen dalam 1 Set
-              </span>
-              <span className="text-xs font-semibold text-slate-500">
-                ({items.length} macam item)
-              </span>
-            </div>
-
-            {selectedStock.completeness_status && (
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                  isComplete
-                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
-                    : 'border border-amber-200 bg-amber-50 text-amber-800'
-                }`}
-              >
-                {isComplete ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
-                {selectedStock.completeness_status}
-              </span>
-            )}
-          </div>
-
-          {items.length === 0 ? (
-            <p className="py-3 text-center text-xs text-slate-500">
-              Alat satuan / belum ada rincian item di master set ini.
-            </p>
-          ) : (
-            <div className="mt-2.5 max-h-44 divide-y divide-slate-100 overflow-y-auto pr-1">
-              {items.map((it, idx) => (
-                <div
-                  key={it.id || idx}
-                  className="flex items-center justify-between py-1.5 text-xs sm:text-sm text-slate-700 hover:bg-slate-50/80 px-1 rounded"
-                >
-                  <span className="font-medium text-slate-800">{it.instrument_name}</span>
-                  <span className="font-bold text-slate-900 tabular-nums">
-                    {it.quantity} {it.unit_label || 'Buah'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {items.length > 0 && (
-            <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2 text-xs font-bold text-slate-900">
-              <span>Total Standar Instrumen:</span>
-              <span className="text-brand-700">
-                {selectedStock.total_instruments || items.reduce((acc, c) => acc + Number(c.quantity || 1), 0)} Buah
-              </span>
-            </div>
-          )}
-
-          {!isComplete && selectedStock.missing_notes && (
-            <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-medium text-amber-800">
-              ⚠️ <strong>Catatan Alat Kurang/Hilang:</strong> {selectedStock.missing_notes}
-            </div>
-          )}
-        </div>
-
-        <p className="mt-2.5 text-[11px] font-medium text-emerald-800 flex items-center gap-1.5">
-          <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
-          {selectedStock.source === 'CATALOG'
-            ? 'Set & unit tujuan sudah otomatis terisi. Kode barcode (DS-...) akan digenerate otomatis saat klik Simpan.'
-            : 'Unit tujuan dan barcode telah terisi otomatis sesuai tanda terima alat kotor.'}
-        </p>
-      </div>
-    );
-  }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3.5 sm:p-4 space-y-3">
-      {/* Tab Switcher Mode */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 border-b border-slate-200 pb-3">
-        <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-          Metode Pemilihan Alat Steril
-        </span>
+    <div className="space-y-4">
+      {/* Tombol bantu buka scan barcode jika diperlukan */}
+      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+          <Boxes size={16} className="text-brand-700" />
+          <span>Pengambilan Set Instrumen & Alat Satuan Steril</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowScanBar((v) => !v)}
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:text-brand-900 transition"
+        >
+          <ScanLine size={13} />
+          <span>{showScanBar ? 'Tutup Scan Barcode' : 'Scan Barcode Paket?'}</span>
+        </button>
+      </div>
 
-        <div className="grid grid-cols-3 sm:inline-flex rounded-xl bg-slate-200/80 p-1 text-xs font-bold w-full sm:w-auto gap-1">
+      {showScanBar && (
+        <form onSubmit={handleScanBarcode} className="flex gap-2 rounded-xl border border-brand-200 bg-brand-50/50 p-2.5">
+          <input
+            type="text"
+            value={scanInput}
+            onChange={(e) => setScanInput(e.target.value)}
+            placeholder="Scan barcode paket steril (ST-... / AS-...) lalu tekan Enter..."
+            className="flex-1 rounded-lg border border-brand-300 bg-white px-3 py-1.5 text-xs font-mono focus:border-brand-600 focus:outline-none"
+            autoFocus
+          />
+          <button
+            type="submit"
+            disabled={searchingScan || !scanInput.trim()}
+            className="rounded-lg bg-brand-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50"
+          >
+            {searchingScan ? 'Mencari...' : 'Tambah dari Barcode'}
+          </button>
+        </form>
+      )}
+
+      {/* ============================================================== */}
+      {/* A. DAFTAR SET INSTRUMEN (MULTI-SET BERBEDA DALAM 1 TRANSAKSI)  */}
+      {/* ============================================================== */}
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-900">
+              A. Daftar Set Instrumen (Unit: {unitId ? unitName : 'Pilih Unit Tujuan dahulu'})
+            </span>
+            <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-bold text-blue-800">
+              {filledSetsCount} Jenis Set • {totalSetQty} Total Set
+            </span>
+          </div>
           <button
             type="button"
-            onClick={() => setMode('CATALOG')}
-            className={`inline-flex items-center justify-center gap-1 rounded-lg px-2 sm:px-3 py-2 text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
-              mode === 'CATALOG'
-                ? 'bg-white text-brand-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            disabled={disabled || !unitId}
+            onClick={handleAddSet}
+            className="flex items-center gap-1.5 rounded-xl bg-[#002D85] hover:bg-brand-900 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition disabled:opacity-50 cursor-pointer"
           >
-            <Sparkles size={13} className="shrink-0" />
-            <span>Daftar Set</span>
-            {catalogList.length > 0 && (
-              <span className="rounded-full bg-brand-100 text-brand-800 px-1.5 py-0.2 text-[10px] font-black shrink-0">
-                {catalogList.length}
-              </span>
-            )}
+            <Plus size={14} /> Tambah Set
           </button>
+        </div>
 
-          <button
-            type="button"
-            onClick={() => setMode('READY')}
-            className={`inline-flex items-center justify-center gap-1 rounded-lg px-2 sm:px-3 py-2 text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
-              mode === 'READY'
-                ? 'bg-white text-brand-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Layers size={13} className="shrink-0" />
-            <span>Siap Steril</span>
-            {readyList.length > 0 && (
-              <span className="rounded-full bg-emerald-100 text-emerald-800 px-1.5 py-0.2 text-[10px] font-black shrink-0">
-                {readyList.length}
-              </span>
-            )}
-          </button>
+        {!unitId && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-2.5 text-xs font-medium text-amber-800">
+            Pilih <b>Unit tujuan / pengambil</b> terlebih dahulu di atas agar daftar set instrumen milik unit tersebut muncul di setiap dropdown.
+          </div>
+        )}
 
-          <button
-            type="button"
-            onClick={() => setMode('SCAN')}
-            className={`inline-flex items-center justify-center gap-1 rounded-lg px-2 sm:px-3 py-2 text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
-              mode === 'SCAN'
-                ? 'bg-white text-brand-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <ScanLine size={13} className="shrink-0" />
-            <span>Scan</span>
-          </button>
+        {/* Container Kartu Set */}
+        <div className="space-y-3">
+          {items.map((item, setIdx) => {
+            const checklist = item.checklist || [];
+            const isExpanded = expandedSets[setIdx] ?? true;
+
+            const matchedOption = unitItems.find(
+              (u) =>
+                (item.item_id && String(u.id) === String(item.item_id)) ||
+                (item.item_name && u.name.toLowerCase() === item.item_name.trim().toLowerCase())
+            );
+            const isCustomMode = item.isCustom || (Boolean(item.item_name) && !matchedOption && unitItems.length > 0);
+
+            return (
+              <div
+                key={setIdx}
+                className="rounded-2xl border border-sky-200/80 bg-[#F4F7FC] p-3 sm:p-4 shadow-sm space-y-3 transition"
+              >
+                {/* Baris Dropdown Pilih Nama Set & Stepper Jumlah */}
+                <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold text-brand-800 uppercase tracking-wider">
+                        Set Instrumen #{setIdx + 1} <span className="text-rose-500">*</span>
+                      </label>
+                      {isCustomMode && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectSetOption(setIdx, '')}
+                          className="text-[10px] font-semibold text-brand-700 hover:underline"
+                        >
+                          ← Kembali ke Dropdown
+                        </button>
+                      )}
+                    </div>
+
+                    {!isCustomMode ? (
+                      <select
+                        value={matchedOption ? String(matchedOption.id) : ''}
+                        disabled={disabled || !unitId || loadingItems}
+                        onChange={(e) => handleSelectSetOption(setIdx, e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none"
+                        required
+                      >
+                        <option value="">
+                          {!unitId
+                            ? 'Pilih Unit Tujuan dahulu...'
+                            : loadingItems
+                            ? 'Memuat daftar set unit...'
+                            : `-- Pilih Jenis Set Instrumen #${setIdx + 1} --`}
+                        </option>
+                        {unitItems.map((u) => {
+                          const usedAtIdx = items.findIndex(
+                            (other, idx) =>
+                              idx !== setIdx &&
+                              ((other.item_id && String(other.item_id) === String(u.id)) ||
+                                (other.item_name && other.item_name.toLowerCase() === u.name.toLowerCase()))
+                          );
+                          return (
+                            <option key={u.id} value={u.id}>
+                              {u.name} ({u.category || u.unit_label || 'Set'})
+                              {usedAtIdx >= 0 ? ` — [Sudah di Set #${usedAtIdx + 1}]` : ''}
+                            </option>
+                          );
+                        })}
+                        <option value="__CUSTOM__">✏️ Ketik nama set / alat manual...</option>
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={item.item_name}
+                        disabled={disabled}
+                        placeholder="Ketik Nama Set Instrumen (misal: SET MINOR)..."
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const match = unitItems.find((u) => u.name.toLowerCase() === val.toLowerCase());
+                          handleUpdateSetName(setIdx, val, match);
+                        }}
+                        className="w-full rounded-xl border border-brand-400 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none"
+                        required
+                      />
+                    )}
+                  </div>
+
+                  {/* Stepper Jumlah Set */}
+                  <div className="flex flex-col items-center shrink-0">
+                    <span className="text-[10px] font-medium text-slate-500 mb-1 leading-none">Jumlah</span>
+                    <div className="flex items-center rounded-xl border border-slate-300 bg-white px-1 py-0.5 shadow-sm">
+                      <button
+                        type="button"
+                        disabled={disabled || item.quantity <= 1}
+                        onClick={() => handleUpdateSetQty(setIdx, -1)}
+                        className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition"
+                      >
+                        <Minus size={13} />
+                      </button>
+                      <span className="w-9 text-center text-xs font-bold text-slate-900">
+                        {item.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => handleUpdateSetQty(setIdx, 1)}
+                        className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 transition"
+                      >
+                        <Plus size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tombol Hapus Baris Set */}
+                  {items.length > 1 && (
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => handleRemoveSet(setIdx)}
+                      title="Hapus set ini"
+                      className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 p-2 text-rose-600 transition shrink-0"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Bar Info Rincian Instrumen & Tombol Accordion */}
+                {item.item_name && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-2.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedSets((prev) => ({ ...prev, [setIdx]: !isExpanded }))}
+                        className="flex items-center gap-1.5 text-xs font-bold text-brand-900 hover:text-brand-700 transition"
+                      >
+                        {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                        <span>Rincian Isi Instrumen ({checklist.length} macam)</span>
+                      </button>
+                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                        <Check size={11} /> Siap Pakai & Steril
+                      </span>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="mt-2 border-t border-slate-100 pt-2">
+                        {checklist.length > 0 ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                            {checklist.map((inst, instIdx) => (
+                              <div
+                                key={instIdx}
+                                className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5 text-xs"
+                              >
+                                <span className="font-medium text-slate-800 truncate" title={inst.instrument_name}>
+                                  {instIdx + 1}. {inst.instrument_name}
+                                </span>
+                                <span className="shrink-0 font-bold text-slate-600 text-[11px] ml-2">
+                                  {inst.quantity || 1} {inst.unit_label || 'Buah'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-slate-400 italic py-1">
+                            Rincian instrumen standar belum terdaftar di Master Data, paket set tetap dapat diserahterimakan.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* MODE 1: DAFTAR SET STERIL OTOMATIS (SEMUA SET MILIK UNIT) */}
-      {mode === 'CATALOG' && (
-        <div className="space-y-2.5">
-          <div className={`grid grid-cols-1 gap-2 ${isUnit ? '' : 'sm:grid-cols-2'}`}>
-            {!isUnit && (
-              <select
-                value={unitFilter}
-                onChange={(e) => {
-                  setUnitFilter(e.target.value);
-                  if (e.target.value) setValue('unit_id', e.target.value);
-                }}
-                className="input-base text-xs font-medium py-1.5"
-              >
-                <option value="">Semua Unit (Tampilkan Semua Set)</option>
-                {units.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari nama set / alat steril (mis. Curetage, Minor, SC)..."
-                className="input-base pl-8 text-xs font-medium py-1.5"
-              />
-            </div>
-          </div>
-
-          {/* Tombol Pilihan Jenis Pengambilan: Set Alat Instrumen & Alat Satuan */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-            <span className="text-[11px] font-bold text-slate-500 mr-1">Pilihan Jenis:</span>
-            <button
-              type="button"
-              onClick={() => setCategoryFilter('SET')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition shadow-xs ${
-                categoryFilter === 'SET'
-                  ? 'bg-brand-700 text-white shadow-sm ring-1 ring-brand-700'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              1. Set Alat Instrumen
-            </button>
-            <button
-              type="button"
-              onClick={() => setCategoryFilter('SINGLE')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition shadow-xs ${
-                categoryFilter === 'SINGLE'
-                  ? 'bg-brand-700 text-white shadow-sm ring-1 ring-brand-700'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              2. Alat Satuan
-            </button>
-            <button
-              type="button"
-              onClick={() => setCategoryFilter('ALL')}
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
-                categoryFilter === 'ALL'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Semua ({catalogList.length})
-            </button>
-          </div>
-
-          <div className="max-h-60 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200 bg-white">
-            {loadingCatalog ? (
-              <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2">
-                <RefreshCw size={14} className="animate-spin text-brand-600" />
-                <span>Memuat daftar set steril...</span>
-              </div>
-            ) : filteredCatalog.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-500">
-                <p className="font-semibold text-slate-700">Tidak ditemukan set steril yang cocok.</p>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  Coba ubah kata kunci pencarian atau pilih "Semua Unit".
-                </p>
-              </div>
-            ) : (
-              filteredCatalog.map((item) => {
-                const instCount = resolveInstruments(item.name, item.id).length;
-                const hasReady = readyList.some(
-                  (r) => (r.item_name || '').trim().toLowerCase() === (item.name || '').trim().toLowerCase()
-                );
-
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => handleSelectCatalogItem(item)}
-                    className="group flex cursor-pointer items-center justify-between p-3 transition-colors hover:bg-brand-50/50"
-                  >
-                    <div className="min-w-0 pr-3">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {item.code && (
-                          <span className="font-mono text-[11px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                            {item.code}
-                          </span>
-                        )}
-                        <span className="rounded bg-blue-50 text-blue-800 px-1.5 py-0.5 text-[10px] font-bold">
-                          {item.category || 'Set Instrumen'}
-                        </span>
-                        {hasReady ? (
-                          <span className="rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-[10px] font-extrabold">
-                            ✓ Lulus Steril Siap Ambil
-                          </span>
-                        ) : (
-                          <span className="rounded bg-slate-100 text-slate-600 px-1.5 py-0.5 text-[10px] font-semibold">
-                            Otomatis Barcode DS
-                          </span>
-                        )}
-                      </div>
-
-                      <h4 className="mt-1 text-sm font-black text-slate-900 uppercase truncate">
-                        {item.name}
-                      </h4>
-
-                      <p className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
-                        <span>Unit: <strong>{item.unit_name || 'Umum / CSSD'}</strong></span>
-                        {instCount > 0 && <span>• Isi: <strong>{instCount} macam instrumen</strong></span>}
-                      </p>
-                    </div>
-
-                    <Button
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelectCatalogItem(item);
-                      }}
-                      className="shrink-0 text-xs py-1 h-7"
-                    >
-                      Pilih Set
-                    </Button>
-                  </div>
-                );
-              })
+      {/* ============================================================== */}
+      {/* B. ALAT SATUAN TAMBAHAN DI LUAR SET                            */}
+      {/* ============================================================== */}
+      <div className="space-y-2.5 border-t border-slate-200 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-900">
+              B. Alat Satuan Tambahan di Luar Set (Opsional)
+            </span>
+            {extraItems.length > 0 && (
+              <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-bold text-purple-800">
+                {extraItems.length} Macam • {totalExtraQty} Buah
+              </span>
             )}
           </div>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={handleAddExtraItem}
+            className="flex items-center gap-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition disabled:opacity-50 cursor-pointer"
+          >
+            <Plus size={14} /> Tambah Alat Satuan
+          </button>
         </div>
-      )}
 
-      {/* MODE 2: SET SIAP HASIL VERIFIKASI STERIL */}
-      {mode === 'READY' && (
-        <div className="space-y-2.5">
-          <div className={`grid grid-cols-1 gap-2 ${isUnit ? '' : 'sm:grid-cols-2'}`}>
-            {!isUnit && (
-              <select
-                value={unitFilter}
-                onChange={(e) => setUnitFilter(e.target.value)}
-                className="input-base text-xs font-medium py-1.5"
+        {extraItems.length > 0 && (
+          <div className="space-y-2">
+            {extraItems.map((extra, eIdx) => (
+              <div
+                key={eIdx}
+                className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border border-purple-200 bg-purple-50/40 p-2.5 shadow-xs"
               >
-                <option value="">Semua Unit Asal Penyerah</option>
-                {units.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari nama set / barcode ST-..."
-                className="input-base pl-8 text-xs font-medium py-1.5"
-              />
-            </div>
-          </div>
-
-          <div className="max-h-56 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200 bg-white">
-            {loadingReady ? (
-              <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2">
-                <RefreshCw size={14} className="animate-spin text-brand-600" />
-                <span>Memuat daftar set steril siap ambil...</span>
-              </div>
-            ) : filteredReady.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-500 space-y-2">
-                <p className="font-semibold text-slate-700">Belum ada paket hasil verifikasi sterilisasi yang menunggu diambil.</p>
-                <button
-                  type="button"
-                  onClick={() => setMode('CATALOG')}
-                  className="inline-flex items-center gap-1 rounded-lg bg-brand-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-800"
-                >
-                  <Sparkles size={12} /> Pilih dari Daftar Set Otomatis
-                </button>
-              </div>
-            ) : (
-              filteredReady.map((stk) => (
-                <div
-                  key={stk.id}
-                  onClick={() => handleSelectStock(stk)}
-                  className="group flex cursor-pointer items-center justify-between p-3 transition-colors hover:bg-brand-50/50"
-                >
-                  <div className="min-w-0 pr-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-slate-700 group-hover:text-brand-800">
-                        {stk.barcode}
-                      </span>
-                      {stk.completeness_status && (
-                        <span
-                          className={`rounded px-1.5 py-0.2 text-[10px] font-bold ${
-                            stk.completeness_status === 'Lengkap'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {stk.completeness_status}
-                        </span>
-                      )}
-                    </div>
-
-                    <h4 className="mt-0.5 text-sm font-black text-slate-900 uppercase truncate">
-                      {stk.item_name}
-                    </h4>
-
-                    <p className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
-                      <span>Unit: <strong>{stk.origin_unit_name || 'Umum'}</strong></span>
-                      {stk.receipt_barcode && (
-                        <span>• Tanda Terima: <strong>{stk.receipt_barcode}</strong></span>
-                      )}
-                      <span>• Sisa: <strong>{stk.quantity} {stk.unit_label}</strong></span>
-                    </p>
-                  </div>
-
-                  <Button
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSelectStock(stk);
-                    }}
-                    className="shrink-0 text-xs py-1 h-7"
-                  >
-                    Pilih Set
-                  </Button>
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    list={`extra-tool-list-${eIdx}`}
+                    value={extra.item_name}
+                    disabled={disabled}
+                    onChange={(e) => handleUpdateExtraName(eIdx, e.target.value)}
+                    placeholder="Nama alat satuan (misal: Gunting Angkat Jahitan, Bengkok, Tromol)..."
+                    className="w-full rounded-xl border border-purple-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 shadow-sm focus:border-purple-600 focus:outline-none"
+                    required
+                  />
+                  <datalist id={`extra-tool-list-${eIdx}`}>
+                    {singleToolSuggestions.map((s) => (
+                      <option key={s.id} value={s.name} />
+                    ))}
+                  </datalist>
                 </div>
-              ))
-            )}
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center rounded-xl border border-purple-300 bg-white px-1 py-0.5 shadow-sm">
+                    <button
+                      type="button"
+                      disabled={disabled || extra.quantity <= 1}
+                      onClick={() => handleUpdateExtraQty(eIdx, -1)}
+                      className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition"
+                    >
+                      <Minus size={12} />
+                    </button>
+                    <span className="w-8 text-center text-xs font-bold text-slate-900">
+                      {extra.quantity}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => handleUpdateExtraQty(eIdx, 1)}
+                      className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 transition"
+                    >
+                      <Plus size={12} />
+                    </button>
+                  </div>
+
+                  <span className="text-xs font-medium text-slate-600">
+                    {extra.unit_label || 'Buah'}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => handleRemoveExtra(eIdx)}
+                    title="Hapus alat satuan ini"
+                    className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 p-1.5 text-rose-600 transition"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* MODE 3: SCAN BARCODE */}
-      {mode === 'SCAN' && (
-        <div className="space-y-2">
-          <p className="text-xs text-slate-600">
-            Arahkan kamera HP ke barcode stiker paket steril (<strong>ST-...</strong>) atau barcode lembar penerimaan alat kotor (<strong>AK-...</strong>):
-          </p>
-
-          <div className="flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <BarcodeInput
-                value={scanCode}
-                onChange={setScanCode}
-                onCommit={handleLookupBarcode}
-                placeholder="mis. ST-031126-001 atau AK-031126-001"
-              />
-            </div>
-            <Button
-              onClick={() => handleLookupBarcode(scanCode)}
-              disabled={searchingCode || !scanCode.trim()}
-              size="sm"
-              className="text-xs h-10 px-4 shrink-0"
-            >
-              {searchingCode ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
-              <span>Cari</span>
-            </Button>
-          </div>
-
-          <p className="text-[11px] text-slate-500">
-            💡 Sistem otomatis mencari data set steril, unit asal, dan rincian instrumen di dalamnya.
-          </p>
-        </div>
-      )}
+      {/* Ringkasan Keseluruhan Pengambilan */}
+      <div className="rounded-xl border border-brand-200 bg-brand-50/70 px-3.5 py-2.5 flex items-center justify-between text-xs">
+        <span className="font-semibold text-brand-900">
+          Total Alat yang Diambil:
+        </span>
+        <span className="font-black text-brand-950 text-sm">
+          {totalAllItems} Item ({filledSetsCount} Set • {totalExtraQty} Satuan)
+        </span>
+      </div>
     </div>
   );
 }

@@ -39,7 +39,9 @@ export const downloadFile = async (endpoint, params, filename) => {
 export const uploadImage = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
-  const { data } = await api.post(API_ENDPOINTS.UPLOADS.IMAGE, formData);
+  const { data } = await api.post(API_ENDPOINTS.UPLOADS.IMAGE, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data.data.path;
 };
 

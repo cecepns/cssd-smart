@@ -464,19 +464,6 @@ export const dttDistributionsConfig = {
     subtitle: 'Pilih Set DTT dari Master Data unit penerima. Barcode pengambilan dibuat otomatis (DDTT-DDMMYY-001).',
     fields: [
       {
-        name: '_dtt_set_selector',
-        type: 'custom',
-        span: 2,
-        render: ({ values, setValue, setValues }) => (
-          <DttSetSelector values={values} setValue={setValue} setValues={setValues} />
-        ),
-      },
-      { name: 'dtt_receipt_id', type: 'hidden' },
-      { name: 'item_name', type: 'hidden' },
-      { name: 'unit_label', type: 'hidden', default: 'pcs' },
-      { name: 'tool_condition', type: 'hidden', default: 'Baik' },
-      { name: 'reuse_count', type: 'hidden', default: 1 },
-      {
         name: 'dist_datetime',
         label: 'Waktu Pengambilan (Otomatis)',
         type: 'datetime-local',
@@ -492,7 +479,23 @@ export const dttDistributionsConfig = {
         optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS,
         optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
         default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
+        onChange: (next, { setValues, option }) => {
+          setValues({ item_name: '', dtt_receipt_id: '', unit_name: option?.name || '' });
+        },
       },
+      {
+        name: '_dtt_set_selector',
+        type: 'custom',
+        span: 2,
+        render: ({ values, setValue, setValues }) => (
+          <DttSetSelector values={values} setValue={setValue} setValues={setValues} />
+        ),
+      },
+      { name: 'dtt_receipt_id', type: 'hidden' },
+      { name: 'item_name', type: 'hidden' },
+      { name: 'unit_label', type: 'hidden', default: 'pcs' },
+      { name: 'tool_condition', type: 'hidden', default: 'Baik' },
+      { name: 'reuse_count', type: 'hidden', default: 1 },
       { name: 'quantity', label: 'Jumlah', type: 'number', required: true, min: 1, default: 1 },
       officerSelectField({
         name: 'officer',

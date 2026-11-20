@@ -103,7 +103,48 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
     { key: 'process_seconds', label: 'Lama / Tunggu', render: durationBadge },
     ...(gauze
       ? [{ key: 'gauze_type', label: 'Jenis Kasa', sortable: true, render: (r) => <b className="font-bold text-brand-700">{r.gauze_type || r.item_name}</b> }]
-      : [{ key: 'item_name', label: 'Alat', sortable: true, render: bold('item_name') }, { key: 'batch_no', label: 'Batch', render: mono('batch_no') }]),
+      : [
+          {
+            key: 'item_name',
+            label: 'Alat / Set',
+            sortable: true,
+            render: (r) => {
+              let sets = [];
+              let extra = [];
+              try {
+                if (r.items_detail) {
+                  const parsed = typeof r.items_detail === 'string' ? JSON.parse(r.items_detail) : r.items_detail;
+                  if (Array.isArray(parsed)) sets = parsed;
+                }
+                if (r.extra_items) {
+                  const parsed = typeof r.extra_items === 'string' ? JSON.parse(r.extra_items) : r.extra_items;
+                  if (Array.isArray(parsed)) extra = parsed;
+                }
+              } catch (e) {}
+
+              return (
+                <div>
+                  <span className="font-bold text-slate-900">{r.item_name}</span>
+                  {(sets.length > 0 || extra.length > 0) && (
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      {sets.length > 0 && (
+                        <span className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.2 text-[10px] font-bold text-blue-700 border border-blue-200">
+                          📦 {sets.length} Set
+                        </span>
+                      )}
+                      {extra.length > 0 && (
+                        <span className="inline-flex items-center gap-0.5 rounded-md bg-purple-50 px-1.5 py-0.2 text-[10px] font-bold text-purple-700 border border-purple-200">
+                          🔧 {extra.length} Alat Satuan
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            },
+          },
+          { key: 'batch_no', label: 'Batch', render: mono('batch_no') },
+        ]),
     { key: 'unit_name', label: 'Unit Tujuan', sortable: true },
     { key: 'quantity', label: 'Jumlah', sortable: true, render: qty() },
     { key: 'officer', label: 'Petugas CSSD' },
@@ -238,39 +279,38 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
         { name: 'notes', label: 'Catatan Pengambilan', type: 'textarea', maxLength: 500, placeholder: 'Catatan kebutuhan unit (opsional)...', span: 2 },
       ]
       : [
-        {
-          name: '_set_selector',
-          type: 'custom',
-          span: 2,
-          render: ({ values, setValue, setValues }) => (
-            <SterileSetSelector values={values} setValue={setValue} setValues={setValues} gauze={gauze} />
-          ),
-        },
-        { name: 'item_name', type: 'hidden' },
-        { name: 'item_category', type: 'hidden' },
-        { name: 'unit_label', type: 'hidden' },
-        {
-          name: 'barcode',
-          label: 'Kode barcode paket steril (Otomatis / Scan)',
-          type: 'barcode',
-          required: false,
-          placeholder: 'Otomatis dibuat (DS-...) saat simpan, atau scan (ST-... / AK-...)',
-          onScan: lookupStock(gauze),
-        },
+        { name: 'dist_date', label: 'Tanggal Pengambilan', type: 'date', required: true, default: todayISO },
         {
           type: 'remote-select',
           name: 'unit_id',
           label: 'Unit tujuan / pengambil',
           required: true,
-          placeholder: 'Pilih unit...',
+          placeholder: 'Pilih unit tujuan...',
           optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS,
           optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
           default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
+          onChange: (next, { values, setValues, option }) => {
+            if (String(next || '') !== String(values?.unit_id || '')) {
+              setValues({ item_name: '', items_detail: '', extra_items: '', unit_name: option?.name || '' });
+            }
+          },
         },
-        { name: 'quantity', label: 'Jumlah', type: 'number', required: true, min: 1, default: 1 },
+        {
+          name: 'items_selector',
+          type: 'custom',
+          span: 2,
+          render: (props) => <SterileSetSelector {...props} />,
+        },
+        { name: 'item_name', type: 'hidden' },
+        { name: 'quantity', type: 'hidden', default: 1 },
+        { name: 'unit_label', type: 'hidden', default: 'set' },
+        { name: 'item_category', type: 'hidden', default: 'Set Instrumen' },
+        { name: 'barcode', type: 'hidden' },
+        { name: 'items_detail', type: 'hidden' },
+        { name: 'extra_items', type: 'hidden' },
         officerSelectField({
           name: 'officer',
-          label: 'Petugas CSSD',
+          label: 'Petugas CSSD yang Menyerahkan',
           required: true,
           placeholder: 'Pilih petugas CSSD...',
           onSignatureField: 'officer_signature',
@@ -281,13 +321,12 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
           label: 'Petugas Pengambil (Unit)',
           required: true,
           maxLength: 100,
-          placeholder: 'Nama perawat / petugas unit',
+          placeholder: 'Nama perawat / petugas unit penerima',
           default: ({ user }) => (user?.role === 'unit' ? user.name : ''),
         },
         { name: 'receiver_signature', label: 'TTD Petugas Unit (Layar HP)', type: 'signature' },
         { name: 'proof_image', label: 'Foto Bukti Serah Terima (Kamera HP)', type: 'image' },
-        { name: 'dist_date', label: 'Tanggal', type: 'date', required: true, default: todayISO },
-        { name: 'notes', label: 'Catatan', type: 'textarea', maxLength: 500, placeholder: 'Catatan tambahan...' },
+        { name: 'notes', label: 'Catatan Pengambilan', type: 'textarea', maxLength: 500, placeholder: 'Catatan tambahan...' },
       ],
   },
 });

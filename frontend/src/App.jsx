@@ -93,7 +93,7 @@ export default function App() {
             <Route path={ROUTES.GUIDE} element={<GuidePage />} />
             <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
 
-            {/* Transaksi & Pengelolaan BMHP: Khusus Petugas CSSD dan Admin */}
+            {/* Transaksi & Pengelolaan BMHP dan Monitoring Suhu: Khusus Petugas CSSD dan Admin */}
             <Route element={<Protected cssdOnly />}>
               <Route path={ROUTES.BMHP} element={<BmhpHubPage />} />
               <Route path={ROUTES.BMHP_STOCK_CARD} element={<BmhpHubPage initialSection="kartu-stok" />} />
@@ -102,6 +102,7 @@ export default function App() {
               <Route path={ROUTES.BMHP_RETUR} element={<BmhpAdjustmentPage />} />
               <Route path={ROUTES.BMHP_DOCUMENTS} element={<BmhpDocumentsPage />} />
               <Route path={ROUTES.BMHP_STOCK} element={resource(bmhpItemsConfig)} />
+              <Route path={ROUTES.CLIMATE_MONITORING} element={<ClimateMonitoringPage />} />
             </Route>
 
             <Route element={<Protected adminOnly />}>
@@ -111,7 +112,6 @@ export default function App() {
               <Route path={ROUTES.STERILIZATIONS} element={resource(sterilizationsConfig)} />
               <Route path={ROUTES.VERIFICATIONS} element={resource(verificationsConfig)} />
               <Route path={ROUTES.GAUZE_STOCK} element={resource(gauzeStockConfig)} />
-              <Route path={ROUTES.CLIMATE_MONITORING} element={<ClimateMonitoringPage />} />
               <Route path={ROUTES.MACHINE_LOGS} element={resource(machineLogsConfig)} />
               <Route path={ROUTES.PROCESS_TIMINGS} element={<ProcessTimingMonitorPage />} />
               <Route path={ROUTES.DTT_CONTROL} element={<DttReuseReportPage />} />

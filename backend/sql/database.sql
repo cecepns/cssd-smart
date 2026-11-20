@@ -440,6 +440,8 @@ CREATE TABLE `distributions` (
   `stock_id` INT UNSIGNED NOT NULL,
   `unit_id` INT UNSIGNED NOT NULL,
   `quantity` INT UNSIGNED NOT NULL DEFAULT 1,
+  `items_detail` LONGTEXT DEFAULT NULL,
+  `extra_items` LONGTEXT DEFAULT NULL,
   `gauze_type` VARCHAR(100) DEFAULT NULL,
   `officer` VARCHAR(100) NOT NULL,
   `officer_signature` TEXT DEFAULT NULL,

@@ -1250,6 +1250,13 @@ registerCrud({
     const ts = resolveActionTimestamps(ctx.body);
     data.started_at = ts.started_at;
     data.completed_at = ts.completed_at;
+
+    if (ctx.body.items_detail) {
+      data.items_detail = typeof ctx.body.items_detail === 'object' ? JSON.stringify(ctx.body.items_detail) : ctx.body.items_detail;
+    }
+    if (ctx.body.extra_items) {
+      data.extra_items = typeof ctx.body.extra_items === 'object' ? JSON.stringify(ctx.body.extra_items) : ctx.body.extra_items;
+    }
     data.barcode = data.barcode || (await makeCode(conn, 'AK', data.receipt_date));
     data.stage = 1;
     data.status = 'Diterima';
@@ -2078,6 +2085,8 @@ registerCrud({
     field('barcode', 'string', { label: 'Barcode', max: 50 }),
     field('unit_id', 'int', { required: true, min: 1, label: 'Unit tujuan' }),
     field('quantity', 'int', { required: true, min: 1, label: 'Jumlah' }),
+    field('items_detail', 'string', { label: 'Rincian Set' }),
+    field('extra_items', 'string', { label: 'Alat Satuan' }),
     field('gauze_type', 'string', { label: 'Jenis Kasa', max: 100 }),
     field('officer', 'string', { required: true, label: 'Petugas CSSD', max: 100 }),
     field('officer_signature', 'path', { label: 'TTD Petugas CSSD' }),
@@ -2107,6 +2116,12 @@ registerCrud({
       if (!ctx.user.unit_id) throw new HttpError(403, 'Akun unit tidak terhubung ke unit rumah sakit');
       data.unit_id = ctx.user.unit_id;
     }
+    if (ctx.body.items_detail !== undefined) {
+      data.items_detail = typeof ctx.body.items_detail === 'object' ? JSON.stringify(ctx.body.items_detail) : ctx.body.items_detail;
+    }
+    if (ctx.body.extra_items !== undefined) {
+      data.extra_items = typeof ctx.body.extra_items === 'object' ? JSON.stringify(ctx.body.extra_items) : ctx.body.extra_items;
+    }
     if (data.barcode !== undefined && data.barcode !== existing.barcode) {
       throw new HttpError(422, 'Barcode distribusi tidak dapat diubah', { barcode: 'Barcode tidak dapat diubah' });
     }
@@ -2133,6 +2148,13 @@ registerCrud({
     const ts = resolveActionTimestamps(ctx.body);
     data.started_at = ts.started_at;
     data.completed_at = ts.completed_at;
+
+    if (ctx.body.items_detail) {
+      data.items_detail = typeof ctx.body.items_detail === 'object' ? JSON.stringify(ctx.body.items_detail) : ctx.body.items_detail;
+    }
+    if (ctx.body.extra_items) {
+      data.extra_items = typeof ctx.body.extra_items === 'object' ? JSON.stringify(ctx.body.extra_items) : ctx.body.extra_items;
+    }
 
     // Alur Khusus: Distribusi KASA STERIL (Langsung dari CSSD ke Unit tanpa alat kotor)
     if (data.type === 'KASA') {
@@ -2506,6 +2528,13 @@ registerCrud({
     const ts = resolveActionTimestamps(ctx.body);
     data.started_at = ts.started_at;
     data.completed_at = ts.completed_at;
+
+    if (ctx.body.items_detail) {
+      data.items_detail = typeof ctx.body.items_detail === 'object' ? JSON.stringify(ctx.body.items_detail) : ctx.body.items_detail;
+    }
+    if (ctx.body.extra_items) {
+      data.extra_items = typeof ctx.body.extra_items === 'object' ? JSON.stringify(ctx.body.extra_items) : ctx.body.extra_items;
+    }
     if (!data.dist_datetime) data.dist_datetime = ts.completed_at;
     const today = (data.dist_datetime || todayStr()).slice(0, 10);
     data.barcode = data.barcode || (await makeCode(conn, 'DDTT', today));
@@ -2557,6 +2586,58 @@ registerCrud({
   },
 });
 
+async function ensureStorageClimateLogsTable(connOrPool = pool) {
+  try {
+    await connOrPool.query(`
+      CREATE TABLE IF NOT EXISTS storage_climate_logs (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        room_name VARCHAR(100) NOT NULL DEFAULT 'Ruang Penyimpanan Alat Steril',
+        check_date DATE NOT NULL,
+        check_time TIME NOT NULL,
+        temperature DECIMAL(4, 1) NOT NULL,
+        humidity DECIMAL(4, 1) NOT NULL,
+        temp_status ENUM('NORMAL', 'WARNING') NOT NULL DEFAULT 'NORMAL',
+        humidity_status ENUM('NORMAL', 'WARNING') NOT NULL DEFAULT 'NORMAL',
+        overall_status ENUM('NORMAL', 'WARNING') NOT NULL DEFAULT 'NORMAL',
+        officer VARCHAR(100) NOT NULL,
+        officer_signature TEXT DEFAULT NULL,
+        notes VARCHAR(255) DEFAULT NULL,
+        corrective_action VARCHAR(255) DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        INDEX idx_climate_date (check_date),
+        INDEX idx_climate_room (room_name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Pastikan seluruh kolom tersedia jika tabel dibuat dengan skema lama
+    const colsToAdd = [
+      ['room_name', "VARCHAR(100) NOT NULL DEFAULT 'Ruang Penyimpanan Alat Steril'"],
+      ['check_date', 'DATE NOT NULL'],
+      ['check_time', 'TIME NOT NULL'],
+      ['temperature', 'DECIMAL(4, 1) NOT NULL DEFAULT 20.0'],
+      ['humidity', 'DECIMAL(4, 1) NOT NULL DEFAULT 45.0'],
+      ['temp_status', "ENUM('NORMAL', 'WARNING') NOT NULL DEFAULT 'NORMAL'"],
+      ['humidity_status', "ENUM('NORMAL', 'WARNING') NOT NULL DEFAULT 'NORMAL'"],
+      ['overall_status', "ENUM('NORMAL', 'WARNING') NOT NULL DEFAULT 'NORMAL'"],
+      ['officer', "VARCHAR(100) NOT NULL DEFAULT 'Petugas CSSD'"],
+      ['officer_signature', 'TEXT DEFAULT NULL'],
+      ['notes', 'VARCHAR(255) DEFAULT NULL'],
+      ['corrective_action', 'VARCHAR(255) DEFAULT NULL'],
+    ];
+    for (const [col, def] of colsToAdd) {
+      try {
+        await connOrPool.query(`ALTER TABLE storage_climate_logs ADD COLUMN ${col} ${def}`);
+      } catch (alterErr) {
+        // Abaikan jika sudah ada (ER_DUP_FIELDNAME)
+      }
+    }
+  } catch (err) {
+    console.error('ensureStorageClimateLogsTable notice:', err.message);
+  }
+}
+
 // ---------- Monitoring Suhu & Kelembaban Udara Ruangan CSSD (RSUD Serpong Utara) ----------
 // Standar Suhu Ruangan: NORMAL 18–22°C (WARNING jika <18°C atau >22°C)
 // Standar Kelembaban Udara: NORMAL 35–55% RH (WARNING jika <35% atau >55% RH)
@@ -2594,7 +2675,8 @@ registerCrud({
     field('notes', 'string', { max: 255, label: 'Catatan' }),
     field('corrective_action', 'string', { max: 255, label: 'Tindakan Koreksi' }),
   ],
-  beforeCreate(conn, data) {
+  async beforeCreate(conn, data) {
+    await ensureStorageClimateLogsTable(conn);
     const temp = parseFloat(data.temperature) || 0;
     const hum = parseFloat(data.humidity) || 0;
     data.temp_status = (temp >= 18.0 && temp <= 22.0) ? 'NORMAL' : 'WARNING';
@@ -2604,7 +2686,8 @@ registerCrud({
     if (!data.check_date) data.check_date = todayStr();
     if (!data.check_time) data.check_time = nowDateTimeStr().slice(11, 19);
   },
-  beforeUpdate(conn, data, ctx, existing) {
+  async beforeUpdate(conn, data, ctx, existing) {
+    await ensureStorageClimateLogsTable(conn);
     const temp = data.temperature !== undefined ? parseFloat(data.temperature) : parseFloat(existing.temperature);
     const hum = data.humidity !== undefined ? parseFloat(data.humidity) : parseFloat(existing.humidity);
     data.temp_status = (temp >= 18.0 && temp <= 22.0) ? 'NORMAL' : 'WARNING';
@@ -2623,11 +2706,34 @@ router.get('/storage-climate-logs/monthly', auth, wrap(async (req, res) => {
   const daysInMonth = new Date(year, month, 0).getDate();
   const endDate = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-  const [rows] = await pool.query(`
-    SELECT * FROM storage_climate_logs
-    WHERE (room_name = ? OR ? = '') AND check_date BETWEEN ? AND ?
-    ORDER BY check_date ASC, check_time ASC, id ASC
-  `, [roomName, roomName, startDate, endDate]);
+  await ensureStorageClimateLogsTable(pool);
+
+  let rows = [];
+  try {
+    const [result] = await pool.query(`
+      SELECT * FROM storage_climate_logs
+      WHERE (room_name = ? OR ? = '') AND check_date BETWEEN ? AND ?
+      ORDER BY check_date ASC, check_time ASC, id ASC
+    `, [roomName, roomName, startDate, endDate]);
+    rows = result;
+  } catch (queryErr) {
+    if (queryErr.errno === 1146 || queryErr.code === 'ER_NO_SUCH_TABLE') {
+      await ensureStorageClimateLogsTable(pool);
+      try {
+        const [result] = await pool.query(`
+          SELECT * FROM storage_climate_logs
+          WHERE (room_name = ? OR ? = '') AND check_date BETWEEN ? AND ?
+          ORDER BY check_date ASC, check_time ASC, id ASC
+        `, [roomName, roomName, startDate, endDate]);
+        rows = result;
+      } catch (retryErr) {
+        rows = [];
+      }
+    } else {
+      console.error('storage_climate_logs query notice:', queryErr.message);
+      rows = [];
+    }
+  }
 
   const daysMap = {};
   for (let d = 1; d <= 31; d++) {
@@ -2657,7 +2763,16 @@ router.get('/storage-climate-logs/monthly', auth, wrap(async (req, res) => {
   let totalWarnings = 0;
 
   for (const r of rows) {
-    const d = parseInt(String(r.check_date).slice(8, 10), 10);
+    let d = 0;
+    if (r.check_date) {
+      if (typeof r.check_date === 'string') {
+        const m = r.check_date.match(/\d{4}-\d{2}-(\d{2})/);
+        d = m ? parseInt(m[1], 10) : parseInt(r.check_date.slice(8, 10), 10);
+      } else if (r.check_date instanceof Date) {
+        const dy = String(r.check_date.getDate()).padStart(2, '0');
+        d = parseInt(dy, 10);
+      }
+    }
     if (daysMap[d]) {
       daysMap[d].records.push(r);
       const temp = parseFloat(r.temperature);
@@ -4958,16 +5073,55 @@ router.get('/dtt-reuse-report', auth, wrap(async (req, res) => {
   }
 
   // 1. Ambil seluruh transaksi terintegrasi (Penerimaan + Pengambilan DTT)
-  const [txRows] = await pool.query(`
-    SELECT r.*, u.name AS unit_name,
-      d.id AS dist_id, d.barcode AS dist_barcode, d.dist_datetime, d.officer AS dist_officer, d.receiver_name AS dist_receiver_name
-    FROM dtt_receipts r
-    JOIN units u ON u.id = r.unit_id
-    LEFT JOIN dtt_distributions d ON d.dtt_receipt_id = r.id
-    WHERE ${where.join(' AND ')}
-    ORDER BY r.receipt_datetime DESC, r.id DESC
-    LIMIT 500
-  `, params);
+  let txRows = [];
+  try {
+    const [rows] = await pool.query(`
+      SELECT r.*, u.name AS unit_name,
+        d.id AS dist_id, d.barcode AS dist_barcode, d.dist_datetime, d.officer AS dist_officer, d.receiver_name AS dist_receiver_name
+      FROM dtt_receipts r
+      JOIN units u ON u.id = r.unit_id
+      LEFT JOIN dtt_distributions d ON d.dtt_receipt_id = r.id
+      WHERE ${where.join(' AND ')}
+      ORDER BY r.receipt_datetime DESC, r.id DESC
+      LIMIT 500
+    `, params);
+    txRows = rows;
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR' || err.errno === 1054) {
+      // Auto-heal kolom officer pada dtt_distributions jika database lama memakai sender_name
+      try {
+        await pool.query('ALTER TABLE dtt_distributions ADD COLUMN officer VARCHAR(100) DEFAULT NULL AFTER tool_condition');
+        try {
+          await pool.query('UPDATE dtt_distributions SET officer = sender_name WHERE (officer IS NULL OR officer = "") AND sender_name IS NOT NULL');
+        } catch (e) { }
+      } catch (e) { }
+
+      let officerColExpr = 'NULL';
+      try {
+        const [cols] = await pool.query("SHOW COLUMNS FROM dtt_distributions WHERE Field IN ('officer', 'sender_name')");
+        const colNames = cols.map((c) => c.Field);
+        if (colNames.includes('officer')) {
+          officerColExpr = 'd.officer';
+        } else if (colNames.includes('sender_name')) {
+          officerColExpr = 'd.sender_name';
+        }
+      } catch (e) { }
+
+      const [rows] = await pool.query(`
+        SELECT r.*, u.name AS unit_name,
+          d.id AS dist_id, d.barcode AS dist_barcode, d.dist_datetime, ${officerColExpr} AS dist_officer, d.receiver_name AS dist_receiver_name
+        FROM dtt_receipts r
+        JOIN units u ON u.id = r.unit_id
+        LEFT JOIN dtt_distributions d ON d.dtt_receipt_id = r.id
+        WHERE ${where.join(' AND ')}
+        ORDER BY r.receipt_datetime DESC, r.id DESC
+        LIMIT 500
+      `, params);
+      txRows = rows;
+    } else {
+      throw err;
+    }
+  }
 
   // 2. Agregasi otomatis per jenis alat & unit (terintegrasi penuh)
   const toolMap = new Map();
@@ -7091,6 +7245,16 @@ async function ensureDttTables() {
         KEY idx_dtt_dist_unit (unit_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+
+    try {
+      await pool.query('ALTER TABLE dtt_distributions ADD COLUMN officer VARCHAR(100) DEFAULT NULL AFTER tool_condition');
+    } catch (e) { }
+    try {
+      await pool.query('ALTER TABLE dtt_distributions ADD COLUMN officer_signature TEXT DEFAULT NULL AFTER officer');
+    } catch (e) { }
+    try {
+      await pool.query('UPDATE dtt_distributions SET officer = sender_name WHERE (officer IS NULL OR officer = "") AND sender_name IS NOT NULL');
+    } catch (e) { }
   } catch (err) {
     console.error('ensureDttTables notice:', err.message);
   }
@@ -7130,8 +7294,15 @@ async function ensureAppSchemaUpdates() {
     await addCol('dirty_receipts', "checklist_status ENUM('Lengkap', 'Tidak Lengkap', 'Ada Kerusakan') DEFAULT 'Lengkap'");
     await addCol('dirty_receipts', 'proof_image LONGTEXT DEFAULT NULL AFTER notes');
     await addCol('distributions', 'proof_image LONGTEXT DEFAULT NULL AFTER notes');
+    await addCol('distributions', 'items_detail LONGTEXT DEFAULT NULL AFTER quantity');
+    await addCol('distributions', 'extra_items LONGTEXT DEFAULT NULL AFTER items_detail');
     await addCol('dtt_receipts', 'proof_image LONGTEXT DEFAULT NULL AFTER notes');
     await addCol('dtt_distributions', 'proof_image LONGTEXT DEFAULT NULL AFTER notes');
+    await addCol('dtt_distributions', 'officer VARCHAR(100) DEFAULT NULL AFTER tool_condition');
+    await addCol('dtt_distributions', 'officer_signature TEXT DEFAULT NULL AFTER officer');
+    try {
+      await pool.query('UPDATE dtt_distributions SET officer = sender_name WHERE (officer IS NULL OR officer = "") AND sender_name IS NOT NULL');
+    } catch (err) { }
     try {
       await pool.query("ALTER TABLE dtt_distributions MODIFY COLUMN dtt_receipt_id INT UNSIGNED DEFAULT NULL");
     } catch (err) { }
@@ -7157,7 +7328,7 @@ async function ensureAppSchemaUpdates() {
         INDEX idx_climate_date (check_date),
         INDEX idx_climate_room (room_name)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `).catch(() => {});
+    `).catch(() => { });
 
     // Pastikan kolom started_at & completed_at tersedia di seluruh tabel tahapan CSSD & DTT
     const timingTables = [
@@ -7396,27 +7567,37 @@ let initPromise = null;
 function runInitMigrations() {
   if (!initPromise) {
     initPromise = (async () => {
+      const runStep = async (name, fn) => {
+        try {
+          await fn();
+        } catch (err) {
+          console.warn(`Init migration step "${name}" notice:`, err.message);
+        }
+      };
+
       try {
         await pool.query('SELECT 1');
-        await ensureDirtyReceiptsColumnsDirect(pool);
-        await ensureAdmin();
-        await ensureOfficersTable();
-        await ensureInstrumentSetsTable();
-        await ensureDiscrepancyTable();
-        await ensureCategoryMigration();
-        await ensurePackagingMaterialsTable();
-        await ensureMachineTypeMigration();
-        await ensureBmhpColumns();
-        await ensureBmhpBatchesAndTables(pool);
-        await ensureItemUnitsTable();
-        await ensureDttTables();
-        await ensureAppSchemaUpdates();
-        await ensureStandardSetItems();
-        await ensureNewFeatureTables();
-        console.log('Database schema initialization completed successfully.');
       } catch (err) {
-        console.warn('Initialization warning:', err.message);
+        console.warn('MySQL ping notice:', err.message);
       }
+
+      await runStep('dirtyReceipts', () => ensureDirtyReceiptsColumnsDirect(pool));
+      await runStep('admin', () => ensureAdmin());
+      await runStep('officers', () => ensureOfficersTable());
+      await runStep('instrumentSets', () => ensureInstrumentSetsTable());
+      await runStep('discrepancy', () => ensureDiscrepancyTable());
+      await runStep('category', () => ensureCategoryMigration());
+      await runStep('packagingMaterials', () => ensurePackagingMaterialsTable());
+      await runStep('machineType', () => ensureMachineTypeMigration());
+      await runStep('bmhpColumns', () => ensureBmhpColumns());
+      await runStep('bmhpBatches', () => ensureBmhpBatchesAndTables(pool));
+      await runStep('itemUnits', () => ensureItemUnitsTable());
+      await runStep('dttTables', () => ensureDttTables());
+      await runStep('climateTable', () => ensureStorageClimateLogsTable(pool));
+      await runStep('appSchemaUpdates', () => ensureAppSchemaUpdates());
+      await runStep('standardSetItems', () => ensureStandardSetItems());
+      await runStep('newFeatureTables', () => ensureNewFeatureTables());
+      console.log('Database schema initialization completed successfully.');
     })();
   }
   return initPromise;
