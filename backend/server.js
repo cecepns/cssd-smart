@@ -66,6 +66,8 @@ const pool = mysql.createPool({
   database: env.DB_NAME || 'cssd_smart',
   waitForConnections: true,
   connectionLimit: 10,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
   dateStrings: true,
   decimalNumbers: true,
   charset: 'utf8mb4',
@@ -207,7 +209,11 @@ async function withTx(fn) {
     await conn.commit();
     return result;
   } catch (err) {
-    await conn.rollback();
+    try {
+      await conn.rollback();
+    } catch (rbErr) {
+      // rollback could fail if connection was broken/reset
+    }
     throw err;
   } finally {
     conn.release();
@@ -290,10 +296,26 @@ function validate(fields, body, { partial = false } = {}) {
         if (!f.values.includes(raw)) errors[f.name] = `${label} harus salah satu dari: ${f.values.join(', ')}`;
         else out[f.name] = raw;
         break;
-      case 'path':
-        if (!PATH_REGEX.test(String(raw))) errors[f.name] = `${label} tidak valid`;
-        else out[f.name] = String(raw);
+      case 'path': {
+        const rawStr = String(raw || '');
+        if (rawStr.startsWith('data:image/')) {
+          try {
+            const b64 = rawStr.split(',')[1] || '';
+            const buf = Buffer.from(b64, 'base64');
+            const folder = f.name.includes('signature') ? 'signatures' : 'images';
+            const savedPath = saveImageBuffer(buf, folder);
+            out[f.name] = savedPath;
+            break;
+          } catch (err) {
+            console.error('Auto-save dataURL error:', err.message);
+            errors[f.name] = `${label} gagal diproses`;
+            break;
+          }
+        }
+        if (!PATH_REGEX.test(rawStr)) errors[f.name] = `${label} tidak valid`;
+        else out[f.name] = rawStr;
         break;
+      }
       default:
         out[f.name] = sanitizeText(raw);
     }
@@ -411,10 +433,93 @@ function toCsv(rows, columns) {
 }
 
 async function fetchOne(cfg, id, conn = pool) {
-  const where = [`${cfg.pk} = ?`];
+  const pk = cfg.pk || (cfg.table ? `${cfg.table}.id` : 't.id');
+  const fromClause = cfg.from || (cfg.table ? `${cfg.table} t` : 't');
+  const selectClause = cfg.select || 't.*';
+  const where = [`${pk} = ?`];
   if (cfg.fixedWhere) where.push(cfg.fixedWhere);
-  const [rows] = await conn.query(`SELECT ${cfg.select} FROM ${cfg.from} WHERE ${where.join(' AND ')} LIMIT 1`, [id]);
-  return rows[0] ? enrichTimingRow(rows[0]) : null;
+  try {
+    const [rows] = await conn.query(`SELECT ${selectClause} FROM ${fromClause} WHERE ${where.join(' AND ')} LIMIT 1`, [id]);
+    return rows[0] ? enrichTimingRow(rows[0]) : null;
+  } catch (err) {
+    console.error(`fetchOne error for ${cfg.path || cfg.table}:`, err.message);
+    if (cfg.table) {
+      try {
+        const [rows] = await conn.query(`SELECT * FROM ?? WHERE id = ? LIMIT 1`, [cfg.table, id]);
+        return rows[0] ? enrichTimingRow(rows[0]) : null;
+      } catch (fallbackErr) {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+async function safeInsert(conn, table, data) {
+  try {
+    return await conn.query('INSERT INTO ?? SET ?', [table, data]);
+  } catch (err) {
+    if (err.errno === 1054 || err.code === 'ER_BAD_FIELD_ERROR') {
+      console.warn(`[SafeInsert] ER_BAD_FIELD_ERROR on table ${table}:`, err.message);
+      if (table.includes('dtt')) {
+        await ensureDttTables(conn);
+      }
+      if (table.includes('climate')) {
+        await ensureStorageClimateLogsTable(conn);
+      }
+      try {
+        return await conn.query('INSERT INTO ?? SET ?', [table, data]);
+      } catch (retryErr) {
+        if (retryErr.errno === 1054 || retryErr.code === 'ER_BAD_FIELD_ERROR') {
+          const [colRows] = await conn.query('SHOW COLUMNS FROM ??', [table]);
+          const validCols = new Set(colRows.map((c) => c.Field));
+          const cleanData = {};
+          for (const [k, v] of Object.entries(data)) {
+            if (validCols.has(k)) {
+              cleanData[k] = v;
+            } else {
+              console.warn(`[SafeInsert] Omitting unknown column '${k}' from insert into '${table}'`);
+            }
+          }
+          return await conn.query('INSERT INTO ?? SET ?', [table, cleanData]);
+        }
+        throw retryErr;
+      }
+    }
+    throw err;
+  }
+}
+
+async function safeUpdate(conn, table, data, id) {
+  try {
+    return await conn.query('UPDATE ?? SET ? WHERE id = ?', [table, data, id]);
+  } catch (err) {
+    if (err.errno === 1054 || err.code === 'ER_BAD_FIELD_ERROR') {
+      console.warn(`[SafeUpdate] ER_BAD_FIELD_ERROR on table ${table}:`, err.message);
+      if (table.includes('dtt')) {
+        await ensureDttTables(conn);
+      }
+      if (table.includes('climate')) {
+        await ensureStorageClimateLogsTable(conn);
+      }
+      try {
+        return await conn.query('UPDATE ?? SET ? WHERE id = ?', [table, data, id]);
+      } catch (retryErr) {
+        if (retryErr.errno === 1054 || retryErr.code === 'ER_BAD_FIELD_ERROR') {
+          const [colRows] = await conn.query('SHOW COLUMNS FROM ??', [table]);
+          const validCols = new Set(colRows.map((c) => c.Field));
+          const cleanData = {};
+          for (const [k, v] of Object.entries(data)) {
+            if (validCols.has(k)) cleanData[k] = v;
+          }
+          if (Object.keys(cleanData).length === 0) return [null];
+          return await conn.query('UPDATE ?? SET ? WHERE id = ?', [table, cleanData, id]);
+        }
+        throw retryErr;
+      }
+    }
+    throw err;
+  }
 }
 
 /* ============================================================
@@ -441,7 +546,13 @@ const allow = (...roles) => (req, res, next) =>
 const router = express.Router();
 
 function registerCrud(raw) {
-  const cfg = { pk: 't.id', ...raw };
+  const table = raw.table;
+  const cfg = {
+    pk: 't.id',
+    from: raw.from || (table ? `${table} t` : 't'),
+    select: raw.select || 't.*',
+    ...raw,
+  };
   const roles = { read: ROLES, write: ['admin', 'petugas'], remove: ['admin', 'petugas'], export: ['admin'], ...(raw.roles || {}) };
   const base = `/${cfg.path}`;
 
@@ -499,7 +610,7 @@ function registerCrud(raw) {
       }
       const id = await withTx(async (conn) => {
         if (cfg.beforeCreate) await cfg.beforeCreate(conn, data, ctx);
-        const [result] = await conn.query('INSERT INTO ?? SET ?', [cfg.table, data]);
+        const [result] = await safeInsert(conn, cfg.table, data);
         if (cfg.afterCreate) await cfg.afterCreate(conn, result.insertId, data, ctx);
         return result.insertId;
       });
@@ -523,7 +634,7 @@ function registerCrud(raw) {
         }
         if (cfg.beforeUpdate) await cfg.beforeUpdate(conn, data, ctx, existing);
         if (!Object.keys(data).length) throw new HttpError(422, 'Tidak ada data yang diubah');
-        await conn.query('UPDATE ?? SET ? WHERE id = ?', [cfg.table, data, id]);
+        await safeUpdate(conn, cfg.table, data, id);
         if (cfg.afterUpdate) await cfg.afterUpdate(conn, id, data, ctx, existing);
       });
       res.json({ success: true, message: 'Data berhasil diperbarui', data: await fetchOne(cfg, id) });
@@ -2420,6 +2531,7 @@ registerCrud({
     field('notes', 'string', { label: 'Catatan', max: 500 }),
   ],
   async beforeCreate(conn, data, ctx) {
+    await ensureDttTables(conn);
     if (ctx.user.role === 'unit' && ctx.user.unit_id) {
       data.unit_id = ctx.user.unit_id;
     }
@@ -2429,6 +2541,9 @@ registerCrud({
     if (!data.receipt_datetime) data.receipt_datetime = ts.completed_at;
     const today = (data.receipt_datetime || todayStr()).slice(0, 10);
     data.barcode = data.barcode || (await makeCode(conn, 'RD', today));
+  },
+  async beforeUpdate(conn, data, ctx, existing) {
+    await ensureDttTables(conn);
   },
   async afterCreate(conn, id, data, ctx) {
     const [[fresh]] = await conn.query(
@@ -2511,6 +2626,7 @@ registerCrud({
     field('notes', 'string', { label: 'Catatan', max: 500 }),
   ],
   async beforeCreate(conn, data, ctx) {
+    await ensureDttTables(conn);
     if (ctx.user.role === 'unit') {
       if (!ctx.user.unit_id) throw new HttpError(403, 'Akun unit tidak terhubung ke unit rumah sakit');
       data.unit_id = ctx.user.unit_id;
@@ -2567,6 +2683,7 @@ registerCrud({
     }
   },
   async beforeUpdate(conn, data, ctx, existing) {
+    await ensureDttTables(conn);
     if (ctx.user.role === 'unit') {
       if (!ctx.user.unit_id) throw new HttpError(403, 'Akun unit tidak terhubung ke unit rumah sakit');
       data.unit_id = ctx.user.unit_id;
@@ -2644,12 +2761,14 @@ async function ensureStorageClimateLogsTable(connOrPool = pool) {
 registerCrud({
   path: 'storage-climate-logs',
   table: 'storage_climate_logs',
-  search: ['room_name', 'officer', 'notes', 'corrective_action'],
-  sort: { id: 'id', check_date: 'check_date', check_time: 'check_time', temperature: 'temperature', humidity: 'humidity' },
+  from: 'storage_climate_logs t',
+  select: 't.*',
+  search: ['t.room_name', 't.officer', 't.notes', 't.corrective_action'],
+  sort: { id: 't.id', check_date: 't.check_date', check_time: 't.check_time', temperature: 't.temperature', humidity: 't.humidity' },
   defaultSort: 'id',
-  filters: { room_name: 'room_name', temp_status: 'temp_status', humidity_status: 'humidity_status', overall_status: 'overall_status' },
-  dateColumn: 'check_date',
-  timeColumn: 'check_time',
+  filters: { room_name: 't.room_name', temp_status: 't.temp_status', humidity_status: 't.humidity_status', overall_status: 't.overall_status' },
+  dateColumn: 't.check_date',
+  timeColumn: 't.check_time',
   exportColumns: [
     ['check_date', 'Tanggal'],
     ['check_time', 'Jam'],
@@ -7188,9 +7307,9 @@ async function ensureItemUnitsTable() {
   }
 }
 
-async function ensureDttTables() {
+async function ensureDttTables(connOrPool = pool) {
   try {
-    await pool.query(`
+    await connOrPool.query(`
       CREATE TABLE IF NOT EXISTS dtt_receipts (
         id INT UNSIGNED NOT NULL AUTO_INCREMENT,
         barcode VARCHAR(50) NOT NULL,
@@ -7201,18 +7320,21 @@ async function ensureDttTables() {
         quantity INT UNSIGNED NOT NULL DEFAULT 1,
         unit_label VARCHAR(30) NOT NULL DEFAULT 'pcs',
         reuse_count INT UNSIGNED NOT NULL DEFAULT 1,
-        max_reuse_limit INT UNSIGNED NOT NULL DEFAULT 10,
+        max_reuse_limit INT UNSIGNED NOT NULL DEFAULT 4,
         tool_condition ENUM('Baik', 'Perlu Perbaikan', 'Rusak / Afkir') NOT NULL DEFAULT 'Baik',
         sender_name VARCHAR(100) NOT NULL,
         sender_signature TEXT DEFAULT NULL,
         receiver_name VARCHAR(100) NOT NULL,
         receiver_signature TEXT DEFAULT NULL,
+        proof_image LONGTEXT DEFAULT NULL,
         process_stage ENUM('Diterima', 'Pencucian DTT', 'Penyimpanan DTT', 'Siap Distribusi', 'Selesai') NOT NULL DEFAULT 'Diterima',
-        dtt_method VARCHAR(100) DEFAULT 'DTT Manual (Perendaman Enzimatik & Disinfektan)',
+        dtt_method VARCHAR(100) DEFAULT 'DTT Manual (Perendaman Enzimatik & Disinfektan Tingkat Tinggi)',
         dtt_liquid VARCHAR(100) DEFAULT 'Glutaraldehyde 2%',
         dtt_duration_min INT UNSIGNED DEFAULT 20,
         verification_result ENUM('Belum Diverifikasi', 'Lolos', 'Gagal / Cuci Ulang') NOT NULL DEFAULT 'Belum Diverifikasi',
         notes TEXT DEFAULT NULL,
+        started_at DATETIME DEFAULT NULL,
+        completed_at DATETIME DEFAULT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
@@ -7222,11 +7344,11 @@ async function ensureDttTables() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
-    await pool.query(`
+    await connOrPool.query(`
       CREATE TABLE IF NOT EXISTS dtt_distributions (
         id INT UNSIGNED NOT NULL AUTO_INCREMENT,
         barcode VARCHAR(50) NOT NULL,
-        dtt_receipt_id INT UNSIGNED NOT NULL,
+        dtt_receipt_id INT UNSIGNED DEFAULT NULL,
         dist_datetime DATETIME NOT NULL,
         unit_id INT UNSIGNED NOT NULL,
         item_name VARCHAR(150) NOT NULL,
@@ -7238,7 +7360,10 @@ async function ensureDttTables() {
         officer_signature TEXT DEFAULT NULL,
         receiver_name VARCHAR(100) NOT NULL,
         receiver_signature TEXT DEFAULT NULL,
+        proof_image LONGTEXT DEFAULT NULL,
         notes TEXT DEFAULT NULL,
+        started_at DATETIME DEFAULT NULL,
+        completed_at DATETIME DEFAULT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
         UNIQUE KEY uq_dtt_dist_barcode (barcode),
@@ -7246,15 +7371,71 @@ async function ensureDttTables() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Pastikan seluruh kolom tersedia jika tabel dibuat dengan skema lama
+    const receiptCols = [
+      ['item_code', 'VARCHAR(50) DEFAULT NULL'],
+      ['item_name', "VARCHAR(150) NOT NULL DEFAULT ''"],
+      ['quantity', 'INT UNSIGNED NOT NULL DEFAULT 1'],
+      ['unit_label', "VARCHAR(30) NOT NULL DEFAULT 'pcs'"],
+      ['reuse_count', 'INT UNSIGNED NOT NULL DEFAULT 1'],
+      ['max_reuse_limit', 'INT UNSIGNED NOT NULL DEFAULT 4'],
+      ['tool_condition', "ENUM('Baik', 'Perlu Perbaikan', 'Rusak / Afkir') NOT NULL DEFAULT 'Baik'"],
+      ['sender_name', "VARCHAR(100) NOT NULL DEFAULT ''"],
+      ['sender_signature', 'TEXT DEFAULT NULL'],
+      ['receiver_name', "VARCHAR(100) NOT NULL DEFAULT ''"],
+      ['receiver_signature', 'TEXT DEFAULT NULL'],
+      ['proof_image', 'LONGTEXT DEFAULT NULL'],
+      ['process_stage', "ENUM('Diterima', 'Pencucian DTT', 'Penyimpanan DTT', 'Siap Distribusi', 'Selesai') NOT NULL DEFAULT 'Diterima'"],
+      ['dtt_method', "VARCHAR(100) DEFAULT 'DTT Manual (Perendaman Enzimatik & Disinfektan Tingkat Tinggi)'"],
+      ['dtt_liquid', "VARCHAR(100) DEFAULT 'Glutaraldehyde 2%'"],
+      ['dtt_duration_min', 'INT UNSIGNED DEFAULT 20'],
+      ['verification_result', "ENUM('Belum Diverifikasi', 'Lolos', 'Gagal / Cuci Ulang') NOT NULL DEFAULT 'Belum Diverifikasi'"],
+      ['notes', 'TEXT DEFAULT NULL'],
+      ['started_at', 'DATETIME DEFAULT NULL'],
+      ['completed_at', 'DATETIME DEFAULT NULL'],
+    ];
+
+    for (const [col, def] of receiptCols) {
+      try {
+        await connOrPool.query(`ALTER TABLE dtt_receipts ADD COLUMN ${col} ${def}`);
+      } catch (alterErr) {
+        // Abaikan jika sudah ada
+      }
+    }
+
+    const distCols = [
+      ['dtt_receipt_id', 'INT UNSIGNED DEFAULT NULL'],
+      ['item_name', "VARCHAR(150) NOT NULL DEFAULT ''"],
+      ['quantity', 'INT UNSIGNED NOT NULL DEFAULT 1'],
+      ['unit_label', "VARCHAR(30) NOT NULL DEFAULT 'pcs'"],
+      ['reuse_count', 'INT UNSIGNED NOT NULL DEFAULT 1'],
+      ['tool_condition', "ENUM('Baik', 'Perlu Perbaikan', 'Rusak / Afkir') NOT NULL DEFAULT 'Baik'"],
+      ['officer', "VARCHAR(100) DEFAULT NULL"],
+      ['officer_signature', 'TEXT DEFAULT NULL'],
+      ['receiver_name', "VARCHAR(100) NOT NULL DEFAULT ''"],
+      ['receiver_signature', 'TEXT DEFAULT NULL'],
+      ['proof_image', 'LONGTEXT DEFAULT NULL'],
+      ['notes', 'TEXT DEFAULT NULL'],
+      ['started_at', 'DATETIME DEFAULT NULL'],
+      ['completed_at', 'DATETIME DEFAULT NULL'],
+    ];
+
+    for (const [col, def] of distCols) {
+      try {
+        await connOrPool.query(`ALTER TABLE dtt_distributions ADD COLUMN ${col} ${def}`);
+      } catch (alterErr) {
+        // Abaikan jika sudah ada
+      }
+    }
+
     try {
-      await pool.query('ALTER TABLE dtt_distributions ADD COLUMN officer VARCHAR(100) DEFAULT NULL AFTER tool_condition');
+      await connOrPool.query('UPDATE dtt_distributions SET officer = sender_name WHERE (officer IS NULL OR officer = "") AND sender_name IS NOT NULL');
     } catch (e) { }
+
     try {
-      await pool.query('ALTER TABLE dtt_distributions ADD COLUMN officer_signature TEXT DEFAULT NULL AFTER officer');
+      await connOrPool.query("ALTER TABLE dtt_distributions MODIFY COLUMN dtt_receipt_id INT UNSIGNED DEFAULT NULL");
     } catch (e) { }
-    try {
-      await pool.query('UPDATE dtt_distributions SET officer = sender_name WHERE (officer IS NULL OR officer = "") AND sender_name IS NOT NULL');
-    } catch (e) { }
+
   } catch (err) {
     console.error('ensureDttTables notice:', err.message);
   }
@@ -7296,10 +7477,17 @@ async function ensureAppSchemaUpdates() {
     await addCol('distributions', 'proof_image LONGTEXT DEFAULT NULL AFTER notes');
     await addCol('distributions', 'items_detail LONGTEXT DEFAULT NULL AFTER quantity');
     await addCol('distributions', 'extra_items LONGTEXT DEFAULT NULL AFTER items_detail');
+    await addCol('dtt_receipts', "dtt_method VARCHAR(100) DEFAULT 'DTT Manual (Perendaman Enzimatik & Disinfektan Tingkat Tinggi)'");
+    await addCol('dtt_receipts', "dtt_liquid VARCHAR(100) DEFAULT 'Glutaraldehyde 2%'");
+    await addCol('dtt_receipts', 'dtt_duration_min INT UNSIGNED DEFAULT 20');
+    await addCol('dtt_receipts', "verification_result ENUM('Belum Diverifikasi', 'Lolos', 'Gagal / Cuci Ulang') NOT NULL DEFAULT 'Belum Diverifikasi'");
+    await addCol('dtt_receipts', 'max_reuse_limit INT UNSIGNED NOT NULL DEFAULT 4');
+    await addCol('dtt_receipts', "tool_condition ENUM('Baik', 'Perlu Perbaikan', 'Rusak / Afkir') NOT NULL DEFAULT 'Baik'");
     await addCol('dtt_receipts', 'proof_image LONGTEXT DEFAULT NULL AFTER notes');
     await addCol('dtt_distributions', 'proof_image LONGTEXT DEFAULT NULL AFTER notes');
     await addCol('dtt_distributions', 'officer VARCHAR(100) DEFAULT NULL AFTER tool_condition');
     await addCol('dtt_distributions', 'officer_signature TEXT DEFAULT NULL AFTER officer');
+    await addCol('dtt_distributions', "tool_condition ENUM('Baik', 'Perlu Perbaikan', 'Rusak / Afkir') NOT NULL DEFAULT 'Baik'");
     try {
       await pool.query('UPDATE dtt_distributions SET officer = sender_name WHERE (officer IS NULL OR officer = "") AND sender_name IS NOT NULL');
     } catch (err) { }
