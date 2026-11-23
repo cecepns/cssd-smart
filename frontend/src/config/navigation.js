@@ -71,12 +71,11 @@ export const NAV_SECTIONS = [
   {
     title: 'Manajemen Persediaan BMHP',
     items: [
-      { label: 'Dashboard BMHP', to: ROUTES.BMHP, icon: Archive },
+      { label: 'Dashboard BMHP', to: ROUTES.BMHP, icon: Archive, end: true },
       { label: 'Master Data BMHP', to: ROUTES.BMHP_STOCK, icon: Layers },
       { label: 'Barang Masuk (Penerimaan)', to: ROUTES.BMHP_IN, icon: ArrowDownToLine },
       { label: 'Barang Keluar (CSSD)', to: ROUTES.BMHP_OUT, icon: ArrowUpFromLine },
       { label: 'Dokumen NPB, SPB, SPPB, BAST', to: ROUTES.BMHP_DOCUMENTS, icon: FilePlus2 },
-      { label: 'Stok Keseluruhan', to: ROUTES.BMHP_STOCK, icon: Boxes },
       { label: 'Kartu Stok BMHP (Format RS)', to: ROUTES.BMHP_STOCK_CARD, icon: ClipboardList },
       { label: 'Retur / Koreksi Stok', to: ROUTES.BMHP_RETUR, icon: RefreshCw },
       { label: 'Laporan BMHP', to: ROUTES.BMHP_REPORT, icon: FileText, adminOnly: true },

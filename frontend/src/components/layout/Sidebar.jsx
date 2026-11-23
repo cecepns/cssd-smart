@@ -6,7 +6,7 @@ import useInstallPrompt from '@/hooks/useInstallPrompt';
 
 const isActive = (item, pathname) => {
   if (item.match) return pathname.startsWith(item.match);
-  if (item.end) return pathname === item.to;
+  if (item.end || item.to === '/bmhp' || item.to === '/') return pathname === item.to;
   return pathname === item.to || pathname.startsWith(`${item.to}/`);
 };
 
