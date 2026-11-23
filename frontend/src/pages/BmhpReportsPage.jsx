@@ -20,16 +20,18 @@ import useDebounce from '@/hooks/useDebounce';
 import { useAuth } from '@/context/AuthContext';
 
 const REPORT_TABS = [
-  { id: 'mutasi', label: 'Mutasi Stok' },
-  { id: 'rekap', label: 'Rekap Stok' },
-  { id: 'masuk', label: 'Laporan Barang Masuk', badge: 'Baru' },
-  { id: 'keluar', label: 'Laporan Barang Keluar', badge: 'Baru' },
+  { id: 'bulanan', label: 'Laporan Bulanan', badge: 'Utama' },
+  { id: 'rekap', label: 'Rekap Persediaan' },
+  { id: 'nilai', label: 'Nilai Persediaan', badge: 'Nilai Rp' },
+  { id: 'opname', label: 'Stock Opname' },
+  { id: 'expired', label: 'Laporan ED & Batch', badge: 'ED' },
+  { id: 'rusak', label: 'Barang Rusak' },
+  { id: 'penggunaan', label: 'Penggunaan BMHP' },
+  { id: 'anggaran', label: 'Rekap Anggaran' },
+  { id: 'mutasi', label: 'Mutasi Stok Detail' },
+  { id: 'masuk', label: 'Barang Masuk (Penerimaan)' },
+  { id: 'keluar', label: 'Barang Keluar (Pengeluaran)' },
   { id: 'retur', label: 'Retur / Koreksi' },
-  { id: 'per_kategori', label: 'Per Jenis Barang', badge: 'Baru' },
-  { id: 'per_tahun', label: 'Per Tahun Pembelian', badge: 'Baru' },
-  { id: 'per_anggaran', label: 'Per Anggaran (APBD/BLUD)', badge: 'Baru' },
-  { id: 'expired', label: 'Expired (ED)' },
-  { id: 'keseluruhan', label: 'Keseluruhan BMHP (Nilai Rp)' },
 ];
 
 const formatRp = (n) =>

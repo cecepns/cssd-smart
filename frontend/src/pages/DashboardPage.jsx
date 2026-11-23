@@ -108,14 +108,24 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Deskripsi resmi aplikasi sesuai permintaan client */}
-              <p className="mx-auto max-w-2xl text-justify text-xs leading-relaxed text-[#1E293B] sm:text-[13.5px]">
-                CSSD SMART merupakan sistem digital terintegrasi untuk pengelolaan seluruh pelayanan CSSD,
-                mulai dari penerimaan alat kotor, pencucian, pengeringan, pemeriksaan, pengemasan, sterilisasi
-                dan DTT, verifikasi, penyimpanan, hingga distribusi alat steril, hasil DTT, dan kasa steril.
-                Dilengkapi barcode, tanda tangan digital, serta manajemen inventaris BMHP untuk mendukung
-                efisiensi, ketertelusuran, dan peningkatan mutu pelayanan CSSD.
-              </p>
+              {/* Deskripsi resmi aplikasi sesuai revisi client (Gambar 1) */}
+              <div className="mx-auto max-w-2xl space-y-2.5 text-justify text-xs leading-relaxed text-[#1E293B] sm:text-[13.5px]">
+                <p>
+                  CSSD SMART merupakan sistem digital terintegrasi untuk mendukung pengelolaan seluruh
+                  pelayanan Central Sterile Supply Department (CSSD), mulai dari penerimaan alat kotor,
+                  pencucian, pengeringan, pemeriksaan, pengemasan, proses sterilisasi dan DTT, verifikasi
+                  hasil proses, penyimpanan, hingga pengambilan alat steril dan pengambilan kasa steril.
+                </p>
+                <p>
+                  Sistem ini dilengkapi dengan barcode untuk ketertelusuran alat, tanda tangan digital,
+                  dokumentasi setiap tahapan proses, pemantauan suhu dan kelembaban ruang penyimpanan alat
+                  steril secara digital, grafik monitoring otomatis, serta manajemen inventaris BMHP.
+                </p>
+                <p>
+                  CSSD SMART dirancang untuk meningkatkan efisiensi kerja, ketepatan dokumentasi, keamanan
+                  proses, ketertelusuran, dan mutu pelayanan CSSD.
+                </p>
+              </div>
 
               {/* 4 Pill Slogan: Akurat | Terlacak | Terdokumentasi | Terintegrasi */}
               <div className="flex flex-wrap items-center justify-center gap-2 pt-1">

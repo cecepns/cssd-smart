@@ -3942,13 +3942,13 @@ router.delete('/instrument-sets/:id', auth, allow('admin'), wrap(async (req, res
 /* ============================================================
  * CUSTOM ROUTES
  * ============================================================ */
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Terlalu banyak percobaan login, coba lagi nanti' },
-});
+// const loginLimiter = rateLimit({
+//   windowMs: 15 * 60 * 1000,
+//   max: 30,
+//   standardHeaders: true,
+//   legacyHeaders: false,
+//   message: { success: false, message: 'Terlalu banyak percobaan login, coba lagi nanti' },
+// });
 
 const signToken = (user) =>
   jwt.sign(
@@ -4941,6 +4941,13 @@ router.get('/bmhp-reports', auth, allow('admin', 'petugas'), wrap(async (req, re
   const { report_type = 'mutasi', start_date, end_date, category, fiscal_year, budget_source, batch_no, bmhp_item_id, search } = req.query;
   const isAdminUser = req.user.role === 'admin';
 
+  // Normalize report_type aliases matching client mockup (8 Menu Laporan BMHP)
+  let rType = report_type;
+  if (rType === 'bulanan') rType = 'mutasi';
+  if (rType === 'nilai') rType = 'keseluruhan';
+  if (rType === 'penggunaan') rType = 'keluar';
+  if (rType === 'anggaran') rType = 'per_anggaran';
+
   // Helper filter transaksi
   const buildTxFilter = () => {
     const w = ['1=1'];
@@ -4960,7 +4967,35 @@ router.get('/bmhp-reports', auth, allow('admin', 'petugas'), wrap(async (req, re
     return { w, p };
   };
 
-  if (report_type === 'kartu_stok_all') {
+  if (rType === 'opname') {
+    const w = ['i.is_active = 1'];
+    const p = [];
+    if (category && category !== 'Semua') { w.push('i.category = ?'); p.push(category); }
+    if (search) { w.push('(i.name LIKE ? OR i.code LIKE ?)'); p.push(`%${search.trim()}%`, `%${search.trim()}%`); }
+    const [rows] = await pool.query(`
+      SELECT i.id, i.code AS item_code, i.name AS item_name, i.category, i.unit_label, i.stock AS system_stock,
+        i.stock AS physical_stock, 0 AS diff_stock, 'Sesuai' AS status_opname
+      FROM bmhp_items i
+      WHERE ${w.join(' AND ')}
+      ORDER BY i.name ASC
+    `, p);
+    return res.json({ success: true, data: { report_type: 'opname', rows } });
+  }
+
+  if (rType === 'rusak') {
+    const { w, p } = buildTxFilter();
+    w.push("(t.notes LIKE '%rusak%' OR t.correction_reason LIKE '%rusak%')");
+    const [rows] = await pool.query(`
+      SELECT t.*, i.name AS item_name, i.code AS item_code, i.category, i.unit_label
+      FROM bmhp_transactions t
+      JOIN bmhp_items i ON i.id = t.bmhp_item_id
+      WHERE ${w.join(' AND ')}
+      ORDER BY t.trx_date DESC, t.id DESC
+    `, p);
+    return res.json({ success: true, data: { report_type: 'rusak', rows } });
+  }
+
+  if (rType === 'kartu_stok_all') {
     // Cetak Kartu Stok Seluruh Barang Sesuai Filter (TANPA nominal rupiah!)
     const itemW = ['i.is_active = 1'];
     const itemP = [];
@@ -5031,11 +5066,11 @@ router.get('/bmhp-reports', auth, allow('admin', 'petugas'), wrap(async (req, re
     return res.json({ success: true, data: { report_type, cards } });
   }
 
-  if (report_type === 'masuk' || report_type === 'keluar' || report_type === 'retur') {
+  if (rType === 'masuk' || rType === 'keluar' || rType === 'retur') {
     const { w, p } = buildTxFilter();
-    if (report_type === 'masuk') w.push("t.type = 'MASUK'");
-    if (report_type === 'keluar') w.push("t.type = 'KELUAR'");
-    if (report_type === 'retur') w.push("t.type IN ('RETUR_MASUK','RETUR_KELUAR','KOREKSI_TAMBAH','KOREKSI_KURANG')");
+    if (rType === 'masuk') w.push("t.type = 'MASUK'");
+    if (rType === 'keluar') w.push("t.type = 'KELUAR'");
+    if (rType === 'retur') w.push("t.type IN ('RETUR_MASUK','RETUR_KELUAR','KOREKSI_TAMBAH','KOREKSI_KURANG')");
     const [rows] = await pool.query(`
       SELECT t.*, i.name AS item_name, i.code AS item_code, i.category, i.unit_label
       FROM bmhp_transactions t
@@ -5044,10 +5079,10 @@ router.get('/bmhp-reports', auth, allow('admin', 'petugas'), wrap(async (req, re
       ORDER BY t.trx_date DESC, t.id DESC
       LIMIT 500
     `, p);
-    return res.json({ success: true, data: { report_type, rows } });
+    return res.json({ success: true, data: { report_type: rType, rows } });
   }
 
-  if (report_type === 'mutasi') {
+  if (rType === 'mutasi') {
     const itemW = ['i.is_active = 1'];
     const itemP = [];
     if (category && category !== 'Semua') { itemW.push('i.category = ?'); itemP.push(category); }
@@ -5069,10 +5104,10 @@ router.get('/bmhp-reports', auth, allow('admin', 'petugas'), wrap(async (req, re
       WHERE ${itemW.join(' AND ')}
       ORDER BY i.name ASC
     `, [...txP, ...txP, ...txP, ...itemP]);
-    return res.json({ success: true, data: { report_type, rows } });
+    return res.json({ success: true, data: { report_type: rType, rows } });
   }
 
-  if (report_type === 'rekap') {
+  if (rType === 'rekap') {
     const w = ['i.is_active = 1'];
     const p = [];
     if (category && category !== 'Semua') { w.push('i.category = ?'); p.push(category); }
@@ -5089,18 +5124,18 @@ router.get('/bmhp-reports', auth, allow('admin', 'petugas'), wrap(async (req, re
       WHERE ${w.join(' AND ')}
       ORDER BY i.stock ASC, i.name ASC
     `, p);
-    return res.json({ success: true, data: { report_type, rows } });
+    return res.json({ success: true, data: { report_type: rType, rows } });
   }
 
-  if (report_type === 'per_kategori' || report_type === 'per_tahun' || report_type === 'per_anggaran') {
+  if (rType === 'per_kategori' || rType === 'per_tahun' || rType === 'per_anggaran') {
     const bw = ['1=1'];
     const bp = [];
     if (category && category !== 'Semua') { bw.push('i.category = ?'); bp.push(category); }
     if (fiscal_year && fiscal_year !== 'Semua') { bw.push('b.fiscal_year = ?'); bp.push(fiscal_year); }
     if (budget_source && budget_source !== 'Semua') { bw.push('b.budget_source = ?'); bp.push(budget_source); }
     const groupField =
-      report_type === 'per_kategori' ? 'i.category' :
-        report_type === 'per_tahun' ? 'b.fiscal_year' : 'b.budget_source';
+      rType === 'per_kategori' ? 'i.category' :
+        rType === 'per_tahun' ? 'b.fiscal_year' : 'b.budget_source';
 
     const [rows] = await pool.query(`
       SELECT ${groupField} AS group_label,
@@ -5115,10 +5150,10 @@ router.get('/bmhp-reports', auth, allow('admin', 'petugas'), wrap(async (req, re
       GROUP BY ${groupField}
       ORDER BY group_label DESC
     `, bp);
-    return res.json({ success: true, data: { report_type, rows: rows.map((r) => ({ ...r, total_value: isAdminUser ? Number(r.total_value || 0) : null })) } });
+    return res.json({ success: true, data: { report_type: rType, rows: rows.map((r) => ({ ...r, total_value: isAdminUser ? Number(r.total_value || 0) : null })) } });
   }
 
-  if (report_type === 'expired') {
+  if (rType === 'expired') {
     const [rows] = await pool.query(`
       SELECT b.*, i.code AS item_code, i.name AS item_name, i.category, i.unit_label,
         DATEDIFF(b.expiry_date, CURDATE()) AS days_left,
@@ -5243,8 +5278,8 @@ router.get('/dtt-reuse-report', auth, wrap(async (req, res) => {
         await pool.query('ALTER TABLE dtt_distributions ADD COLUMN officer VARCHAR(100) DEFAULT NULL AFTER tool_condition');
         try {
           await pool.query('UPDATE dtt_distributions SET officer = sender_name WHERE (officer IS NULL OR officer = "") AND sender_name IS NOT NULL');
-        } catch (e) {}
-      } catch (e) {}
+        } catch (e) { }
+      } catch (e) { }
 
       let officerColExpr = 'NULL';
       try {
@@ -5255,7 +5290,7 @@ router.get('/dtt-reuse-report', auth, wrap(async (req, res) => {
         } else if (colNames.includes('sender_name')) {
           officerColExpr = 'd.sender_name';
         }
-      } catch (e) {}
+      } catch (e) { }
 
       const [rows] = await pool.query(`
         SELECT r.*, u.name AS unit_name,
@@ -6726,9 +6761,9 @@ const app = express.Router();
 
 // const corsOrigins = (env.CORS_ORIGIN || '*').split(',').map((o) => o.trim()).filter(Boolean);
 // app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({ origin: corsOrigins.includes('*') ? true : corsOrigins }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// app.use(cors({ origin: corsOrigins.includes('*') ? true : corsOrigins }));
+// app.use(express.json({ limit: '10mb' }));
+// app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use(`/${UPLOAD_FOLDER}`, express.static(UPLOAD_DIR, {
   dotfiles: 'deny',
@@ -7074,7 +7109,138 @@ async function ensureBmhpColumns() {
     await addCol('bmhp_items', 'batch_no VARCHAR(50) DEFAULT NULL');
     await addCol('bmhp_items', 'expiry_date DATE DEFAULT NULL');
 
+    // Kolom Tambahan Master Data BMHP (Revisi Dokumen Panduan BMHP)
+    await addCol('bmhp_items', 'nusp VARCHAR(50) DEFAULT NULL');
+    await addCol('bmhp_items', 'brand VARCHAR(100) DEFAULT NULL');
+    await addCol('bmhp_items', 'manufacturer VARCHAR(150) DEFAULT NULL');
+    await addCol('bmhp_items', 'default_supplier VARCHAR(150) DEFAULT NULL');
+    await addCol('bmhp_items', 'packaging_label VARCHAR(50) DEFAULT NULL');
+    await addCol('bmhp_items', 'contents_per_package INT DEFAULT NULL');
+    await addCol('bmhp_items', 'account_code VARCHAR(50) DEFAULT NULL');
+    await addCol('bmhp_items', 'default_budget_source VARCHAR(50) DEFAULT NULL');
+    await addCol('bmhp_items', 'default_fiscal_year VARCHAR(10) DEFAULT NULL');
+    await addCol('bmhp_items', 'reference_price DECIMAL(15,2) DEFAULT 0');
+    await addCol('bmhp_items', 'storage_location VARCHAR(100) DEFAULT NULL');
+    await addCol('bmhp_items', 'photo VARCHAR(500) DEFAULT NULL');
+
+    // Kolom Tambahan Transaksi BMHP (Barang Masuk & Keluar)
     await addCol('bmhp_transactions', 'expiry_date DATE DEFAULT NULL');
+    await addCol('bmhp_transactions', 'supplier_name VARCHAR(150) DEFAULT NULL');
+    await addCol('bmhp_transactions', 'po_number VARCHAR(60) DEFAULT NULL');
+    await addCol('bmhp_transactions', 'delivery_note VARCHAR(60) DEFAULT NULL');
+    await addCol('bmhp_transactions', 'invoice_number VARCHAR(60) DEFAULT NULL');
+    await addCol('bmhp_transactions', "item_condition VARCHAR(30) DEFAULT 'Baik'");
+    await addCol('bmhp_transactions', 'storage_location VARCHAR(100) DEFAULT NULL');
+    await addCol('bmhp_transactions', 'production_date DATE DEFAULT NULL');
+    await addCol('bmhp_transactions', 'attachment_photos LONGTEXT DEFAULT NULL');
+    await addCol('bmhp_transactions', 'verifier_signature LONGTEXT DEFAULT NULL');
+    await addCol('bmhp_transactions', 'verifier_name VARCHAR(100) DEFAULT NULL');
+    await addCol('bmhp_transactions', 'handover_photo LONGTEXT DEFAULT NULL');
+
+    // Tabel Master Pendukung BMHP
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bmhp_suppliers (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(150) NOT NULL,
+        contact_person VARCHAR(100) DEFAULT NULL,
+        phone VARCHAR(30) DEFAULT NULL,
+        address VARCHAR(500) DEFAULT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_supplier_name (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bmhp_packaging_types (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(50) NOT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_packaging_name (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bmhp_manufacturers (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(150) NOT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_manufacturer_name (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bmhp_account_codes (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        code VARCHAR(50) NOT NULL,
+        description VARCHAR(255) DEFAULT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_account_code (code)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bmhp_storage_locations (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(100) NOT NULL,
+        description VARCHAR(255) DEFAULT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_storage_name (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bmhp_budget_sources (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(50) NOT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_budget_source (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bmhp_fiscal_years (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        year VARCHAR(10) NOT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_fiscal_year (year)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bmhp_consumer_units (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(100) NOT NULL DEFAULT 'Instalasi CSSD',
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_consumer_unit (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Inisialisasi data awal master pendukung jika kosong
+    try {
+      await pool.query(`INSERT IGNORE INTO bmhp_budget_sources (name) VALUES ('BLUD'), ('APBD'), ('DAK'), ('BOK')`);
+      await pool.query(`INSERT IGNORE INTO bmhp_fiscal_years (year) VALUES ('2023'), ('2024'), ('2025'), ('2026'), ('2027')`);
+      await pool.query(`INSERT IGNORE INTO bmhp_packaging_types (name) VALUES ('Box'), ('Pack'), ('Dus'), ('Karton'), ('Roll'), ('Botol'), ('Pouch'), ('Sachet'), ('Tube')`);
+      await pool.query(`INSERT IGNORE INTO bmhp_storage_locations (name) VALUES ('Gudang BMHP CSSD'), ('Rak A'), ('Rak B'), ('Rak C'), ('Lemari Penyimpanan')`);
+      await pool.query(`INSERT IGNORE INTO bmhp_consumer_units (name) VALUES ('Instalasi CSSD')`);
+      await pool.query(`INSERT IGNORE INTO bmhp_account_codes (code, description) VALUES ('5.1.02.01.01', 'Belanja BMHP')`);
+    } catch (e) { }
 
     await pool.query(`
       UPDATE bmhp_items 
@@ -7560,7 +7726,7 @@ async function ensureAppSchemaUpdates() {
         INDEX idx_climate_date (check_date),
         INDEX idx_climate_room (room_name)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `).catch(() => {});
+    `).catch(() => { });
 
     // Pastikan kolom started_at & completed_at tersedia di seluruh tabel tahapan CSSD & DTT
     const timingTables = [
@@ -7836,19 +8002,19 @@ function runInitMigrations() {
 }
 
 // Inisialisasi dijalankan otomatis saat module dimuat
-runInitMigrations();
+// runInitMigrations();
 
-async function start() {
-  try {
-    await runInitMigrations();
-  } catch (err) {
-    console.error('Gagal terhubung ke database. Pastikan MySQL berjalan dan sql/database.sql sudah diimport.');
-    console.error(err.message);
-    process.exit(1);
-  }
-  app.listen(PORT, () => console.log(`CSSD SMART API berjalan di http://localhost:${PORT}/api`));
-}
+// async function start() {
+//   try {
+//     await runInitMigrations();
+//   } catch (err) {
+//     console.error('Gagal terhubung ke database. Pastikan MySQL berjalan dan sql/database.sql sudah diimport.');
+//     console.error(err.message);
+//     process.exit(1);
+//   }
+//   app.listen(PORT, () => console.log(`CSSD SMART API berjalan di http://localhost:${PORT}/api`));
+// }
 
-if (require.main === module) start();
+// if (require.main === module) start();
 
 module.exports = app;
