@@ -52,10 +52,17 @@ export default function BmhpDocumentsPage() {
 
   const handlePrintDoc = (row, type) => {
     const meta = DOC_META[type];
-    const docNo =
+    let docNo =
       type === 'NPB' ? row.npb_number :
       type === 'SPB' ? row.spb_number :
       type === 'SPPB' ? row.sppb_number : row.bast_number;
+
+    if (!docNo || String(docNo).includes('undefined') || String(docNo).includes('null')) {
+      const fallbackSuffix = (row.doc_number && !String(row.doc_number).includes('undefined') && !String(row.doc_number).includes('null'))
+        ? row.doc_number.replace(/^(BMHP-OUT|NPB|SPB|SPPB|BAST|BK)-/, '')
+        : `${String(row.trx_date || '').replace(/-/g, '').slice(2) || '261125'}-${String(row.id || 1).padStart(3, '0')}`;
+      docNo = `${type}-${fallbackSuffix}`;
+    }
 
     const win = window.open('', '_blank', 'width=1000,height=850');
     if (!win) {
@@ -438,7 +445,11 @@ export default function BmhpDocumentsPage() {
                 rows.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50/70">
                     <td className="px-4 py-3">
-                      <div className="font-mono font-bold text-brand-700">{r.doc_number}</div>
+                      <div className="font-mono font-bold text-brand-700">
+                        {(r.doc_number && !String(r.doc_number).includes('undefined'))
+                          ? r.doc_number
+                          : (r.spb_number ? r.spb_number.replace(/^SPB-/, 'BK-') : `BK-${r.id}`)}
+                      </div>
                       <div className="text-[11px] text-slate-500">{formatDate(r.trx_date)} {r.trx_time || ''}</div>
                     </td>
                     <td className="px-3 py-3">
@@ -482,15 +493,23 @@ export default function BmhpDocumentsPage() {
         title={previewDoc ? DOC_META[previewDoc.type].title : ''}
         subtitle={
           previewDoc
-            ? `Nomor: ${
-                previewDoc.type === 'NPB'
-                  ? previewDoc.row.npb_number
-                  : previewDoc.type === 'SPB'
-                  ? previewDoc.row.spb_number
-                  : previewDoc.type === 'SPPB'
-                  ? previewDoc.row.sppb_number
-                  : previewDoc.row.bast_number
-              }`
+            ? `Nomor: ${(() => {
+                let num =
+                  previewDoc.type === 'NPB'
+                    ? previewDoc.row.npb_number
+                    : previewDoc.type === 'SPB'
+                    ? previewDoc.row.spb_number
+                    : previewDoc.type === 'SPPB'
+                    ? previewDoc.row.sppb_number
+                    : previewDoc.row.bast_number;
+                if (!num || String(num).includes('undefined') || String(num).includes('null')) {
+                  const fallbackSuffix = (previewDoc.row.doc_number && !String(previewDoc.row.doc_number).includes('undefined'))
+                    ? previewDoc.row.doc_number.replace(/^(BMHP-OUT|NPB|SPB|SPPB|BAST|BK)-/, '')
+                    : `${String(previewDoc.row.trx_date || '').replace(/-/g, '').slice(2) || '261125'}-${String(previewDoc.row.id || 1).padStart(3, '0')}`;
+                  num = `${previewDoc.type}-${fallbackSuffix}`;
+                }
+                return num;
+              })()}`
             : ''
         }
         footer={

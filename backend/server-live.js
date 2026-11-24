@@ -175,7 +175,13 @@ function enrichTimingRow(row) {
   return row;
 }
 const pad = (n, size = 3) => String(n).padStart(size, '0');
-const ddmmyy = (d) => `${d.slice(8, 10)}${d.slice(5, 7)}${d.slice(2, 4)}`;
+const ddmmyy = (d) => {
+  const s = typeof d === 'string' ? d : (d instanceof Date ? d.toISOString().slice(0, 10) : String(d || ''));
+  if (s.length >= 10 && s.includes('-')) {
+    return `${s.slice(8, 10)}${s.slice(5, 7)}${s.slice(2, 4)}`;
+  }
+  return String(s || '').replace(/\D/g, '').slice(0, 6) || '261125';
+};
 
 function addMonths(dateStr, months) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -185,12 +191,15 @@ function addMonths(dateStr, months) {
   return target.toISOString().slice(0, 10);
 }
 
-const sanitizeText = (v) =>
-  String(v)
+const sanitizeText = (v) => {
+  if (v === null || v === undefined) return '';
+  const s = String(v)
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
     .replace(/[<>]/g, '')
     .trim();
+  return s === 'undefined' || s === 'null' ? '' : s;
+};
 
 const escapeLike = (s) => s.replace(/[\\%_]/g, '\\$&');
 
@@ -3173,6 +3182,8 @@ registerCrud({
     field('officer', 'string', { required: true, label: 'Petugas', max: 100 }),
     field('trx_date', 'date', { default: todayStr, label: 'Tanggal' }),
     field('trx_time', 'string', { label: 'Jam' }),
+    field('doc_number', 'string', { label: 'Nomor Dokumen', max: 60 }),
+    field('doc_type', 'string', { label: 'Jenis Dokumen', max: 30 }),
     field('notes', 'string', { label: 'Catatan', max: 500 }),
   ],
   async beforeCreate(conn, data) {
@@ -3188,7 +3199,14 @@ registerCrud({
       data.batch_no = data.batch_no || item.batch_no || 'BATCH-001';
       data.unit_name = 'Instalasi CSSD';
       data.stock_after = item.stock + data.quantity;
+      if (!data.doc_number || data.doc_number === 'undefined' || data.doc_number === 'null') {
+        data.doc_number = await makeCode(conn, 'BMHP-IN', data.trx_date);
+      }
     } else {
+      if (!data.doc_number || data.doc_number === 'undefined' || data.doc_number === 'null') {
+        data.doc_number = await makeCode(conn, 'BMHP-OUT', data.trx_date);
+      }
+      data.doc_type = data.doc_type || 'NPB';
       // KELUAR: Resolusi Unit Pemakai internal Instalasi CSSD
       if (data.unit_id) {
         const [[u]] = await conn.query('SELECT id, name FROM units WHERE id = ?', [data.unit_id]);
@@ -4370,6 +4388,20 @@ async function ensureBmhpEnhancementColumns(connOrPool) {
       await connOrPool.query(`ALTER TABLE bmhp_transactions ADD COLUMN ${col} ${def}`);
     } catch (e) { }
   }
+  // Auto-heal nomor dokumen transaksi BMHP yang masih null atau 'undefined'
+  try {
+    await connOrPool.query(`
+      UPDATE bmhp_transactions
+      SET doc_number = CONCAT(
+            CASE WHEN type = 'MASUK' THEN 'BMHP-IN-' ELSE 'BMHP-OUT-' END,
+            DATE_FORMAT(COALESCE(trx_date, CURDATE()), '%y%m%d'),
+            '-',
+            LPAD(id, 3, '0')
+          ),
+          doc_type = COALESCE(NULLIF(NULLIF(doc_type, 'undefined'), ''), 'NPB')
+      WHERE doc_number IS NULL OR doc_number = '' OR doc_number = 'undefined' OR doc_number = 'null' OR doc_number LIKE '%undefined%'
+    `);
+  } catch (e) { }
   _bmhpColsReady = true;
 }
 
@@ -4621,7 +4653,10 @@ router.post('/bmhp-out', auth, allow('admin', 'petugas'), wrap(async (req, res) 
     await conn.query('UPDATE bmhp_items SET stock = ? WHERE id = ?', [totalPhysicalStock, batch.bmhp_item_id]);
 
     // 4. Generate nomor dokumen barang keluar otomatis (terhubung ke NPB/SPB/SPPB/BAST)
-    const docNumber = sanitizeText(body.doc_number) || (await makeCode(conn, 'BMHP-OUT', trxDate));
+    const rawDocNo = sanitizeText(body.doc_number);
+    const docNumber = (rawDocNo && rawDocNo !== 'undefined' && rawDocNo !== 'null')
+      ? rawDocNo
+      : (await makeCode(conn, 'BMHP-OUT', trxDate));
 
     // 5. Catat transaksi KELUAR di bmhp_transactions
     const [txRes] = await conn.query(`
@@ -4972,8 +5007,17 @@ router.get('/bmhp-documents', auth, allow('admin', 'petugas'), wrap(async (req, 
   `, params);
 
   const enriched = rows.map((r) => {
-    const baseNo = r.doc_number || `BMHP-OUT-${String(r.trx_date || '').replace(/-/g, '').slice(2)}-${pad(r.id)}`;
-    const suffix = baseNo.replace(/^(BMHP-OUT|NPB|SPB|SPPB|BAST)-/, '');
+    let baseNo = r.doc_number;
+    if (!baseNo || baseNo === 'undefined' || baseNo === 'null' || String(baseNo).includes('undefined')) {
+      const dStr = r.trx_date ? (r.trx_date instanceof Date ? r.trx_date.toISOString().slice(0, 10) : String(r.trx_date)) : todayStr();
+      const datePart = dStr.replace(/-/g, '').slice(2, 8);
+      baseNo = `BMHP-OUT-${datePart}-${pad(r.id || 1)}`;
+    }
+    const cleanSuffix = baseNo.replace(/^(BMHP-OUT|NPB|SPB|SPPB|BAST|BK)-/, '');
+    const suffix = (!cleanSuffix || cleanSuffix === 'undefined' || cleanSuffix === 'null')
+      ? `${todayStr().replace(/-/g, '').slice(2)}-${pad(r.id || 1)}`
+      : cleanSuffix;
+
     return {
       ...r,
       doc_number: baseNo,

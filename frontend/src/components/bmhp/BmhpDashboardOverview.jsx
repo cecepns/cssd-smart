@@ -285,6 +285,8 @@ export default function BmhpDashboardOverview({
       await api.post(API_ENDPOINTS.BMHP_TRANSACTIONS.LIST, {
         bmhp_item_id: inForm.item_id || selectedItem?.id,
         type: 'KELUAR',
+        doc_number: outForm.issue_no,
+        doc_type: 'NPB',
         quantity: Number(outForm.quantity),
         batch_id: outForm.selected_batch_id,
         unit_name: 'Instalasi CSSD', // Strictly locked
