@@ -63,15 +63,26 @@ export default function BmhpDocumentsPage() {
       return;
     }
 
+    const tangselLogoUrl = window.location.origin + '/logo-tangerang.png';
+    const rsudLogoUrl = window.location.origin + '/logo-rsud-serpong.png';
+
     const officialKop = `
-      <div style="border-bottom: 2.5px solid #000; padding-bottom: 8px; margin-bottom: 12px; text-align: center; font-family: Arial, sans-serif;">
-        <h4 style="margin: 0; font-size: 11px; font-weight: bold; letter-spacing: 0.5px;">PEMERINTAH KOTA TANGERANG SELATAN</h4>
-        <h3 style="margin: 2px 0 0; font-size: 13px; font-weight: bold;">DINAS KESEHATAN</h3>
-        <h2 style="margin: 2px 0 0; font-size: 15px; font-weight: bold; color: #002D85;">RUMAH SAKIT UMUM DAERAH SERPONG UTARA</h2>
-        <p style="margin: 3px 0 0; font-size: 9px; color: #333;">
-          Jl. Raya Serpong, Kel. Pakulonan, Kec. Serpong Utara, Kota Tangerang Selatan - 15320<br/>
-          Telp. 021-3982999, Pos-el rsudserpongutara@tangerangselatankota.go.id, Laman rsudserpongutara.tangerangselatankota.go.id
-        </p>
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2.5px solid #000; padding-bottom: 6px; margin-bottom: 12px; font-family: Arial, sans-serif;">
+        <div style="width: 75px; text-align: left;">
+          <img src="${tangselLogoUrl}" style="height: 58px; max-width: 70px; object-fit: contain;" alt="Logo Pemkot Tangsel" />
+        </div>
+        <div style="flex: 1; text-align: center; padding: 0 8px;">
+          <h4 style="margin: 0; font-size: 11px; font-weight: bold; letter-spacing: 0.5px; color: #000;">PEMERINTAH KOTA TANGERANG SELATAN</h4>
+          <h3 style="margin: 2px 0 0; font-size: 13px; font-weight: bold; color: #000;">DINAS KESEHATAN</h3>
+          <h2 style="margin: 2px 0 0; font-size: 15px; font-weight: 900; color: #002D85;">RUMAH SAKIT UMUM DAERAH SERPONG UTARA</h2>
+          <p style="margin: 3px 0 0; font-size: 8.5px; color: #333; line-height: 1.3;">
+            Jl. Raya Serpong, Kel. Pakulonan, Kec. Serpong Utara, Kota Tangerang Selatan - 15320<br/>
+            Telp. 021-59629999, Pos-el rsudserpongutara@tangerangselatankota.go.id, Laman rsudserpongutara.tangerangselatankota.go.id
+          </p>
+        </div>
+        <div style="width: 75px; text-align: right;">
+          <img src="${rsudLogoUrl}" style="height: 58px; max-width: 70px; object-fit: contain;" alt="Logo RSUD Serpong Utara" />
+        </div>
       </div>
     `;
 
@@ -91,7 +102,7 @@ export default function BmhpDocumentsPage() {
               <tr><td style="width: 150px; font-weight: bold;">Daftar Permintaan:</td><td></td></tr>
               <tr><td style="padding-left: 12px;">Nomor Transaksi</td><td>: ${row.doc_number || '-'}</td></tr>
               <tr><td style="padding-left: 12px;">Tanggal Transaksi</td><td>: ${formatDate(row.trx_date)} ${row.trx_time || ''} WIB</td></tr>
-              <tr><td style="padding-left: 12px;">Pihak Yang Meminta</td><td>: <b>${row.unit_name || 'Instalasi CSSD'} (${row.officer || 'Petugas CSSD'})</b></td></tr>
+              <tr><td style="padding-left: 12px;">Pihak Yang Meminta</td><td>: <b>${row.unit_name || 'Instalasi CSSD'}</b></td></tr>
               <tr><td style="padding-left: 12px;">Sumber Anggaran / Tahun</td><td>: ${row.budget_source || 'BLUD'} / ${row.fiscal_year || '2026'}</td></tr>
             </table>
 
@@ -154,8 +165,8 @@ export default function BmhpDocumentsPage() {
                 <td style="width: 50%;">
                   <div>Tangerang Selatan, ${formatDate(row.trx_date)}</div>
                   <div style="font-weight: bold; margin-top: 4px;">Pengurus Barang Pembantu</div>
-                  <div style="height: 65px;"></div>
-                  <div style="font-weight: bold;">( ............................................................ )</div>
+                  <div style="height: 60px;"></div>
+                  <div style="font-weight: bold;">( ___________________________ )</div>
                   <div style="font-size: 9px; margin-top: 2px;">NIP. ........................................................</div>
                 </td>
               </tr>
@@ -185,11 +196,11 @@ export default function BmhpDocumentsPage() {
               Pada hari ini <b>${formatDate(row.trx_date)}</b> bertempat di RSUD Serpong Utara, yang bertanda tangan di bawah ini :
             </p>
             <table style="width: 100%; font-size: 10px; margin-bottom: 6px; margin-left: 8px;">
-              <tr><td style="width: 18px; vertical-align: top;"><b>1.</b></td><td style="width: 110px;">Nama</td><td>: <b>${row.officer || 'Petugas CSSD'}</b></td></tr>
+              <tr><td style="width: 18px; vertical-align: top;"><b>1.</b></td><td style="width: 110px;">Nama</td><td>: ........................................................</td></tr>
               <tr><td></td><td>NIP</td><td>: -</td></tr>
               <tr><td></td><td>Pangkat / Gol</td><td>: -</td></tr>
               <tr><td></td><td colspan="2" style="font-style: italic; color: #333;">Dalam hal ini bertindak sebagai pemberi laporan BMD berupa barang persediaan, selanjutnya sebagai <b>PIHAK PERTAMA</b>.</td></tr>
-              <tr><td style="vertical-align: top; padding-top: 4px;"><b>2.</b></td><td style="padding-top: 4px;">Nama</td><td style="padding-top: 4px;">: <b>${row.receiver_name || row.unit_name || 'Pengurus Barang Pembantu'}</b></td></tr>
+              <tr><td style="vertical-align: top; padding-top: 4px;"><b>2.</b></td><td style="padding-top: 4px;">Nama</td><td style="padding-top: 4px;">: <b>${row.unit_name || 'Instalasi CSSD'}</b></td></tr>
               <tr><td></td><td>NIP</td><td>: -</td></tr>
               <tr><td></td><td>Pangkat / Gol</td><td>: -</td></tr>
               <tr><td></td><td colspan="2" style="font-style: italic; color: #333;">Dalam hal ini bertindak sebagai Pengurus Barang Pembantu / Unit Penerima RSUD Serpong Utara, selanjutnya sebagai <b>PIHAK KEDUA</b>.</td></tr>
@@ -255,16 +266,14 @@ export default function BmhpDocumentsPage() {
               <tr>
                 <td style="width: 50%;">
                   <div style="font-weight: bold;">PIHAK PERTAMA</div>
-                  <div style="height: 60px; display: flex; align-items: center; justify-content: center;">
-                    ${row.officer_signature ? `<img src="${row.officer_signature}" style="max-height: 50px;" />` : ''}
-                  </div>
-                  <div style="font-weight: bold;">( ${row.officer || '................................'} )</div>
+                  <div style="height: 60px;"></div>
+                  <div style="font-weight: bold;">( ___________________________ )</div>
                   <div style="font-size: 9px; margin-top: 2px;">NIP. ........................................................</div>
                 </td>
                 <td style="width: 50%;">
                   <div style="font-weight: bold;">PIHAK KEDUA</div>
                   <div style="height: 60px;"></div>
-                  <div style="font-weight: bold;">( ${row.receiver_name || row.unit_name || '................................'} )</div>
+                  <div style="font-weight: bold;">( ___________________________ )</div>
                   <div style="font-size: 9px; margin-top: 2px;">NIP. ........................................................</div>
                 </td>
               </tr>
@@ -321,15 +330,15 @@ export default function BmhpDocumentsPage() {
             <tr>
               <td style="width: 50%;">
                 <div>Yang Menyerahkan (Petugas CSSD)</div>
-                <div style="height: 64px; display: flex; align-items: center; justify-content: center;">
-                  ${row.officer_signature ? `<img src="${row.officer_signature}" style="max-height: 55px;" />` : ''}
-                </div>
-                <div><b>(${row.officer || '............................'})</b></div>
+                <div style="height: 64px;"></div>
+                <div><b>( ___________________________ )</b></div>
+                <div style="font-size: 9px; margin-top: 2px;">NIP. ........................................................</div>
               </td>
               <td style="width: 50%;">
                 <div>Yang Menerima / Meminta (${row.unit_name || 'Unit'})</div>
                 <div style="height: 64px;"></div>
-                <div><b>(${row.receiver_name || row.officer || '............................'})</b></div>
+                <div><b>( ___________________________ )</b></div>
+                <div style="font-size: 9px; margin-top: 2px;">NIP. ........................................................</div>
               </td>
             </tr>
           </table>

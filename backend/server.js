@@ -603,6 +603,18 @@ function registerCrud(raw) {
         if (!req.user.unit_id) throw new HttpError(403, 'Akun unit tidak terhubung ke unit rumah sakit');
         bodyInput.unit_id = req.user.unit_id;
       }
+      // Auto-fill fallback untuk field wajib yang mungkin belum terisi di form unit luar
+      if (cfg.path === 'distributions') {
+        if (!bodyInput.officer || !String(bodyInput.officer).trim()) {
+          bodyInput.officer = 'Petugas CSSD';
+        }
+        if (!bodyInput.receiver_name || !String(bodyInput.receiver_name).trim()) {
+          bodyInput.receiver_name = req.user?.name || 'Petugas Unit';
+        }
+        if (!bodyInput.quantity || Number(bodyInput.quantity) < 1) {
+          bodyInput.quantity = 1;
+        }
+      }
       const data = validate(fields, bodyInput);
       const ctx = { body: bodyInput, user: req.user };
       if (req.user.role === 'unit' && cfg.unitColumn) {
@@ -947,18 +959,23 @@ router.get('/lookups/items', auth, wrap(async (req, res) => {
     where.push('t.process_type = ?');
     params.push(req.query.process_type);
   }
+  let targetUnitId = null;
   if (req.user.role === 'unit') {
     if (!req.user.unit_id) return res.json({ success: true, data: [] });
-    where.push('(t.unit_id = ? OR t.unit_id IS NULL)');
-    params.push(req.user.unit_id);
+    targetUnitId = req.user.unit_id;
   } else if (req.query.unit_id !== undefined && req.query.unit_id !== '') {
     const uid = Number(req.query.unit_id);
     if (Number.isInteger(uid) && uid >= 1) {
-      where.push('(t.unit_id = ? OR t.unit_id IS NULL)');
-      params.push(uid);
+      targetUnitId = uid;
     }
   }
-  const [rows] = await pool.query(
+
+  if (targetUnitId) {
+    where.push('(t.unit_id = ? OR t.unit_id IS NULL)');
+    params.push(targetUnitId);
+  }
+
+  let [rows] = await pool.query(
     `SELECT t.id, t.unit_id, u.name AS unit_name, t.code, t.name, t.process_type, t.category, t.unit_label
      FROM items t
      LEFT JOIN units u ON u.id = t.unit_id
@@ -967,6 +984,20 @@ router.get('/lookups/items', auth, wrap(async (req, res) => {
      LIMIT 100`,
     params
   );
+
+  // Jika unit ini belum memiliki set khusus (rows kosong), otomatis sediakan daftar Set Standar RSUD
+  if (rows.length === 0 && targetUnitId) {
+    const [allRows] = await pool.query(
+      `SELECT t.id, t.unit_id, u.name AS unit_name, t.code, t.name, t.process_type, t.category, t.unit_label
+       FROM items t
+       LEFT JOIN units u ON u.id = t.unit_id
+       WHERE t.is_active = 1
+       ORDER BY ${sortCol} ${order}
+       LIMIT 100`
+    );
+    rows = allRows;
+  }
+
   res.json({ success: true, data: rows });
 }));
 
@@ -2322,7 +2353,28 @@ registerCrud({
     // Mendukung 2 jalur otomatis:
     // (a) Memilih dari Daftar Set Steril (otomatis cocokkan stok siap atau generate barcode resmi DS-...)
     // (b) Scan / pilih paket steril ber-barcode (ST-... / AK-...)
-    const selectedItemName = sanitizeText(ctx.body.item_name);
+    let selectedItemName = sanitizeText(ctx.body.item_name);
+
+    // Jika item_name belum terangkum, coba ekstrak dari items_detail atau extra_items
+    if (!selectedItemName && ctx.body.items_detail) {
+      try {
+        const parsed = typeof ctx.body.items_detail === 'string' ? JSON.parse(ctx.body.items_detail) : ctx.body.items_detail;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const names = parsed.filter((it) => it && it.item_name).map((it) => `${it.item_name} (${it.quantity || 1} ${it.unit_label || 'Set'})`);
+          if (names.length > 0) selectedItemName = names.join(', ');
+        }
+      } catch (e) {}
+    }
+    if (!selectedItemName && ctx.body.extra_items) {
+      try {
+        const parsedExtra = typeof ctx.body.extra_items === 'string' ? JSON.parse(ctx.body.extra_items) : ctx.body.extra_items;
+        if (Array.isArray(parsedExtra) && parsedExtra.length > 0) {
+          const names = parsedExtra.filter((it) => it && it.item_name).map((it) => `${it.item_name} (${it.quantity || 1} ${it.unit_label || 'Buah'})`);
+          if (names.length > 0) selectedItemName = names.join(', ');
+        }
+      } catch (e) {}
+    }
+
     if (!data.barcode && selectedItemName) {
       const [[matchedStock]] = await conn.query(`
         SELECT s.*, p.receipt_id, r.barcode AS receipt_barcode, COALESCE(s.unit_id, r.unit_id) AS origin_unit_id
@@ -7791,6 +7843,42 @@ async function ensureAppSchemaUpdates() {
 
 async function ensureStandardSetItems() {
   try {
+    // 1. Dapatkan daftar units aktif untuk pemetaan set
+    const [units] = await pool.query('SELECT id, code, name FROM units');
+    const unitMap = {};
+    for (const u of units) {
+      unitMap[u.code] = u.id;
+      unitMap[u.name.toLowerCase()] = u.id;
+    }
+    const vkUnitId = unitMap['VK'] || units.find((u) => u.name.toLowerCase().includes('bersalin'))?.id || null;
+    const nicuUnitId = unitMap['NICU'] || units.find((u) => u.name.toLowerCase().includes('nicu'))?.id || null;
+    const thtUnitId = unitMap['THT'] || units.find((u) => u.name.toLowerCase().includes('tht'))?.id || null;
+
+    // 2. Pastikan item standar ada di tabel items untuk unit Bersalin, NICU, THT, dll.
+    const standardItems = [
+      { code: 'SET-PARTUS', name: 'Set Partus / Melahirkan', category: 'Set Instrumen', unit_id: vkUnitId, unit_label: 'Set' },
+      { code: 'SET-HECT-VK', name: 'Set Hecting Episiotomi', category: 'Set Instrumen', unit_id: vkUnitId, unit_label: 'Set' },
+      { code: 'SET-KURET', name: 'Set Kuretase', category: 'Set Instrumen', unit_id: vkUnitId, unit_label: 'Set' },
+      { code: 'SET-RESUS-BAYI', name: 'Set Resusitasi Bayi Baru Lahir', category: 'Set Instrumen', unit_id: vkUnitId, unit_label: 'Set' },
+      { code: 'SET-RESUS-NICU', name: 'Set Resusitasi Neonatus', category: 'Set Instrumen', unit_id: nicuUnitId, unit_label: 'Set' },
+      { code: 'SET-UMBILIKAL', name: 'Set Pasang Umbilikal Kateter', category: 'Set Instrumen', unit_id: nicuUnitId, unit_label: 'Set' },
+      { code: 'SET-VENA-NICU', name: 'Set Vena Seksi Neonatus', category: 'Set Instrumen', unit_id: nicuUnitId, unit_label: 'Set' },
+      { code: 'SET-THT-SERUMEN', name: 'Set Ekstraksi Serumen THT', category: 'Set Instrumen', unit_id: thtUnitId, unit_label: 'Set' },
+      { code: 'SET-THT-MIRING', name: 'Set Miringotomi THT', category: 'Set Instrumen', unit_id: thtUnitId, unit_label: 'Set' },
+    ];
+
+    for (const it of standardItems) {
+      const [[exists]] = await pool.query('SELECT id FROM items WHERE code = ? OR LOWER(name) = LOWER(?)', [it.code, it.name]);
+      if (!exists) {
+        await pool.query(
+          'INSERT INTO items (unit_id, code, name, category, shelf_life_months, is_active, process_type, unit_label) VALUES (?, ?, ?, ?, 6, 1, "Steril", ?)',
+          [it.unit_id, it.code, it.name, it.category, it.unit_label]
+        );
+      } else if (it.unit_id && !exists.unit_id) {
+        await pool.query('UPDATE items SET unit_id = ? WHERE id = ?', [it.unit_id, exists.id]);
+      }
+    }
+
     const [[setMinor]] = await pool.query("SELECT id FROM instrument_sets WHERE LOWER(name) LIKE '%minor%' LIMIT 1");
     if (setMinor?.id) {
       const clientMinorInstruments = [

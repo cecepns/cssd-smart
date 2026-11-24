@@ -311,7 +311,7 @@ export default function BmhpDashboardOverview({
   };
 
   // ---------------------------------------------------------------------------
-  // 6. CETAK RESMI KARTU STOK BMHP (SESUAI TEMPLATE GAMBAR 3 / EXCEL RSUD SERPONG UTARA)
+  // 6. CETAK RESMI KARTU STOK BMHP (FORMAT RESMI 1 HALAMAN SESUAI GAMBAR 2)
   // ---------------------------------------------------------------------------
   const handlePrintStockCardPdf = () => {
     const item = selectedItem || {
@@ -328,24 +328,27 @@ export default function BmhpDashboardOverview({
       return;
     }
 
-    // Bangun 50 baris portrait sesuai ketentuan RSUD Serpong Utara
+    const tangselLogoUrl = window.location.origin + '/logo-tangerang.png';
+    const rsudLogoUrl = window.location.origin + '/logo-rsud-serpong.png';
+
+    // Bangun 50 baris portrait presisi 1 halaman sesuai template resmi RSUD Serpong Utara (Gambar 2)
     const rowsData = [
-      { no: 1, date: '21-11-2026', desc: 'Penerimaan (BM-2026-0001)', inQty: 50, outQty: '-', balance: 50, officer: 'Alvin' },
-      { no: 2, date: '21-11-2026', desc: 'Pengambilan (BK-2026-0001)', inQty: '-', outQty: 10, balance: 40, officer: 'Resti' },
+      { no: 1, date: '21-11-2026', desc: 'Penerimaan (BM-2026-0001)', inQty: 50, outQty: '-', balance: 50 },
+      { no: 2, date: '21-11-2026', desc: 'Pengambilan (BK-2026-0001)', inQty: '-', outQty: 10, balance: 40 },
     ];
     let rowsHtml = '';
     for (let i = 1; i <= 50; i++) {
       const d = rowsData[i - 1];
       rowsHtml += `
-        <tr style="height: 20px;">
-          <td style="border: 1px solid #1e293b; padding: 2px 4px; text-align: center; font-size: 10px;">${i}</td>
-          <td style="border: 1px solid #1e293b; padding: 2px 6px; font-size: 10px;">${d ? d.date : ''}</td>
-          <td style="border: 1px solid #1e293b; padding: 2px 6px; font-size: 10px;">${d ? d.desc : ''}</td>
-          <td style="border: 1px solid #1e293b; padding: 2px 6px; text-align: center; font-size: 10px; font-weight: bold; color: #047857;">${d ? d.inQty : ''}</td>
-          <td style="border: 1px solid #1e293b; padding: 2px 6px; text-align: center; font-size: 10px; font-weight: bold; color: #be123c;">${d ? d.outQty : ''}</td>
-          <td style="border: 1px solid #1e293b; padding: 2px 6px; text-align: center; font-size: 10px; font-weight: bold;">${d ? d.balance : ''}</td>
-          <td style="border: 1px solid #1e293b; padding: 2px 4px; text-align: center; font-size: 9px;">
-            ${d ? `<img src="${SVG_PARAF_PETUGAS}" style="height: 16px; display: inline-block; vertical-align: middle;"/>` : ''}
+        <tr style="height: 14.5px;">
+          <td style="border: 1px solid #1e293b; padding: 1px 3px; text-align: center; font-size: 8px;">${i}.</td>
+          <td style="border: 1px solid #1e293b; padding: 1px 4px; font-size: 8px; text-align: center;">${d ? d.date : ''}</td>
+          <td style="border: 1px solid #1e293b; padding: 1px 4px; font-size: 8px;">${d ? d.desc : ''}</td>
+          <td style="border: 1px solid #1e293b; padding: 1px 4px; text-align: center; font-size: 8.5px; font-weight: bold; color: #047857;">${d ? d.inQty : ''}</td>
+          <td style="border: 1px solid #1e293b; padding: 1px 4px; text-align: center; font-size: 8.5px; font-weight: bold; color: #be123c;">${d ? d.outQty : ''}</td>
+          <td style="border: 1px solid #1e293b; padding: 1px 4px; text-align: center; font-size: 8.5px; font-weight: bold;">${d ? d.balance : ''}</td>
+          <td style="border: 1px solid #1e293b; padding: 1px 2px; text-align: center; font-size: 8px;">
+            ${d ? '<span style="color: #002D85; font-size: 11px; font-weight: bold; line-height: 1;">&#10003;</span>' : ''}
           </td>
         </tr>
       `;
@@ -357,84 +360,68 @@ export default function BmhpDashboardOverview({
         <head>
           <title>KARTU STOK BMHP - ${item.name}</title>
           <style>
-            @page { size: portrait; margin: 12mm 15mm; }
-            body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #0f172a; }
+            @page { size: A4 portrait; margin: 6mm 8mm; }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color: #0f172a; line-height: 1.2; }
             table { border-collapse: collapse; width: 100%; }
           </style>
         </head>
         <body>
-          <!-- KOP SURAT RESMI RSUD SERPONG UTARA DENGAN 2 LOGO -->
-          <div style="border-bottom: 3px double #000; padding-bottom: 8px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
-            <div style="width: 70px; text-align: left;">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="65" height="65">
-                <path d="M 50 5 L 85 20 L 85 60 C 85 80 50 95 50 95 C 50 95 15 80 15 60 L 15 20 Z" fill="#00529b" stroke="#f1c40f" stroke-width="3"/>
-                <polygon points="50,15 54,27 67,27 56,35 60,47 50,39 40,47 44,35 33,27 46,27" fill="#f1c40f"/>
-                <path d="M 30 70 Q 50 55 70 70" fill="none" stroke="#27ae60" stroke-width="5" stroke-linecap="round"/>
-                <path d="M 25 78 Q 50 68 75 78" fill="none" stroke="#2980b9" stroke-width="3"/>
-                <path d="M 28 84 Q 50 74 72 84" fill="none" stroke="#ffffff" stroke-width="2"/>
-                <text x="50" y="58" font-size="8" font-family="sans-serif" font-weight="900" fill="#ffffff" text-anchor="middle">KOTA</text>
-                <text x="50" y="66" font-size="7" font-family="sans-serif" font-weight="900" fill="#f1c40f" text-anchor="middle">TANGSEL</text>
-              </svg>
+          <!-- KOP SURAT RESMI RSUD SERPONG UTARA DENGAN LOGO KOTA DAN LOGO RSUD ASLI -->
+          <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 4px;">
+            <div style="width: 75px; text-align: left;">
+              <img src="${tangselLogoUrl}" style="height: 58px; max-width: 70px; object-fit: contain;" alt="Logo Pemkot Tangsel" />
             </div>
-            <div style="flex: 1; text-align: center; padding: 0 10px;">
-              <h4 style="margin: 0; font-size: 13px; font-weight: bold; letter-spacing: 0.8px;">PEMERINTAH KOTA TANGERANG SELATAN</h4>
-              <h3 style="margin: 2px 0 0; font-size: 15px; font-weight: bold;">DINAS KESEHATAN</h3>
-              <h2 style="margin: 2px 0 0; font-size: 17px; font-weight: 900; color: #002D85;">RUMAH SAKIT UMUM DAERAH SERPONG UTARA</h2>
-              <p style="margin: 3px 0 0; font-size: 10px; color: #1e293b; line-height: 1.3;">
+            <div style="flex: 1; text-align: center; padding: 0 8px;">
+              <h4 style="margin: 0; font-size: 12px; font-weight: bold; letter-spacing: 0.6px; color: #0f172a;">PEMERINTAH KOTA TANGERANG SELATAN</h4>
+              <h3 style="margin: 1px 0 0; font-size: 13.5px; font-weight: bold; color: #0f172a;">DINAS KESEHATAN</h3>
+              <h2 style="margin: 1px 0 0; font-size: 15px; font-weight: 900; color: #002D85;">RUMAH SAKIT UMUM DAERAH SERPONG UTARA</h2>
+              <p style="margin: 2px 0 0; font-size: 8.5px; color: #1e293b; line-height: 1.25;">
                 Jl. Raya Serpong, Kel. Pakulonan, Kec. Serpong Utara, Kota Tangerang Selatan - 15320<br/>
                 Telp. 021-59629999, Email : rsudserpongutara@tangerangselatankota.go.id
               </p>
             </div>
-            <div style="width: 70px; text-align: right;">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="65" height="65">
-                <circle cx="50" cy="50" r="46" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
-                <circle cx="50" cy="32" r="14" fill="#d946ef" opacity="0.8"/>
-                <circle cx="68" cy="50" r="14" fill="#ec4899" opacity="0.8"/>
-                <circle cx="50" cy="68" r="14" fill="#d946ef" opacity="0.8"/>
-                <circle cx="32" cy="50" r="14" fill="#ec4899" opacity="0.8"/>
-                <rect x="44" y="28" width="12" height="44" rx="4" fill="#0d9488"/>
-                <rect x="28" y="44" width="44" height="12" rx="4" fill="#0d9488"/>
-                <text x="50" y="89" font-size="7" font-family="sans-serif" font-weight="900" fill="#0f766e" text-anchor="middle">RSUD SERPONG</text>
-                <text x="50" y="96" font-size="6" font-family="sans-serif" font-weight="800" fill="#0f766e" text-anchor="middle">UTARA</text>
-              </svg>
+            <div style="width: 75px; text-align: right;">
+              <img src="${rsudLogoUrl}" style="height: 58px; max-width: 70px; object-fit: contain;" alt="Logo RSUD Serpong Utara" />
             </div>
           </div>
+          <div style="border-bottom: 2.5px solid #002D85; margin: 3px 0 8px 0;"></div>
 
-          <!-- TITLE PILL SESUAI EXCEL GAMBAR 3 -->
-          <div style="text-align: center; margin-bottom: 12px;">
-            <div style="display: inline-block; background-color: #002D85; color: #ffffff; padding: 6px 36px; border-radius: 9999px; font-weight: 900; font-size: 16px; letter-spacing: 1px; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">
+          <!-- TITLE PILL SESUAI FORMAT GAMBAR 2 -->
+          <div style="text-align: center; margin-bottom: 7px;">
+            <div style="display: inline-block; background-color: #002D85; color: #ffffff; padding: 4px 34px; border-radius: 9999px; font-weight: 900; font-size: 13.5px; letter-spacing: 0.8px; box-shadow: 0 2px 4px rgba(0,0,0,0.12);">
               KARTU STOK BMHP
             </div>
           </div>
 
           <!-- BOX IDENTITAS BARANG & ANGGARAN (LIGHT BLUE) -->
-          <table style="width: 100%; border: 1.5px solid #002D85; background-color: #EBF3FC; margin-bottom: 12px; font-size: 11px;">
+          <table style="width: 100%; border: 1.5px solid #002D85; background-color: #EBF3FC; margin-bottom: 7px; font-size: 9.5px;">
             <tr>
-              <td style="padding: 6px 12px; width: 50%; vertical-align: top;">
-                <div style="margin-bottom: 4px;"><b>Nama Barang</b> : ${item.name}</div>
-                <div style="margin-bottom: 4px;"><b>Satuan</b> : ${item.unit_label || 'Rol'}</div>
+              <td style="padding: 4px 8px; width: 50%; vertical-align: top;">
+                <div style="margin-bottom: 2px;"><b>Nama Barang</b> : ${item.name}</div>
+                <div style="margin-bottom: 2px;"><b>Satuan</b> : ${item.unit_label || 'Rol'}</div>
                 <div><b>Kemasan</b> : ${item.packaging || 'Rol'}</div>
               </td>
-              <td style="padding: 6px 12px; width: 50%; vertical-align: top;">
-                <div style="margin-bottom: 4px;"><b>Tahun Anggaran</b> : ${batch.fiscal_year || '2026'}</div>
-                <div style="margin-bottom: 4px;"><b>Sumber Anggaran</b> : ${batch.budget_source || 'BLUD'}</div>
-                <div style="margin-bottom: 4px;"><b>Batch/Lot</b> : ${batch.batch_no || 'BATCH-001'}</div>
+              <td style="padding: 4px 8px; width: 50%; vertical-align: top;">
+                <div style="margin-bottom: 2px;"><b>Tahun Anggaran</b> : ${batch.fiscal_year || '2026'}</div>
+                <div style="margin-bottom: 2px;"><b>Sumber Anggaran</b> : ${batch.budget_source || 'BLUD'}</div>
+                <div style="margin-bottom: 2px;"><b>Batch/Lot</b> : ${batch.batch_no || 'BATCH-001'}</div>
                 <div><b>ED (Expired Date)</b> : ${batch.expiry_date ? String(batch.expiry_date).slice(0, 7) : '04-2029'}</div>
               </td>
             </tr>
           </table>
 
           <!-- TABEL TRANSAKSI MUTASI (50 BARIS PORTRAIT TANPA HARGA RUPIAH) -->
-          <table style="width: 100%; border: 1.5px solid #1e293b; font-size: 10px;">
+          <table style="width: 100%; border: 1.5px solid #1e293b; font-size: 8.5px;">
             <thead>
               <tr style="background-color: #B9D7F2; text-align: center; font-weight: bold; border-bottom: 1.5px solid #1e293b;">
-                <th style="border: 1px solid #1e293b; padding: 5px 4px; width: 35px;">No.</th>
-                <th style="border: 1px solid #1e293b; padding: 5px 8px; width: 90px;">Tanggal</th>
-                <th style="border: 1px solid #1e293b; padding: 5px 8px;">Uraian</th>
-                <th style="border: 1px solid #1e293b; padding: 5px 8px; width: 75px;">Masuk (M)</th>
-                <th style="border: 1px solid #1e293b; padding: 5px 8px; width: 75px;">Keluar (K)</th>
-                <th style="border: 1px solid #1e293b; padding: 5px 8px; width: 85px;">Sisa Stok</th>
-                <th style="border: 1px solid #1e293b; padding: 5px 8px; width: 85px;">Paraf Petugas</th>
+                <th style="border: 1px solid #1e293b; padding: 3px 2px; width: 30px;">No.</th>
+                <th style="border: 1px solid #1e293b; padding: 3px 4px; width: 75px;">Tanggal</th>
+                <th style="border: 1px solid #1e293b; padding: 3px 6px;">Uraian</th>
+                <th style="border: 1px solid #1e293b; padding: 3px 4px; width: 65px;">Masuk (M)</th>
+                <th style="border: 1px solid #1e293b; padding: 3px 4px; width: 65px;">Keluar (K)</th>
+                <th style="border: 1px solid #1e293b; padding: 3px 4px; width: 70px;">Sisa Stok</th>
+                <th style="border: 1px solid #1e293b; padding: 3px 4px; width: 75px;">Paraf Petugas</th>
               </tr>
             </thead>
             <tbody>
@@ -442,30 +429,32 @@ export default function BmhpDashboardOverview({
             </tbody>
           </table>
 
-          <!-- LEMBAR PENGESAHAN DUA TANDA TANGAN -->
-          <div style="margin-top: 18px; display: flex; justify-content: space-between; font-size: 11px;">
-            <div style="text-align: center; width: 220px;">
-              <div>Petugas Pengelola BMHP,</div>
-              <div style="height: 55px; display: flex; align-items: center; justify-content: center;">
-                <img src="${SVG_SIGNATURE_ALVIN}" style="height: 48px;" alt="TTD"/>
-              </div>
-              <div style="font-weight: bold; text-decoration: underline;">( Alvin Pratama, A.Md.Farm )</div>
-              <div style="font-size: 10px; color: #475569;">NIP. 19940815 202102 1 002</div>
+          <!-- FOOTER LEMBAR PENGESAHAN & KETERANGAN (100% IDENTIK GAMBAR 2) -->
+          <div style="margin-top: 7px; display: flex; justify-content: space-between; align-items: flex-start;">
+            <!-- Box Kiri: Keterangan -->
+            <div style="border: 1.5px solid #002D85; border-radius: 8px; padding: 5px 8px; width: 45%; font-size: 8px; line-height: 1.35; background: #ffffff;">
+              <div style="font-weight: bold; margin-bottom: 2px; color: #002D85;">Keterangan :</div>
+              <div style="display: flex; gap: 4px; margin-bottom: 1px;"><span>•</span><span>Satu kartu stok untuk setiap jenis barang, batch/lot, dan ED.</span></div>
+              <div style="display: flex; gap: 4px; margin-bottom: 1px;"><span>•</span><span>Setiap transaksi Barang Masuk dan Barang Keluar harus didukung dokumen (NPB/SPB/SPPB/BAST).</span></div>
+              <div style="display: flex; gap: 4px;"><span>•</span><span>Paraf Petugas pada setiap transaksi.</span></div>
             </div>
 
-            <div style="text-align: center; width: 220px;">
-              <div>Mengetahui,</div>
-              <div><b>Kepala Instalasi CSSD</b></div>
-              <div style="height: 55px; display: flex; align-items: center; justify-content: center;">
-                <img src="${SVG_SIGNATURE_RAHMA}" style="height: 48px;" alt="TTD"/>
+            <!-- Box Kanan: Dua Kotak Tanda Tangan Tanpa Nama Hardcode Sesuai Gambar 2 -->
+            <div style="display: flex; gap: 12px; width: 52%; justify-content: flex-end; text-align: center; font-size: 9px;">
+              <div style="width: 140px;">
+                <div>Mengetahui,</div>
+                <div style="font-weight: bold; margin-bottom: 3px;">Kepala Instalasi CSSD</div>
+                <div style="height: 46px; border: 1.5px solid #002D85; border-radius: 8px; margin: 0 auto 4px; background: #fafafa;"></div>
+                <div style="font-weight: bold;">( ___________________ )</div>
               </div>
-              <div style="font-weight: bold; text-decoration: underline;">( Rahma, S.ST )</div>
-              <div style="font-size: 10px; color: #475569;">NIP. 19850412 201001 2 015</div>
-            </div>
-          </div>
 
-          <div style="margin-top: 12px; font-size: 9px; color: #64748b; text-align: right;">
-            *Dicetak otomatis dari Sistem CSSD SMART — Tanpa nominal rupiah (SOP Fisik Persediaan RSUD Serpong Utara)
+              <div style="width: 140px;">
+                <div style="visibility: hidden;">-</div>
+                <div style="font-weight: bold; margin-bottom: 3px;">Petugas Pengelola BMHP</div>
+                <div style="height: 46px; border: 1.5px solid #002D85; border-radius: 8px; margin: 0 auto 4px; background: #fafafa;"></div>
+                <div style="font-weight: bold;">( ___________________ )</div>
+              </div>
+            </div>
           </div>
 
           <script>
@@ -541,12 +530,12 @@ export default function BmhpDashboardOverview({
           </div>
         </div>
 
-        {/* User Info & Header Actions */}
-        <div className="flex items-center gap-3 relative z-10 self-end sm:self-center">
+        {/* Header Actions */}
+        <div className="flex items-center gap-2 relative z-10 self-end sm:self-center">
           <button
             type="button"
             className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white transition"
-            title="3 Notifikasi Belum Dibaca"
+            title="Notifikasi Sistem"
           >
             <Bell size={16} />
             <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white">
@@ -560,16 +549,6 @@ export default function BmhpDashboardOverview({
           >
             <HelpCircle size={16} />
           </button>
-
-          <div className="flex items-center gap-2 pl-2 border-l border-white/20">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-300 text-blue-950 font-black text-xs shadow-inner">
-              R
-            </div>
-            <div className="text-left leading-tight hidden sm:block">
-              <div className="text-xs font-black text-white">{user?.name || 'Rahma'}</div>
-              <div className="text-[10px] text-blue-200">Kepala Instalasi CSSD</div>
-            </div>
-          </div>
         </div>
       </div>
 

@@ -81,84 +81,75 @@ export default function DashboardPage() {
           {/* Glow latar halus */}
           <div className="pointer-events-none absolute -top-20 left-1/3 h-64 w-64 rounded-full bg-sky-300/25 blur-3xl" />
 
-          <div className="relative grid items-stretch lg:grid-cols-[1.12fr_0.88fr] xl:grid-cols-[1.15fr_0.85fr]">
-            {/* Kolom Kiri: Branding Centered, Deskripsi Resmi & 4 Slogan */}
-            <div className="relative z-10 flex flex-col justify-center space-y-3.5 px-5 py-6 sm:px-8 sm:py-7 lg:pl-10 lg:pr-4">
-              <div className="pt-2 text-center sm:pt-1">
-                <p className="font-serif italic text-xl font-semibold tracking-wide text-[#00338D] sm:text-2xl lg:text-[26px]">
+          <div className="relative grid items-stretch lg:grid-cols-[1.05fr_0.95fr] xl:grid-cols-[1.08fr_0.92fr]">
+            {/* Kolom Kiri: Branding Centered, Deskripsi Gambar 5 & 4 Slogan */}
+            <div className="relative z-10 flex flex-col justify-center space-y-3 px-5 py-5 sm:px-8 sm:py-6 lg:pl-10 lg:pr-3">
+              <div className="pt-1 text-center sm:pt-0">
+                <p className="font-serif italic text-lg font-semibold tracking-wide text-[#00338D] sm:text-xl lg:text-[23px]">
                   Selamat Datang di
                 </p>
-                <h1 className="mt-1 text-4xl font-black leading-none tracking-tight text-[#001F5F] sm:text-5xl lg:text-[52px]">
+                <h1 className="mt-0.5 text-3xl font-black leading-none tracking-tight text-[#001F5F] sm:text-4xl lg:text-[46px]">
                   CSSD{' '}
                   <span className="italic text-[#F5A600] drop-shadow-[0_2px_10px_rgba(245,166,0,0.3)]">
                     SMART
                   </span>
                 </h1>
-                <div className="mt-2.5 flex justify-center">
-                  <span className="inline-flex items-center rounded-full bg-gradient-to-r from-[#FFE36E] via-[#FFD233] to-[#FFCA28] px-6 py-1.5 text-sm font-extrabold tracking-wide text-[#001A4D] shadow-[0_4px_14px_rgba(255,208,40,0.45)] sm:text-[15px]">
+                <div className="mt-2 flex justify-center">
+                  <span className="inline-flex items-center rounded-full bg-gradient-to-r from-[#FFE36E] via-[#FFD233] to-[#FFCA28] px-5 py-1 text-xs font-extrabold tracking-wide text-[#001A4D] shadow-[0_3px_12px_rgba(255,208,40,0.4)] sm:text-sm">
                     Sterile Management System
                   </span>
                 </div>
-                <div className="mx-auto mt-2 flex max-w-xs items-center justify-center gap-2.5">
+                <div className="mx-auto mt-1.5 flex max-w-xs items-center justify-center gap-2">
                   <span className="h-[2px] flex-1 rounded-full bg-gradient-to-r from-transparent to-[#F5B000]" />
-                  <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#001F5F] sm:text-xs">
+                  <p className="text-[10.5px] font-black uppercase tracking-[0.14em] text-[#001F5F] sm:text-[11.5px]">
                     RSUD SERPONG UTARA
                   </p>
                   <span className="h-[2px] flex-1 rounded-full bg-gradient-to-l from-transparent to-[#F5B000]" />
                 </div>
               </div>
 
-              {/* Deskripsi resmi aplikasi sesuai revisi client (Gambar 1) */}
-              <div className="mx-auto max-w-2xl space-y-2.5 text-justify text-xs leading-relaxed text-[#1E293B] sm:text-[13.5px]">
+              {/* Deskripsi resmi aplikasi sesuai Gambar 5 verbatim */}
+              <div className="mx-auto max-w-xl space-y-2 text-justify text-xs leading-relaxed text-[#1E293B] sm:text-[12.5px] lg:text-[13px]">
                 <p>
-                  CSSD SMART merupakan sistem digital terintegrasi untuk mendukung pengelolaan seluruh
-                  pelayanan Central Sterile Supply Department (CSSD), mulai dari penerimaan alat kotor,
-                  pencucian, pengeringan, pemeriksaan, pengemasan, proses sterilisasi dan DTT, verifikasi
-                  hasil proses, penyimpanan, hingga pengambilan alat steril dan pengambilan kasa steril.
+                  CSSD SMART merupakan sistem digital terintegrasi untuk pengelolaan pelayanan CSSD, meliputi penerimaan alat kotor, dekontaminasi, pemeriksaan, pengemasan, sterilisasi, verifikasi, DTT, penyimpanan, pengambilan alat steril, pengambilan kasa steril, serta pengelolaan BMHP.
                 </p>
                 <p>
-                  Sistem ini dilengkapi dengan barcode untuk ketertelusuran alat, tanda tangan digital,
-                  dokumentasi setiap tahapan proses, pemantauan suhu dan kelembaban ruang penyimpanan alat
-                  steril secara digital, grafik monitoring otomatis, serta manajemen inventaris BMHP.
-                </p>
-                <p>
-                  CSSD SMART dirancang untuk meningkatkan efisiensi kerja, ketepatan dokumentasi, keamanan
-                  proses, ketertelusuran, dan mutu pelayanan CSSD.
+                  Dilengkapi barcode, monitoring proses, dokumentasi digital, pemantauan suhu dan kelembapan ruang penyimpanan alat steril, serta pelaporan terintegrasi untuk meningkatkan efisiensi, akurasi, dan ketertelusuran pelayanan.
                 </p>
               </div>
 
-              {/* 4 Pill Slogan: Akurat | Terlacak | Terdokumentasi | Terintegrasi */}
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200/90 bg-white/95 px-3.5 py-1.5 text-xs font-extrabold text-[#002266] shadow-xs backdrop-blur">
-                  <ShieldCheck size={14} className="text-[#F59E0B]" /> Akurat
+              {/* 4 Pill Slogan Gambar 5: Akurat | Terlacak | Terdokumentasi | Terintegrasi */}
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-0.5">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200/90 bg-white/95 px-3 py-1 text-[11.5px] font-extrabold text-[#002266] shadow-xs backdrop-blur">
+                  <ShieldCheck size={13} className="text-[#F59E0B]" /> Akurat
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200/90 bg-white/95 px-3.5 py-1.5 text-xs font-extrabold text-[#002266] shadow-xs backdrop-blur">
-                  <Share2 size={14} className="text-[#F59E0B]" /> Terlacak
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200/90 bg-white/95 px-3 py-1 text-[11.5px] font-extrabold text-[#002266] shadow-xs backdrop-blur">
+                  <Share2 size={13} className="text-[#F59E0B]" /> Terlacak
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200/90 bg-white/95 px-3.5 py-1.5 text-xs font-extrabold text-[#002266] shadow-xs backdrop-blur">
-                  <FileText size={14} className="text-[#F59E0B]" /> Terdokumentasi
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200/90 bg-white/95 px-3 py-1 text-[11.5px] font-extrabold text-[#002266] shadow-xs backdrop-blur">
+                  <FileText size={13} className="text-[#F59E0B]" /> Terdokumentasi
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200/90 bg-white/95 px-3.5 py-1.5 text-xs font-extrabold text-[#002266] shadow-xs backdrop-blur">
-                  <Award size={14} className="text-[#F59E0B]" /> Terintegrasi
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200/90 bg-white/95 px-3 py-1 text-[11.5px] font-extrabold text-[#002266] shadow-xs backdrop-blur">
+                  <Award size={13} className="text-[#F59E0B]" /> Terintegrasi
                 </span>
               </div>
             </div>
 
-            {/* Kolom Kanan: Foto Petugas CSSD (foto-1.jpeg) menyatu halus dengan hero */}
-            <div className="relative flex max-h-[300px] min-h-[240px] items-end justify-center overflow-hidden sm:max-h-[340px] lg:max-h-none lg:min-h-[340px]">
+            {/* Kolom Kanan: Foto Petugas CSSD diperbesar agar wajah lebih jelas dan menonjol sesuai permintaan Gambar 4 & 5 */}
+            <div className="relative flex min-h-[280px] sm:min-h-[360px] lg:min-h-[410px] items-end justify-center overflow-hidden">
               {/* Fade lembut agar sisi kiri foto menyatu halus dengan area teks */}
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-20 bg-gradient-to-r from-[#EBF5FF] via-[#EBF5FF]/55 to-transparent lg:block"
+                className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-16 bg-gradient-to-r from-[#EBF5FF] via-[#EBF5FF]/50 to-transparent lg:block"
               />
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-[#EDF6FF] to-transparent lg:hidden"
+                className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-[#EDF6FF] to-transparent lg:hidden"
               />
               <img
                 src={officerPhoto}
                 alt="Petugas CSSD RSUD Serpong Utara"
-                className="h-full w-full object-cover object-top lg:object-[25%_10%] xl:object-[35%_8%]"
+                className="h-full w-full object-cover object-[center_top] sm:object-[28%_top] lg:object-[25%_top] scale-105 transition-transform duration-300"
                 onError={(e) => {
                   e.currentTarget.src = '/foto-1.jpeg';
                 }}

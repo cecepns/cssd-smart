@@ -44,7 +44,13 @@ export default function SterileSetSelector({ values, setValue, setValues, disabl
     { unit_id: unitId, is_active: 1, sort_by: 'name', order: 'asc' },
     { enabled: Boolean(unitId) }
   );
-  const unitItems = itemsData || [];
+  // Fallback seluruh item standar RSUD jika unit belum punya master data khusus
+  const { data: allItemsData } = useFetch(
+    API_ENDPOINTS.LOOKUPS.ITEMS,
+    { is_active: 1, sort_by: 'name', order: 'asc' },
+    { enabled: Boolean(unitId && itemsData && itemsData.length === 0) }
+  );
+  const unitItems = (itemsData && itemsData.length > 0) ? itemsData : (allItemsData || []);
 
   // 2. Ambil master rincian instrumen per set
   const { data: setInstrumentsData } = useFetch(API_ENDPOINTS.LOOKUPS.SET_INSTRUMENTS);
