@@ -38,6 +38,16 @@ export default function SterileSetSelector({ values, setValue, setValues, disabl
   const [scanInput, setScanInput] = useState('');
   const [searchingScan, setSearchingScan] = useState(false);
 
+  // Pastikan unit_id selalu terisi jika user role adalah 'unit'
+  useEffect(() => {
+    if (user?.role === 'unit' && !values?.unit_id) {
+      const uname = String(user.username || '').toLowerCase();
+      const targetId = user.unit_id ? String(user.unit_id) : (uname.includes('vk') || uname.includes('bersalin') ? '4' : '1');
+      if (setValues) setValues({ unit_id: targetId });
+      else if (setValue) setValue('unit_id', targetId);
+    }
+  }, [user, values?.unit_id, setValue, setValues]);
+
   // 1. Ambil daftar master set & alat milik unit tujuan
   const { data: itemsData, loading: loadingItems } = useFetch(
     API_ENDPOINTS.LOOKUPS.ITEMS,

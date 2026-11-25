@@ -248,13 +248,22 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
           placeholder: 'Pilih unit ruangan...',
           optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS,
           optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
-          default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
+          default: ({ user }) => {
+            if (user?.role === 'unit') {
+              if (user.unit_id) return String(user.unit_id);
+              const uname = String(user.username || '').toLowerCase();
+              if (uname.includes('vk') || uname.includes('bersalin')) return '4';
+              return '1';
+            }
+            return '';
+          },
         },
         officerSelectField({
           name: 'officer',
           label: 'Petugas Penyerah (CSSD)',
           required: true,
           placeholder: 'Pilih petugas CSSD...',
+          default: 'Petugas CSSD',
           onSignatureField: 'officer_signature',
         }),
         { name: 'officer_signature', label: 'TTD Petugas Penyerah (Otomatis / Layar)', type: 'signature' },
@@ -264,7 +273,7 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
           required: true,
           maxLength: 100,
           placeholder: 'Nama perawat / petugas ruangan',
-          default: ({ user }) => (user?.role === 'unit' ? user.name : ''),
+          default: ({ user }) => (user?.name || user?.username || 'Petugas Unit'),
         },
         { name: 'receiver_signature', label: 'TTD Petugas Pengambil (Layar HP)', type: 'signature' },
         { name: 'proof_image', label: 'Foto Bukti Serah Terima (Kamera HP)', type: 'image' },
@@ -288,7 +297,15 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
           placeholder: 'Pilih unit tujuan...',
           optionsEndpoint: API_ENDPOINTS.LOOKUPS.UNITS,
           optionsParams: { is_active: 1, sort_by: 'name', order: 'asc' },
-          default: ({ user }) => (user?.role === 'unit' && user?.unit_id ? String(user.unit_id) : ''),
+          default: ({ user }) => {
+            if (user?.role === 'unit') {
+              if (user.unit_id) return String(user.unit_id);
+              const uname = String(user.username || '').toLowerCase();
+              if (uname.includes('vk') || uname.includes('bersalin')) return '4';
+              return '1';
+            }
+            return '';
+          },
           onChange: (next, { values, setValues, option }) => {
             if (String(next || '') !== String(values?.unit_id || '')) {
               setValues({ item_name: '', items_detail: '', extra_items: '', unit_name: option?.name || '' });
@@ -323,7 +340,7 @@ const buildConfig = ({ key, title, subtitle, icon, type, gauze }) => ({
           required: true,
           maxLength: 100,
           placeholder: 'Nama perawat / petugas unit penerima',
-          default: ({ user }) => (user?.role === 'unit' ? (user.name || 'Petugas Unit') : ''),
+          default: ({ user }) => (user?.name || user?.username || 'Petugas Unit'),
         },
         { name: 'receiver_signature', label: 'TTD Petugas Unit (Layar HP)', type: 'signature' },
         { name: 'proof_image', label: 'Foto Bukti Serah Terima (Kamera HP)', type: 'image' },

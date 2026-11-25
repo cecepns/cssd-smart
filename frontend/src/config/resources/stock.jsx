@@ -2,7 +2,7 @@ import { AlertOctagon, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Archive,
 import { API_ENDPOINTS } from '@/utils/endpoints';
 import { PACKAGE_TYPES } from '@/utils/constants';
 import { getList } from '@/utils/request';
-import { formatDate, formatDateTime, formatNumber, todayISO } from '@/utils/format';
+import { fileUrl, formatDate, formatDateTime, formatNumber, todayISO } from '@/utils/format';
 import { Badge } from '@/components/ui/Badge';
 import { badge, bold, date, dateTime, durationBadge, expiry, mono, qty, timeWindow } from '@/config/cells';
 import { ROUTES } from '@/config/routes';
@@ -166,6 +166,7 @@ export const bmhpItemsConfig = {
   adminOnlyWrite: true,
   canEdit: true,
   canDelete: true,
+  enableBulkImport: true,
   createLabel: 'Tambah BMHP',
   searchPlaceholder: 'Cari kode, barcode, nama, kategori, batch...',
   exportable: true,
@@ -199,6 +200,16 @@ export const bmhpItemsConfig = {
     },
   ],
   columns: [
+    {
+      key: 'photo',
+      label: 'Foto',
+      render: (r) =>
+        r.photo ? (
+          <img src={fileUrl(r.photo)} alt={r.name} className="h-9 w-9 rounded-lg border border-slate-200 object-cover" loading="lazy" />
+        ) : (
+          <span className="text-slate-300">-</span>
+        ),
+    },
     {
       key: 'code',
       label: 'Kode',
@@ -271,8 +282,9 @@ export const bmhpItemsConfig = {
   ],
   deleteMessage: (row) => `Hapus BMHP "${row.name}"? Hanya bisa jika stok kosong.`,
   form: {
-    subtitle: 'Lengkapi spesifikasi, stok awal, serta tanggal kedaluwarsa BMHP.',
+    subtitle: 'Lengkapi spesifikasi, foto barang, serta tanggal kedaluwarsa BMHP.',
     fields: [
+      { name: 'photo', label: 'Foto / Gambar Barang BMHP', type: 'image', span: 2 },
       { name: 'code', label: 'Kode Barang', required: true, maxLength: 30, placeholder: 'mis. BMHP-POUCH-01' },
       { name: 'barcode', label: 'Barcode Produk (opsional)', maxLength: 50, placeholder: 'mis. 899123456789' },
       { name: 'name', label: 'Nama Barang', required: true, maxLength: 150, span: 2, placeholder: 'mis. Sterilization Flat Roll Pouch 75mm x 200m' },
@@ -284,6 +296,8 @@ export const bmhpItemsConfig = {
         options: BMHP_CATEGORIES,
         default: 'Kemasan Steril',
       },
+      { name: 'brand', label: 'Merek', maxLength: 100, placeholder: 'mis. SteriPack, 3M, Cisa' },
+      { name: 'manufacturer', label: 'Pabrik / Produsen', maxLength: 150, placeholder: 'mis. PT. Sterilindo Mandiri' },
       { name: 'item_type', label: 'Jenis Barang', maxLength: 100, placeholder: 'mis. Pouch Roll, Strip Indikator, Cairan Enzimatik' },
       {
         name: 'specification',
@@ -293,7 +307,8 @@ export const bmhpItemsConfig = {
         maxLength: 255,
         placeholder: 'mis. Medical paper 60gsm + laminated film, dual indicator steam & EO, ukuran 75mm x 200m',
       },
-      { name: 'package_volume', label: 'Volume Kemasan', maxLength: 100, placeholder: 'mis. 1 Roll @ 200 Meter, 1 Box isi 250 pcs, Galon 5L' },
+      { name: 'packaging_label', label: 'Kemasan', maxLength: 50, placeholder: 'mis. Rol, Box, Galon, Lembar' },
+      { name: 'contents_per_package', label: 'Isi per Kemasan (Pcs)', type: 'number', min: 1, placeholder: 'mis. 200' },
       {
         name: 'unit_label',
         label: 'Satuan Unit',
@@ -302,6 +317,8 @@ export const bmhpItemsConfig = {
         options: BMHP_UNITS,
         default: 'pcs',
       },
+      { name: 'storage_location', label: 'Lokasi Penyimpanan', maxLength: 100, placeholder: 'mis. Gudang BMHP CSSD - Rak A1' },
+      { name: 'account_code', label: 'Kode Rekening', maxLength: 50, placeholder: 'mis. 5.1.02.01.01 (Belanja BMHP)' },
       {
         name: 'initial_stock',
         label: 'Jumlah Stok Awal',
@@ -318,10 +335,10 @@ export const bmhpItemsConfig = {
         default: 10,
         help: 'Peringatan otomatis muncul di sistem jika stok akhir ≤ batas minimum ini.',
       },
-      { name: 'batch_no', label: 'Nomor Batch / Lot', maxLength: 50, placeholder: 'mis. LOT-202611-01' },
+      { name: 'batch_no', label: 'Nomor Batch / Lot Awal', maxLength: 50, placeholder: 'mis. LOT-202611-01' },
       {
         name: 'expiry_date',
-        label: 'Tanggal Expired',
+        label: 'Tanggal Expired Awal',
         type: 'date',
         help: 'Peringatan otomatis aktif saat barang mendekati kedaluwarsa (≤30 hari) atau sudah lewat.',
       },

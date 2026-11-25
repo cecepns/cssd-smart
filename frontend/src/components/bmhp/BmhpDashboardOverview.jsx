@@ -61,6 +61,7 @@ import { getErrorMessage } from '@/utils/request';
 import { useAuth } from '@/context/AuthContext';
 import Modal from '@/components/ui/Modal';
 import SignaturePad from '@/components/form/SignaturePad';
+import BmhpBulkImportModal from '@/components/bmhp/BmhpBulkImportModal';
 
 // Default SVG Cursive Signatures for aesthetic precision matching mockup
 const SVG_SIGNATURE_ALVIN = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80"><path d="M 20 55 Q 40 10 50 35 Q 60 65 75 40 T 95 38 T 115 42 Q 130 15 140 45 T 165 40 Q 180 35 190 50" fill="none" stroke="%230f172a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M 35 48 Q 90 42 170 45" fill="none" stroke="%230f172a" stroke-width="2" stroke-linecap="round"/></svg>`;
@@ -91,6 +92,20 @@ export default function BmhpDashboardOverview({
 }) {
   const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+
+  // Dynamic fiscal years (2024 to current + 4 plus any year found in actual batches)
+  const dynamicFiscalYears = useMemo(() => {
+    const years = new Set();
+    const curr = new Date().getFullYear();
+    for (let y = curr + 4; y >= 2024; y--) {
+      years.add(String(y));
+    }
+    (batches || []).forEach((b) => {
+      if (b.fiscal_year) years.add(String(b.fiscal_year));
+    });
+    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+  }, [batches]);
 
   // ---------------------------------------------------------------------------
   // 1. STATE FORM BARANG MASUK (KOLOM KIRI)
@@ -536,6 +551,15 @@ export default function BmhpDashboardOverview({
         <div className="flex items-center gap-2 relative z-10 self-end sm:self-center">
           <button
             type="button"
+            onClick={() => setBulkModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-3 py-1.5 text-xs font-black text-blue-950 hover:from-amber-300 hover:to-amber-400 shadow-sm transition"
+            title="Bulk Import Data Saldo Awal BMHP dari Excel"
+          >
+            <FileSpreadsheet size={15} />
+            <span className="hidden sm:inline">Bulk Import Excel</span>
+          </button>
+          <button
+            type="button"
             className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white transition"
             title="Notifikasi Sistem"
           >
@@ -667,9 +691,20 @@ export default function BmhpDashboardOverview({
                 Input Barang Masuk <span className="font-normal text-blue-200">(Penerimaan BMHP)</span>
               </h2>
             </div>
-            <span className="rounded bg-emerald-500/20 border border-emerald-400/40 px-2 py-0.5 text-[9px] font-black text-emerald-200">
-              BMHP-IN
-            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setBulkModalOpen(true)}
+                className="rounded bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 px-2 py-0.5 text-[9px] font-black text-amber-200 flex items-center gap-1 transition"
+                title="Bulk Import Saldo Awal BMHP dari Excel"
+              >
+                <FileSpreadsheet size={11} />
+                <span>Import Excel</span>
+              </button>
+              <span className="rounded bg-emerald-500/20 border border-emerald-400/40 px-2 py-0.5 text-[9px] font-black text-emerald-200">
+                BMHP-IN
+              </span>
+            </div>
           </div>
 
           <form onSubmit={handleInSubmit} className="p-3 space-y-2.5 text-xs">
@@ -768,7 +803,7 @@ export default function BmhpDashboardOverview({
                     onChange={(e) => setInForm({ ...inForm, fiscal_year: e.target.value })}
                     className="w-full rounded-lg border border-slate-300 bg-white py-1 px-1.5 text-[10px] font-bold text-slate-800"
                   >
-                    {FISCAL_YEARS.map((y) => (
+                    {dynamicFiscalYears.map((y) => (
                       <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
@@ -1665,6 +1700,13 @@ export default function BmhpDashboardOverview({
           </div>
         </Modal>
       )}
+
+      {/* Bulk Import Excel Modal */}
+      <BmhpBulkImportModal
+        open={bulkModalOpen}
+        onClose={() => setBulkModalOpen(false)}
+        onSuccess={() => onRefreshData?.()}
+      />
     </div>
   );
 }

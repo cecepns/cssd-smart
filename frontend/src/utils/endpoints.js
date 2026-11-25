@@ -110,6 +110,7 @@ export const API_ENDPOINTS = {
     REPORTS: '/bmhp-reports',
     STOCK_CARD: '/bmhp-stock-card',
     OVERALL_STOCK: '/bmhp-overall-stock',
+    BULK_IMPORT: '/bmhp-bulk-import',
   },
   BMHP_TRANSACTIONS: crud('/bmhp-transactions'),
 

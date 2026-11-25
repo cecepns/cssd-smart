@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Download, History, Pencil, Plus, Printer, QrCode, RotateCcw, Trash2 } from 'lucide-react';
+import { Download, FileSpreadsheet, History, Pencil, Plus, Printer, QrCode, RotateCcw, Trash2 } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import SearchInput from '@/components/ui/SearchInput';
 import DataTable from '@/components/ui/DataTable';
@@ -10,6 +10,7 @@ import SubNav from '@/components/ui/SubNav';
 import Button, { IconButton } from '@/components/ui/Button';
 import FormModal from '@/components/form/FormModal';
 import BarcodeLabel from '@/components/form/BarcodeLabel';
+import BmhpBulkImportModal from '@/components/bmhp/BmhpBulkImportModal';
 import { useAuth } from '@/context/AuthContext';
 import useFetch from '@/hooks/useFetch';
 import useList from '@/hooks/useList';
@@ -60,6 +61,7 @@ export default function ResourcePage({ config }) {
   const [modal, setModal] = useState(CLOSED);
   const [label, setLabel] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
   const writable = !config.readOnly && (!config.adminOnlyWrite || isAdmin);
   const canCreate = writable && !config.noCreate;
@@ -187,6 +189,11 @@ export default function ResourcePage({ config }) {
               {config.exportable !== false && isAdmin && (
                 <Button variant="secondary" icon={Download} loading={exporting} onClick={handleExport}>
                   Unduh CSV
+                </Button>
+              )}
+              {config.enableBulkImport && (
+                <Button variant="secondary" icon={FileSpreadsheet} onClick={() => setBulkImportOpen(true)}>
+                  Bulk Import Excel
                 </Button>
               )}
               {canCreate && (
@@ -319,6 +326,14 @@ export default function ResourcePage({ config }) {
         title={label?.title}
         subtitle={label?.subtitle}
       />
+
+      {config.enableBulkImport && (
+        <BmhpBulkImportModal
+          open={bulkImportOpen}
+          onClose={() => setBulkImportOpen(false)}
+          onSuccess={() => list.reload()}
+        />
+      )}
     </div>
   );
 }

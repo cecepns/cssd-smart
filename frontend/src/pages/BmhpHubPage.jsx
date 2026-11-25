@@ -43,7 +43,8 @@ import { getErrorMessage } from '@/utils/request';
 import useFetch from '@/hooks/useFetch';
 import { useAuth } from '@/context/AuthContext';
 
-const FISCAL_YEARS = ['2026', '2025', '2024', '2023'];
+const currentYear = new Date().getFullYear();
+const FISCAL_YEARS = Array.from({ length: 8 }, (_, i) => String(currentYear + 3 - i));
 const BUDGET_SOURCES = ['BLUD', 'APBD', 'DAK', 'BOK', 'Lainnya'];
 
 // Default SVG Cursive Signatures for aesthetic precision matching mockup
