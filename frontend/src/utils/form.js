@@ -53,6 +53,18 @@ export function validateValues(fields, values, mode) {
       else if (field.max !== undefined && n > field.max) errors[field.name] = `${field.label} maksimal ${field.max}`;
       return;
     }
+    if (field.type === 'date') {
+      let v = String(value || '').trim();
+      const dmy = v.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+      if (dmy) {
+        const [, d, m, y] = dmy;
+        v = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+      if (v && (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v)))) {
+        errors[field.name] = `${field.label} tidak valid (YYYY-MM-DD)`;
+        return;
+      }
+    }
     if (typeof value === 'string' && field.minLength && value.trim().length < field.minLength) {
       errors[field.name] = `${field.label} minimal ${field.minLength} karakter`;
       return;
@@ -116,6 +128,17 @@ export async function preparePayload(fields, values, { mode }) {
     if (field.skipEmptyOnEdit && mode === 'edit' && isEmptyValue(value)) continue;
     if (field.type === 'multicheck') value = (value || []).map(Number);
 
+    if (field.type === 'date') {
+      let v = typeof value === 'string' ? value.trim() : (value || '');
+      const dmy = String(v).match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+      if (dmy) {
+        const [, d, m, y] = dmy;
+        value = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      } else if (v) {
+        value = v;
+      }
+    }
+
     if (value !== undefined) {
       payload[field.name] = typeof value === 'string' ? value.trim() : value;
     }
@@ -125,7 +148,15 @@ export async function preparePayload(fields, values, { mode }) {
   // (misal items_detail, extra_items, item_category dari MultiSetPicker / SterileSetSelector)
   for (const [key, val] of Object.entries(values || {})) {
     if (payload[key] === undefined && val !== undefined && val !== null && val !== '') {
-      payload[key] = val;
+      let finalVal = val;
+      if (typeof val === 'string' && (key.endsWith('_date') || key === 'date')) {
+        const dmy = val.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+        if (dmy) {
+          const [, d, m, y] = dmy;
+          finalVal = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+      }
+      payload[key] = finalVal;
     }
   }
 

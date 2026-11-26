@@ -296,9 +296,23 @@ function validate(fields, body, { partial = false } = {}) {
         out[f.name] = raw === true || raw === 1 || raw === '1' || raw === 'true' ? 1 : 0;
         break;
       case 'date': {
-        const v = String(raw);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v))) errors[f.name] = `${label} tidak valid (YYYY-MM-DD)`;
-        else out[f.name] = v;
+        let v = String(raw || '').trim();
+        const dmyMatch = v.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+        if (dmyMatch) {
+          const [, d, m, y] = dmyMatch;
+          v = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v))) {
+          if (!f.required && !v) {
+            out[f.name] = null;
+          } else if (f.default) {
+            out[f.name] = typeof f.default === 'function' ? f.default() : f.default;
+          } else {
+            errors[f.name] = `${label} tidak valid (YYYY-MM-DD)`;
+          }
+        } else {
+          out[f.name] = v;
+        }
         break;
       }
       case 'enum':
@@ -2401,21 +2415,49 @@ registerCrud({
         // Jika belum ada stok terdaftar di sterile_stock, buat otomatis agar foreign key & ketertelusuran tetap valid
         const distDate = data.dist_date || todayStr();
         const batchNo = `BATCH-KS-${distDate.replace(/-/g, '')}`;
-        const autoStockBarcode = `KS-${distDate.replace(/-/g, '').slice(2)}-${pad(Math.floor(100 + Math.random() * 900))}`;
-        const [insertRes] = await conn.query(`
-          INSERT INTO sterile_stock (
-            barcode, category, item_name, batch_no, sterile_date, started_at, completed_at, expiry_date, unit_id, quantity, unit_label, officer, status
-          ) VALUES (?, 'Kasa Steril', ?, ?, ?, NOW(), NOW(), DATE_ADD(?, INTERVAL 30 DAY), ?, ?, 'pouch', ?, 'Terdistribusi')
-        `, [
-          autoStockBarcode,
-          data.gauze_type,
-          batchNo,
-          distDate,
-          distDate,
-          data.unit_id,
-          data.quantity || 1,
-          data.officer || 'Petugas CSSD'
-        ]);
+        let autoStockBarcode = '';
+        let kAttempts = 0;
+        while (!autoStockBarcode && kAttempts < 100) {
+          kAttempts++;
+          const cand = `KS-${distDate.replace(/-/g, '').slice(2)}-${pad(Math.floor(100 + Math.random() * 900))}`;
+          const [[dup]] = await conn.query('SELECT id FROM sterile_stock WHERE barcode = ? LIMIT 1', [cand]);
+          if (!dup) autoStockBarcode = cand;
+        }
+        if (!autoStockBarcode) autoStockBarcode = `KS-${distDate.replace(/-/g, '').slice(2)}-${Date.now().toString().slice(-4)}`;
+
+        let insertRes;
+        try {
+          [insertRes] = await conn.query(`
+            INSERT INTO sterile_stock (
+              barcode, category, item_name, batch_no, sterile_date, sterilized_date, started_at, completed_at, expiry_date, unit_id, quantity, unit_label, officer, status
+            ) VALUES (?, 'Kasa Steril', ?, ?, ?, ?, NOW(), NOW(), DATE_ADD(?, INTERVAL 30 DAY), ?, ?, 'pouch', ?, 'Terdistribusi')
+          `, [
+            autoStockBarcode,
+            data.gauze_type,
+            batchNo,
+            distDate,
+            distDate,
+            distDate,
+            data.unit_id,
+            data.quantity || 1,
+            data.officer || 'Petugas CSSD'
+          ]);
+        } catch (colErr) {
+          [insertRes] = await conn.query(`
+            INSERT INTO sterile_stock (
+              barcode, category, item_name, batch_no, sterile_date, started_at, completed_at, expiry_date, unit_id, quantity, unit_label, officer, status
+            ) VALUES (?, 'Kasa Steril', ?, ?, ?, NOW(), NOW(), DATE_ADD(?, INTERVAL 30 DAY), ?, ?, 'pouch', ?, 'Terdistribusi')
+          `, [
+            autoStockBarcode,
+            data.gauze_type,
+            batchNo,
+            distDate,
+            distDate,
+            data.unit_id,
+            data.quantity || 1,
+            data.officer || 'Petugas CSSD'
+          ]);
+        }
         data.stock_id = insertRes.insertId;
       } else {
         data.stock_id = stock.id;
@@ -2451,17 +2493,39 @@ registerCrud({
     }
 
     if (!data.barcode && selectedItemName) {
-      const [[matchedStock]] = await conn.query(`
+      // Ekstrak token nama set murni (misal "VK-KURET SET (Set Instrumen)" -> "vk-kuret set")
+      const cleanTokens = selectedItemName
+        .replace(/\([^)]*\)/g, ' ')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => s.length >= 2);
+
+      // Cari stok steril siap pakai milik unit ini
+      const [candidateStocks] = await conn.query(`
         SELECT s.*, p.receipt_id, r.barcode AS receipt_barcode, COALESCE(s.unit_id, r.unit_id) AS origin_unit_id
         FROM sterile_stock s
         LEFT JOIN packagings p ON p.id = s.packaging_id
         LEFT JOIN dirty_receipts r ON r.id = p.receipt_id
-        WHERE LOWER(s.item_name) = LOWER(?) AND s.category != 'Kasa Steril'
-          AND s.status = 'Tersedia' AND s.quantity >= ? AND s.expiry_date >= CURDATE()
+        WHERE s.category != 'Kasa Steril'
+          AND s.status = 'Tersedia' AND s.quantity >= 1 AND s.expiry_date >= CURDATE()
           AND (COALESCE(s.unit_id, r.unit_id) = ? OR (s.unit_id IS NULL AND r.unit_id IS NULL))
-        ORDER BY s.expiry_date ASC, s.id ASC
-        LIMIT 1 FOR UPDATE
-      `, [selectedItemName, data.quantity || 1, data.unit_id]);
+        ORDER BY (s.quantity >= ?) DESC, s.expiry_date ASC, s.id ASC
+      `, [data.unit_id, data.quantity || 1]);
+
+      let matchedStock = null;
+      for (const st of candidateStocks) {
+        const stLower = st.item_name.toLowerCase();
+        const selLower = selectedItemName.toLowerCase();
+        if (stLower === selLower) {
+          matchedStock = st;
+          break;
+        }
+        const isMatched = cleanTokens.some((tok) => tok && (stLower.includes(tok) || tok.includes(stLower)));
+        if (isMatched) {
+          matchedStock = st;
+          break;
+        }
+      }
 
       if (matchedStock) {
         data.barcode = matchedStock.barcode;
@@ -2470,30 +2534,66 @@ registerCrud({
         return;
       }
 
+      // Jika belum ada stok steril terdaftar, buat otomatis dengan barcode unik collision-proof
       const distDate = data.dist_date || todayStr();
-      const autoBarcode = await makeCode(conn, 'DS', distDate);
+      let autoBarcode = '';
+      let attempts = 0;
+      while (!autoBarcode && attempts < 100) {
+        attempts++;
+        const candidate = await makeCode(conn, 'DS', distDate);
+        const [[dupStock]] = await conn.query('SELECT id FROM sterile_stock WHERE barcode = ? LIMIT 1', [candidate]);
+        const [[dupDist]] = await conn.query('SELECT id FROM distributions WHERE barcode = ? LIMIT 1', [candidate]);
+        if (!dupStock && !dupDist) {
+          autoBarcode = candidate;
+        }
+      }
+      if (!autoBarcode) {
+        autoBarcode = `DS-${ddmmyy(distDate)}-${Math.floor(100 + Math.random() * 900)}`;
+      }
+
       const batchNo = `BATCH-ST-${distDate.replace(/-/g, '')}`;
       const rawCat = sanitizeText(ctx.body.item_category);
       const validCats = ['Alat Satuan', 'Set Instrumen', 'Duk & Jas Operasi'];
       const stockCategory = validCats.includes(rawCat) ? rawCat : 'Set Instrumen';
       const stockUnitLabel = sanitizeText(ctx.body.unit_label) || 'set';
 
-      const [insertRes] = await conn.query(`
-        INSERT INTO sterile_stock (
-          barcode, category, item_name, batch_no, sterile_date, started_at, completed_at, expiry_date, unit_id, quantity, unit_label, officer, status
-        ) VALUES (?, ?, ?, ?, ?, NOW(), NOW(), DATE_ADD(?, INTERVAL 6 MONTH), ?, ?, ?, ?, 'Terdistribusi')
-      `, [
-        autoBarcode,
-        stockCategory,
-        selectedItemName,
-        batchNo,
-        distDate,
-        distDate,
-        data.unit_id,
-        data.quantity || 1,
-        stockUnitLabel,
-        data.officer || 'Petugas CSSD',
-      ]);
+      let insertRes;
+      try {
+        [insertRes] = await conn.query(`
+          INSERT INTO sterile_stock (
+            barcode, category, item_name, batch_no, sterile_date, sterilized_date, started_at, completed_at, expiry_date, unit_id, quantity, unit_label, officer, status
+          ) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW(), DATE_ADD(?, INTERVAL 6 MONTH), ?, ?, ?, ?, 'Terdistribusi')
+        `, [
+          autoBarcode,
+          stockCategory,
+          selectedItemName,
+          batchNo,
+          distDate,
+          distDate,
+          distDate,
+          data.unit_id,
+          data.quantity || 1,
+          stockUnitLabel,
+          data.officer || 'Petugas CSSD',
+        ]);
+      } catch (errCol) {
+        [insertRes] = await conn.query(`
+          INSERT INTO sterile_stock (
+            barcode, category, item_name, batch_no, sterile_date, started_at, completed_at, expiry_date, unit_id, quantity, unit_label, officer, status
+          ) VALUES (?, ?, ?, ?, ?, NOW(), NOW(), DATE_ADD(?, INTERVAL 6 MONTH), ?, ?, ?, ?, 'Terdistribusi')
+        `, [
+          autoBarcode,
+          stockCategory,
+          selectedItemName,
+          batchNo,
+          distDate,
+          distDate,
+          data.unit_id,
+          data.quantity || 1,
+          stockUnitLabel,
+          data.officer || 'Petugas CSSD',
+        ]);
+      }
 
       data.barcode = autoBarcode;
       data.stock_id = insertRes.insertId;
